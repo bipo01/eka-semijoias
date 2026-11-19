@@ -2,7 +2,9 @@ import { ShoppingBag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { BADGE_LABEL, defaultVariant, isPurchasable, productBadge } from '../../data/catalog';
 import { FINISH_LABEL, type Product } from '../../data/schema';
+import { useBusiness } from '../../hooks/useBusiness';
 import { productImageSources } from '../../lib/assets';
+import { notifyMeMessage, whatsappUrl } from '../../lib/whatsapp';
 import { Img } from '../ui/Img';
 import { Price, SwatchDot } from '../ui/Misc';
 import { cx } from '../ui/cx';
@@ -13,6 +15,7 @@ export const CARD_SIZES = '(min-width: 1024px) 280px, (min-width: 768px) 30vw, 4
 
 export function ProductCard({ product, priority, sizes = CARD_SIZES, compact }: { product: Product; priority?: boolean; sizes?: string; compact?: boolean }) {
   const addToBag = useAddToBag();
+  const biz = useBusiness();
   const badge = productBadge(product);
   const purchasable = isPurchasable(product);
   const [first, second] = product.images;
@@ -99,6 +102,17 @@ export function ProductCard({ product, priority, sizes = CARD_SIZES, compact }: 
           </p>
         )}
         <Price price={product.price} promoPrice={product.promoPrice} size="sm" />
+        {!purchasable && (
+          <a
+            href={whatsappUrl(biz.whatsapp, notifyMeMessage(product.name))}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Avise-me quando ${product.name} voltar`}
+            className="relative z-10 -my-2 inline-flex min-h-11 w-fit items-center text-sm text-copper underline underline-offset-4"
+          >
+            Avise-me
+          </a>
+        )}
       </div>
     </article>
   );

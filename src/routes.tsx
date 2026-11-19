@@ -1,4 +1,3 @@
-import { lazy } from 'react';
 import { createHashRouter } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { RouteError } from './components/layout/RouteError';
@@ -15,12 +14,12 @@ import { AboutPage } from './pages/About';
 import { ContactPage } from './pages/Contact';
 import { NotFoundPage } from './pages/NotFound';
 
-const AdminApp = lazy(() => import('./admin/AdminApp'));
-
 export const router = createHashRouter([
   {
     path: '/admin/*',
-    element: <AdminApp />,
+    // Code-split: the admin chunk only loads on /#/admin.
+    lazy: () => import('./admin/AdminApp').then((m) => ({ Component: m.default })),
+    hydrateFallbackElement: <div className="min-h-dvh bg-ivory" aria-busy="true" />,
     errorElement: <RouteError />,
   },
   {
