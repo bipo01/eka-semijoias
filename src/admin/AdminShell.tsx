@@ -4,9 +4,11 @@ import { ExternalLink, LogOut, Menu, Plus } from 'lucide-react';
 import { ButtonLink, IconButton } from '../components/ui/Button';
 import { Sheet } from '../components/ui/Sheet';
 import { cx } from '../components/ui/cx';
+import { KEYS, readRaw } from '../data/storage';
 import { useCatalog } from '../store/catalog';
 import { toast } from '../store/ui';
 import { useAdminSession } from './AdminContext';
+import { downloadText, fileDate } from './lib/download';
 import { ADMIN_BASE } from './lib/paths';
 
 export const SECTIONS = [
@@ -26,6 +28,37 @@ function useSection() {
 
 function StorageBanners() {
   const issue = useCatalog((s) => s.issue);
+  const corruptKey = useCatalog((s) => s.corruptKey);
+  if (issue === 'outdated') {
+    return (
+      <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-[12px] border border-danger/40 bg-[#f6e9e6] px-4 py-3 text-sm text-danger">
+        <p className="flex-1">Os dados deste navegador foram salvos por uma versão mais nova do site. Recarregue a página antes de editar.</p>
+        <button type="button" onClick={() => window.location.reload()} className="min-h-11 font-medium underline underline-offset-4">
+          Recarregar
+        </button>
+      </div>
+    );
+  }
+  if (issue === 'corrupt-unsaved') {
+    return (
+      <div role="alert" className="mb-4 flex flex-col gap-2 rounded-[12px] border border-danger/40 bg-[#f6e9e6] px-4 py-3 text-sm text-danger">
+        <p>
+          Os dados salvos do catálogo não puderam ser abertos e não há espaço para guardar uma cópia. Para não perder nada, as alterações estão bloqueadas até
+          você baixar a cópia.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            const raw = readRaw(KEYS.catalog);
+            if (raw != null) downloadText(`eka-catalogo-recuperado-${fileDate()}.json`, raw, 'application/json');
+          }}
+          className="min-h-11 self-start font-medium underline underline-offset-4"
+        >
+          Baixar a cópia dos dados
+        </button>
+      </div>
+    );
+  }
   if (issue === 'unavailable') {
     return (
       <p role="alert" className="mb-4 rounded-[12px] border border-danger/40 bg-[#f6e9e6] px-4 py-3 text-sm text-danger">
@@ -33,10 +66,10 @@ function StorageBanners() {
       </p>
     );
   }
-  if (issue === 'corrupt-recovered') {
+  if (issue === 'corrupt-recovered' && corruptKey) {
     return (
       <p className="mb-4 rounded-[12px] border border-line bg-champagne px-4 py-3 text-sm">
-        Alguns dados salvos do catálogo não puderam ser abertos, então o catálogo inicial foi carregado. Guardamos uma cópia do que estava salvo, e ela pode ser
+        Os dados salvos do catálogo não puderam ser abertos, então o catálogo inicial foi carregado. Guardamos uma cópia do que estava salvo, e ela pode ser
         baixada em{' '}
         <Link to={`${ADMIN_BASE}/backup`} className="link-underline font-medium text-copper">
           Backup

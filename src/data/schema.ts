@@ -58,7 +58,7 @@ export const productSchema = z
     categoryId: id,
     collectionIds: z.array(id).max(20),
     price: cents.min(1),
-    promoPrice: cents.optional(),
+    promoPrice: cents.min(1).optional(),
     description: shortText(4000),
     details: z.object({
       material: shortText(160).optional(),
@@ -125,6 +125,12 @@ export const settingsSchema = z.object({
 
 export const catalogStateSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
+  /**
+   * True once the catalog was edited in the admin (or imported). A stored catalog
+   * that was never customized (e.g. only a reseller lead was saved) is refreshed
+   * from the deployed seed on load, so new deploys reach returning visitors.
+   */
+  customized: z.boolean().optional(),
   products: z.array(productSchema).max(500),
   categories: z.array(categorySchema).max(50),
   collections: z.array(collectionSchema).max(50),

@@ -148,8 +148,9 @@ function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
       return;
     }
     const lead = parsed.data;
-    // Stored for the admin's Revendedoras list; the WhatsApp message is what reaches the store.
-    commit((data) => ({
+    // The WhatsApp message is what reaches the store. The local copy only feeds the admin list on
+    // this same device, so a failed write must not block the visitor from sending the message.
+    const saved = commit((data) => ({
       ...data,
       leads: [
         {
@@ -165,7 +166,8 @@ function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
         },
         ...data.leads,
       ],
-    }));
+    }), { customize: false });
+    if (!saved.ok && import.meta.env.DEV) console.warn('Lead not stored locally:', saved.message);
     const url = whatsappUrl(whatsapp, leadMessage(lead));
     window.open(url, '_blank', 'noopener,noreferrer');
     setSentUrl(url);

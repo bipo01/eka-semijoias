@@ -13,6 +13,7 @@ export function uniqueSlug(base: string, taken: Iterable<string>): string {
   const root = slugify(base) || 'peca';
   if (!set.has(root)) return root;
   let i = 2;
-  while (set.has(`${root}-${i}`)) i++;
-  return `${root}-${i}`;
+  const withSuffix = (n: number) => `${root.slice(0, 80 - `-${n}`.length).replace(/-+$/, '')}-${n}`;
+  while (set.has(withSuffix(i))) i++;
+  return withSuffix(i);
 }

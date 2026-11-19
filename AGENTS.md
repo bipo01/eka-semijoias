@@ -24,9 +24,12 @@ CI (`deploy.yml`): `npm ci` → typecheck → unit tests → build → deploy Pa
 ## Structure
 - `src/config/business.ts` — unconfirmed business facts (`null` hides the claim) + the admin checklist. Settings saved in the admin override contact fields and warranty (`src/hooks/useBusiness.ts`).
 - `src/data/` — `schema.ts` (zod schemas/types), `seed.ts` (24-product initial catalog), `storage.ts` (typed `StorageResult`, quota detection, versioned load + `MIGRATIONS`, corrupt payload quarantine to `eka:catalog:corrupt:<ts>`), `catalog.ts` (selectors: prices, badges, variant galleries).
-- `src/store/` — Zustand stores: `catalog` (commit only mutates state after a successful write; cross-tab `storage` sync), `cart`, `favorites`, `customer`, `ui` (toasts, panels, open-dialog count).
+- Catalog persistence semantics (`storage.ts` `loadCatalog`): the seed is never written on first visit; a stored catalog with `customized !== true` (only leads were saved) is replaced by the current deployed seed on load (leads kept), so new deploys reach returning visitors. Admin commits and imports set `customized: true`. Every write is validated (`validateCatalog`) before it is stored. Data from a newer schema (`outdated`) or unreadable data that could not be quarantined (`corrupt-unsaved`) put the store in read-only mode.
+- **What visitors see is the deployed seed.** Admin edits live only in the browser where they were made (no backend). To publish them for everyone: export a backup in the admin and turn it into `src/data/seed.ts` (or move to a backend).
+- `src/store/` — Zustand stores: `catalog` (commit only mutates state after a successful, validated write; cross-tab `storage` sync), `cart`, `favorites`, `customer`, `ui` (toasts, panels, open-dialog count).
 - `src/lib/` — `format` (BRL), `whatsapp` (order message + `wa.me` links), `catalogQuery` (URL-driven filters), `lead` (reseller form schema/mask), `search`, `slug`, `assets` (public asset/srcset helpers), `image` (upload pipeline), `csv`.
-- `src/components/{ui,layout,product,home,bag}`, `src/pages/*`, `src/admin/*` (lazy chunk at `/#/admin`).
+- `src/components/{ui,layout,product,home,bag}`, `src/pages/*`.
+- `src/admin/` (lazy route chunk at `/#/admin`): `PinGate` (SHA-256 PIN, default 2580, session in sessionStorage), `AdminShell` (tabs, storage banners), `products/` (list, full-screen form with photo manager and variants editor, `productDraft.ts` validation), `sections/` (categories, collections, leads + CSV, settings + checklist, backup), `lib/` (persist/save helpers, session, contact formatting, downloads, reorder).
 - localStorage keys: `eka:catalog:v1`, `eka:cart:v1`, `eka:favorites:v1`, `eka:customer:v1`; admin session flag in sessionStorage.
 
 ## Ground rules

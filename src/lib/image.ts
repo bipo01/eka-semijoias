@@ -18,6 +18,8 @@ export const IMAGE_BUDGET_BYTES = 180 * 1024;
 export const IMAGE_HARD_LIMIT_BYTES = 320 * 1024;
 /** Files bigger than this are refused before decoding (protects memory on phones). */
 export const MAX_INPUT_BYTES = 40 * 1024 * 1024;
+/** Decoded images above this pixel count are refused (a 48 MP phone photo is ~48 M). */
+export const MAX_INPUT_PIXELS = 60_000_000;
 export const THUMB_STEP: Record<ImageMime, EncodeStep> = {
   'image/webp': { maxSide: 480, quality: 0.75 },
   'image/jpeg': { maxSide: 480, quality: 0.78 },
@@ -57,8 +59,8 @@ export interface EncodedImage {
  * (or the last, smallest attempt). If the browser answers a WebP request with
  * another type (Safari without a WebP encoder), it switches to the JPEG plan.
  */
-export async function encodeWithinBudget(encode: Encoder, budget = IMAGE_BUDGET_BYTES): Promise<EncodedImage> {
-  let mime: ImageMime = 'image/webp';
+export async function encodeWithinBudget(encode: Encoder, budget = IMAGE_BUDGET_BYTES, startMime: ImageMime = 'image/webp'): Promise<EncodedImage> {
+  let mime: ImageMime = startMime;
   let steps = encodeSteps(mime);
   let last: EncodedImage | null = null;
   for (let i = 0; i < steps.length; i++) {
@@ -125,11 +127,11 @@ async function decode(file: Blob): Promise<Decoded | null> {
   }
 }
 
-function canvasEncoder(decoded: Decoded): Encoder {
+/** One canvas per photo, reused across encode steps and released afterwards (iOS caps total canvas memory). */
+function canvasEncoder(decoded: Decoded, canvas: HTMLCanvasElement): Encoder {
   return (step, mime) =>
     new Promise<Blob>((resolve, reject) => {
       const { width, height } = fitWithin(decoded.width, decoded.height, step.maxSide);
-      const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
@@ -152,15 +154,31 @@ function toDataUrl(blob: Blob): Promise<string> {
 
 const DATA_URL = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
 
+let webpSupport: Promise<boolean> | null = null;
+/** Detects once whether the browser can encode WebP (Safari cannot), so no photo pays for a wasted encode. */
+function canEncodeWebp(): Promise<boolean> {
+  webpSupport ??= new Promise((resolve) => {
+    const probe = document.createElement('canvas');
+    probe.width = probe.height = 1;
+    probe.toBlob((blob) => resolve(blob?.type === 'image/webp'), 'image/webp', 0.8);
+  });
+  return webpSupport;
+}
+
 /** Turns a picked photo into a compact data URL plus a 480 px thumbnail. */
 export async function processImage(file: File): Promise<ProcessedImage> {
   if (file.size > MAX_INPUT_BYTES) return fail('too-large');
   // HEIC decodes only in a few browsers (Safari); elsewhere decoding fails and is reported as unsupported.
   const decoded = await decode(file);
   if (!decoded) return fail('unsupported');
+  if (decoded.width * decoded.height > MAX_INPUT_PIXELS) {
+    decoded.release();
+    return fail('too-large');
+  }
+  const canvas = document.createElement('canvas');
   try {
-    const encode = canvasEncoder(decoded);
-    const main = await encodeWithinBudget(encode);
+    const encode = canvasEncoder(decoded, canvas);
+    const main = await encodeWithinBudget(encode, IMAGE_BUDGET_BYTES, (await canEncodeWebp()) ? 'image/webp' : 'image/jpeg');
     if (main.blob.size > IMAGE_HARD_LIMIT_BYTES) return fail('too-large');
     const thumbBlob = await encode(THUMB_STEP[main.mime], main.mime);
     const [src, thumb] = await Promise.all([toDataUrl(main.blob), toDataUrl(thumbBlob)]);
@@ -170,5 +188,7 @@ export async function processImage(file: File): Promise<ProcessedImage> {
     return fail('unknown');
   } finally {
     decoded.release();
+    canvas.width = 0;
+    canvas.height = 0;
   }
 }

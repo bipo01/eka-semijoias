@@ -100,7 +100,7 @@ export function LeadsPage() {
         </ul>
       ) : (
         <EmptyState>
-          Nenhum cadastro de revendedora ainda. Quando alguém preencher o formulário da página Revendedoras, o contato aparece aqui.
+          Nenhum pré-cadastro neste aparelho. Os pré-cadastros do site chegam pelo WhatsApp, já com todos os dados; aqui aparecem os feitos neste navegador.
         </EmptyState>
       )}
 

@@ -12,17 +12,20 @@ export const CORRUPT_PREFIX = 'eka:catalog:corrupt:';
 /** Practical localStorage budget used for the meter (most browsers allow ~5 MB per origin). */
 export const STORAGE_BUDGET_BYTES = 5 * 1024 * 1024;
 
-export type StorageFailure = 'quota' | 'unavailable' | 'unknown';
+export type StorageFailure = 'quota' | 'unavailable' | 'unknown' | 'invalid' | 'outdated' | 'blocked';
 export type StorageResult = { ok: true } | { ok: false; reason: StorageFailure; message: string };
 
 const MESSAGES: Record<StorageFailure, string> = {
   quota: 'Espaço do navegador cheio. Exporte um backup e remova fotos antigas para continuar salvando.',
   unavailable: 'Este navegador não permite salvar alterações (talvez esteja em modo anônimo).',
   unknown: 'Não foi possível salvar agora. Tente de novo.',
+  invalid: 'Não foi possível salvar: os dados ficaram inconsistentes.',
+  outdated: 'Esta página está com uma versão antiga do site. Recarregue para continuar salvando.',
+  blocked: 'Os dados salvos neste navegador estão danificados. Baixe a cópia indicada no aviso antes de continuar.',
 };
 
-export function failure(reason: StorageFailure): StorageResult {
-  return { ok: false, reason, message: MESSAGES[reason] };
+export function failure(reason: StorageFailure, message?: string): StorageResult {
+  return { ok: false, reason, message: message ?? MESSAGES[reason] };
 }
 
 /** Detects quota errors across browsers (Chrome/Safari code 22, Firefox 1014 / NS_ERROR_DOM_QUOTA_REACHED). */
@@ -143,7 +146,7 @@ export const MIGRATIONS: Record<number, Migration> = {};
 
 export type MigrationResult =
   | { ok: true; state: CatalogState; migratedFrom: number | null }
-  | { ok: false; error: string };
+  | { ok: false; error: string; newer?: boolean };
 
 export function migrateCatalog(input: unknown, migrations: Record<number, Migration> = MIGRATIONS): MigrationResult {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -153,7 +156,7 @@ export function migrateCatalog(input: unknown, migrations: Record<number, Migrat
   const startVersion = typeof data.schemaVersion === 'number' ? data.schemaVersion : NaN;
   if (!Number.isInteger(startVersion)) return { ok: false, error: 'O arquivo não informa a versão do catálogo.' };
   if (startVersion > SCHEMA_VERSION) {
-    return { ok: false, error: 'Este backup foi feito por uma versão mais nova do site.' };
+    return { ok: false, error: 'Este backup foi feito por uma versão mais nova do site.', newer: true };
   }
   let version = startVersion;
   while (version < SCHEMA_VERSION) {
@@ -179,6 +182,12 @@ export function migrateCatalog(input: unknown, migrations: Record<number, Migrat
 
 /** Cross-reference checks zod cannot express (unique slugs, existing categories, image references). */
 export function checkIntegrity(state: CatalogState): string | null {
+  const duplicate = (values: string[]) => values.find((v, i) => values.indexOf(v) !== i);
+  const dupCategory = duplicate(state.categories.map((c) => c.id)) ?? duplicate(state.categories.map((c) => c.slug));
+  if (dupCategory) return `Categoria repetida: ${dupCategory}.`;
+  const dupCollection = duplicate(state.collections.map((c) => c.id)) ?? duplicate(state.collections.map((c) => c.slug));
+  if (dupCollection) return `Coleção repetida: ${dupCollection}.`;
+  if (duplicate(state.leads.map((l) => l.id))) return 'Cadastro de revendedora repetido.';
   const categoryIds = new Set(state.categories.map((c) => c.id));
   const slugs = new Set<string>();
   const ids = new Set<string>();
@@ -189,6 +198,8 @@ export function checkIntegrity(state: CatalogState): string | null {
     slugs.add(p.slug);
     if (!categoryIds.has(p.categoryId)) return `A peça "${p.name}" aponta para uma categoria que não existe.`;
     const imageIds = new Set(p.images.map((i) => i.id));
+    if (imageIds.size !== p.images.length) return `A peça "${p.name}" tem fotos repetidas.`;
+    if (duplicate(p.variants.map((v) => v.id))) return `A peça "${p.name}" tem acabamentos repetidos.`;
     for (const v of p.variants) {
       if (v.imageIds.some((imgId) => !imageIds.has(imgId))) return `A peça "${p.name}" tem foto de acabamento inválida.`;
     }
@@ -196,7 +207,15 @@ export function checkIntegrity(state: CatalogState): string | null {
   return null;
 }
 
-export type CatalogLoadIssue = 'none' | 'seeded' | 'corrupt-recovered' | 'unavailable' | 'seed-not-saved';
+/**
+ * - none / seeded: normal operation (seeded = nothing stored yet).
+ * - corrupt-recovered: unreadable data was copied to `corruptKey` and the seed is in use.
+ * - unavailable: storage cannot be written (private mode, blocked).
+ * - outdated: stored data comes from a newer version of the site; this tab must not write.
+ * - corrupt-unsaved: unreadable data could not be copied aside (no space); writes are
+ *   blocked so the only copy is not overwritten until it is downloaded.
+ */
+export type CatalogLoadIssue = 'none' | 'seeded' | 'corrupt-recovered' | 'unavailable' | 'outdated' | 'corrupt-unsaved';
 
 export interface CatalogLoad {
   state: CatalogState;
@@ -207,11 +226,8 @@ export interface CatalogLoad {
 export function loadCatalog(now: () => number = Date.now): CatalogLoad {
   if (!isStorageAvailable()) return { state: createSeed(), issue: 'unavailable' };
   const raw = readRaw(KEYS.catalog);
-  if (raw == null) {
-    const seed = createSeed();
-    const saved = writeJSON(KEYS.catalog, seed);
-    return { state: seed, issue: saved.ok ? 'seeded' : 'seed-not-saved' };
-  }
+  // Nothing is written until the catalog is actually edited, so every deploy's seed reaches visitors.
+  if (raw == null) return { state: createSeed(), issue: 'seeded' };
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -220,18 +236,31 @@ export function loadCatalog(now: () => number = Date.now): CatalogLoad {
   }
   const result = parsed === undefined ? null : migrateCatalog(parsed);
   if (result?.ok) {
+    if (!result.state.customized) return { state: { ...createSeed(), leads: result.state.leads }, issue: 'none' };
     if (result.migratedFrom != null) writeJSON(KEYS.catalog, result.state);
     return { state: result.state, issue: 'none' };
   }
-  // Quarantine the unreadable payload before falling back to the seed, so it can be recovered.
+  if (result && !result.ok && result.newer) return { state: createSeed(), issue: 'outdated' };
+  // Quarantine the unreadable payload so it can be recovered, then start over from the seed.
   const corruptKey = `${CORRUPT_PREFIX}${now()}`;
-  const quarantined = writeRaw(corruptKey, raw);
-  const seed = createSeed();
-  if (quarantined.ok) writeJSON(KEYS.catalog, seed);
-  return { state: seed, issue: 'corrupt-recovered', ...(quarantined.ok ? { corruptKey } : {}) };
+  if (!writeRaw(corruptKey, raw).ok) return { state: createSeed(), issue: 'corrupt-unsaved' };
+  removeKey(KEYS.catalog);
+  return { state: createSeed(), issue: 'corrupt-recovered', corruptKey };
+}
+
+/** Validates a catalog before it is written, so nothing saved can fail to load later. */
+export function validateCatalog(state: CatalogState): string | null {
+  const parsed = catalogStateSchema.safeParse(state);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return `${issue?.message ?? 'formato inesperado'} (${issue?.path.join('.') || 'catálogo'})`;
+  }
+  return checkIntegrity(parsed.data);
 }
 
 export function saveCatalog(state: CatalogState): StorageResult {
+  const problem = validateCatalog(state);
+  if (problem) return failure('invalid', `Não foi possível salvar: ${problem}`);
   return writeJSON(KEYS.catalog, state);
 }
 

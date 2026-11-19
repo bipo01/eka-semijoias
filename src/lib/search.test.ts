@@ -19,4 +19,13 @@ describe('slug', () => {
   it('avoids collisions', () => {
     expect(uniqueSlug('Brinco Gota', ['brinco-gota', 'brinco-gota-2'])).toBe('brinco-gota-3');
   });
+  it('keeps suffixed slugs within 80 characters', () => {
+    const long = 'Colar '.repeat(20);
+    const first = uniqueSlug(long, []);
+    const second = uniqueSlug(long, [first]);
+    expect(first.length).toBeLessThanOrEqual(80);
+    expect(second.length).toBeLessThanOrEqual(80);
+    expect(second).toMatch(/-2$/);
+    expect(second).not.toBe(first);
+  });
 });

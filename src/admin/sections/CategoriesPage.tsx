@@ -55,7 +55,10 @@ function CategoryEditor({ editing, onClose }: { editing: Editing; onClose: () =>
     const ok = save(
       (d) => ({
         ...d,
-        categories: editing.isNew ? [...d.categories, { ...category, order: d.categories.length }] : d.categories.map((c) => (c.id === category.id ? category : c)),
+        // Upsert: if another tab deleted it meanwhile, saving brings it back instead of silently doing nothing.
+        categories: d.categories.some((c) => c.id === category.id)
+          ? d.categories.map((c) => (c.id === category.id ? category : c))
+          : [...d.categories, { ...category, order: d.categories.length }],
       }),
       editing.isNew ? 'Categoria criada.' : 'Categoria salva.',
     );

@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, useBlocker, useNavigate } from 'react-router-dom';
 import { Copy, Plus } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -70,6 +70,20 @@ export function ProductForm({ source }: { source: FormSource }) {
   /** Set right before navigating away after a save/delete, so the unsaved-changes guard lets it through. */
   const leaving = useRef(false);
   const blocker = useBlocker(() => dirty && !leaving.current);
+  /** Version of the product when the form opened, to detect saves from another tab. */
+  const openedAt = useRef(source.kind === 'edit' ? source.product.updatedAt : null);
+  const [conflict, setConflict] = useState<{ product: Product; then: 'close' | 'new'; deleted: boolean } | null>(null);
+
+  // Reloading or closing the tab with unsaved edits asks the browser to confirm.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   const categories = sortedCategories(data);
   const taken = useMemo(() => takenSlugs(data, draft.id), [data, draft.id]);
@@ -106,8 +120,17 @@ export function ProductForm({ source }: { source: FormSource }) {
       return;
     }
     setErrors({});
+    if (openedAt.current) {
+      const stored = useCatalog.getState().data.products.find((p) => p.id === result.product.id);
+      if (!stored || stored.updatedAt !== openedAt.current) return setConflict({ product: result.product, then, deleted: !stored });
+    }
+    write(result.product, then);
+  }
+
+  function write(product: Product, then: 'close' | 'new') {
+    setConflict(null);
     // On a failed write (e.g. storage full) the form stays open with every edit.
-    if (!save((d) => upsertProduct(d, result.product), draft.isNew ? 'Peça cadastrada.' : 'Alterações salvas.')) return;
+    if (!save((d) => upsertProduct(d, product), draft.isNew ? 'Peça cadastrada.' : 'Alterações salvas.')) return;
     leave(then === 'new' ? adminPath('produtos', 'nova') : adminPath('produtos'));
   }
 
@@ -324,6 +347,18 @@ export function ProductForm({ source }: { source: FormSource }) {
         onCancel={() => setConfirmDelete(false)}
       >
         “{draft.name || 'Esta peça'}” sai do catálogo. Logo depois você ainda pode desfazer.
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={!!conflict}
+        title={conflict?.deleted ? 'Esta peça foi excluída em outra aba' : 'Esta peça mudou em outra aba'}
+        confirmLabel={conflict?.deleted ? 'Salvar como peça' : 'Salvar minha versão'}
+        cancelLabel="Voltar ao formulário"
+        onConfirm={() => conflict && write(conflict.product, conflict.then)}
+        onCancel={() => setConflict(null)}
+      >
+        {conflict?.deleted
+          ? 'Se você salvar, a peça volta para o catálogo com as informações deste formulário.'
+          : 'Ela foi salva em outra aba depois que você abriu este formulário. Se salvar, as alterações feitas lá serão substituídas pelas daqui.'}
       </ConfirmDialog>
       <ConfirmDialog
         open={blocker.state === 'blocked'}

@@ -17,7 +17,8 @@ import { altFor, imageFinish, type DraftErrors, type ProductDraft } from './prod
 
 const MAX_PHOTOS = 20;
 /** Typical storage cost of one uploaded photo + thumbnail (base64, UTF-16), for the "about N photos" hint. */
-const TYPICAL_PHOTO_COST = 400 * 1024;
+// A 180 KB photo plus its thumb measures ~560 KB in the meter (data URL as UTF-16).
+const TYPICAL_PHOTO_COST = 560 * 1024;
 
 export const photoCost = (img: ProductImage) => (img.src.startsWith('data:') ? stringCost(img.src) + stringCost(img.thumb) : 0);
 

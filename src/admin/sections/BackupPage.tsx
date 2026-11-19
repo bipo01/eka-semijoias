@@ -4,13 +4,16 @@ import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import type { CatalogState } from '../../data/schema';
 import { createSeed } from '../../data/seed';
-import { CORRUPT_PREFIX, listCorruptKeys, migrateCatalog, readRaw } from '../../data/storage';
+import { CORRUPT_PREFIX, listCorruptKeys, migrateCatalog, readRaw, removeKey } from '../../data/storage';
 import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
 import { formatDateTime } from '../lib/contact';
 import { downloadText, fileDate } from '../lib/download';
 import { replaceCatalog } from '../lib/persist';
 import { StorageMeter } from '../StorageMeter';
+
+/** A full catalog with photos fits in ~5 MB of storage; anything far larger is not a backup. */
+const MAX_BACKUP_BYTES = 20 * 1024 * 1024;
 
 export const backupFilename = (date = new Date()) => `eka-catalogo-${fileDate(date)}.json`;
 
@@ -60,13 +63,15 @@ export function BackupPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [pending, setPending] = useState<{ state: CatalogState; fileName: string } | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [corruptKeys] = useState(listCorruptKeys);
+  const [corruptKeys, setCorruptKeys] = useState(listCorruptKeys);
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
 
   async function pickFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     setImportError(null);
+    if (file.size > MAX_BACKUP_BYTES) return setImportError('Este arquivo é grande demais para ser um backup do catálogo.');
     let text: string;
     try {
       text = await file.text();
@@ -133,7 +138,7 @@ export function BackupPage() {
             {corruptKeys.map((key) => {
               const ts = Number(key.slice(CORRUPT_PREFIX.length));
               return (
-                <li key={key}>
+                <li key={key} className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="secondary"
                     size="sm"
@@ -145,12 +150,31 @@ export function BackupPage() {
                   >
                     <Download size={16} strokeWidth={1.5} /> Baixar cópia {Number.isFinite(ts) ? `de ${formatDateTime(ts)}` : ''}
                   </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteKey(key)}>
+                    Excluir cópia
+                  </Button>
                 </li>
               );
             })}
           </ul>
         </section>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDeleteKey}
+        title="Excluir esta cópia?"
+        confirmLabel="Excluir"
+        tone="danger"
+        onConfirm={() => {
+          if (confirmDeleteKey) removeKey(confirmDeleteKey);
+          setCorruptKeys(listCorruptKeys());
+          setConfirmDeleteKey(null);
+          toast('Cópia excluída. O espaço foi liberado.', { tone: 'success' });
+        }}
+        onCancel={() => setConfirmDeleteKey(null)}
+      >
+        <p>Baixe a cópia antes se ainda precisar de alguma informação dela. Depois de excluída, ela não pode ser recuperada.</p>
+      </ConfirmDialog>
 
       <ConfirmDialog open={!!pending} title="Substituir o catálogo?" confirmLabel="Substituir" tone="danger" onConfirm={confirmImport} onCancel={() => setPending(null)}>
         {pending && (
