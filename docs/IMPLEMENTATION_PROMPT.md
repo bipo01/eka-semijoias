@@ -1,6 +1,6 @@
 # Implementation prompt — ÉKA Semijoias website
 
-> Paste everything below the line into a fresh Claude Code session opened in `~/dev/eka-semijoias` (repo `github.com/bipo01/eka-semijoias`). It is self-contained.
+> Paste everything below the line into a fresh Claude Code session opened in `~/Desktop/Programação/Side Projects/eka-semijoias` (repo `github.com/bipo01/eka-semijoias`). It is self-contained.
 
 ---
 
