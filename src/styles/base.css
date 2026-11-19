@@ -1,0 +1,157 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scroll-padding-top: calc(var(--header-h) + 16px);
+  }
+  body {
+    background: var(--c-ivory);
+    color: var(--c-ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100dvh;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+  }
+  p { text-wrap: pretty; }
+  img { max-width: 100%; height: auto; }
+  input, select, textarea { font-size: 16px; } /* prevents iOS zoom on focus */
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :focus-visible {
+    outline: 2px solid var(--c-copper);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--c-ivory);
+  }
+  .on-dark :focus-visible {
+    outline-color: var(--c-rose);
+    box-shadow: 0 0 0 2px var(--c-ink);
+  }
+  ::selection { background: var(--c-champagne); color: var(--c-ink); }
+  dialog { color: inherit; }
+  dialog::backdrop { background: rgb(43 29 24 / 0.42); }
+}
+
+@layer components {
+  .container-x {
+    width: 100%;
+    max-width: calc(1200px + 2 * var(--gutter));
+    margin-inline: auto;
+    padding-inline: var(--gutter);
+  }
+  .eyebrow {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .price { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .link-underline {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 4px;
+  }
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .img-fade { opacity: 0; transition: opacity var(--dur-2) var(--ease); }
+  .img-fade[data-loaded='true'] { opacity: 1; }
+}
+
+/* Sheets and drawers on top of native <dialog>. */
+dialog.sheet {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  max-width: 100vw;
+  max-height: 100dvh;
+  background: var(--c-ivory);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-2) var(--ease), opacity var(--dur-2) var(--ease), overlay var(--dur-2) allow-discrete, display var(--dur-2) allow-discrete;
+}
+dialog.sheet::backdrop { transition: opacity var(--dur-2) var(--ease), overlay var(--dur-2) allow-discrete, display var(--dur-2) allow-discrete; opacity: 0; }
+dialog.sheet[open]::backdrop { opacity: 1; }
+@starting-style { dialog.sheet[open]::backdrop { opacity: 0; } }
+
+dialog.sheet-bottom {
+  inset: auto 0 0 0;
+  width: 100%;
+  max-height: min(92dvh, 860px);
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  transform: translateY(100%);
+}
+dialog.sheet-bottom[open] { transform: translateY(0); }
+@starting-style { dialog.sheet-bottom[open] { transform: translateY(100%); } }
+
+dialog.sheet-left, dialog.sheet-right {
+  inset: 0 auto 0 0;
+  height: 100dvh;
+  width: min(88vw, 400px);
+  transform: translateX(-100%);
+}
+dialog.sheet-right { inset: 0 0 0 auto; transform: translateX(100%); width: min(100vw, 440px); }
+dialog.sheet-left[open], dialog.sheet-right[open] { transform: translateX(0); }
+@starting-style {
+  dialog.sheet-left[open] { transform: translateX(-100%); }
+  dialog.sheet-right[open] { transform: translateX(100%); }
+}
+
+dialog.sheet-center {
+  inset: 0;
+  margin: auto;
+  width: min(calc(100vw - 32px), 420px);
+  border-radius: 16px;
+  opacity: 0;
+  transform: scale(0.98);
+}
+dialog.sheet-center[open] { opacity: 1; transform: none; }
+@starting-style { dialog.sheet-center[open] { opacity: 0; transform: scale(0.98); } }
+
+dialog.sheet-full { inset: 0; width: 100vw; height: 100dvh; max-height: 100dvh; opacity: 0; }
+dialog.sheet-full[open] { opacity: 1; }
+@starting-style { dialog.sheet-full[open] { opacity: 0; } }
+
+@media (min-width: 768px) {
+  dialog.sheet-bottom.md-right {
+    inset: 0 0 0 auto;
+    height: 100dvh;
+    max-height: 100dvh;
+    width: 440px;
+    border-radius: 0;
+    transform: translateX(100%);
+  }
+  dialog.sheet-bottom.md-right[open] { transform: translateX(0); }
+  @starting-style { dialog.sheet-bottom.md-right[open] { transform: translateX(100%); } }
+  dialog.sheet-bottom.md-center {
+    inset: 0;
+    margin: auto;
+    width: 480px;
+    border-radius: var(--radius-sheet);
+    transform: none;
+    opacity: 0;
+  }
+  dialog.sheet-bottom.md-center[open] { opacity: 1; }
+  @starting-style { dialog.sheet-bottom.md-center[open] { opacity: 0; } }
+}
+
+html:has(dialog[open]) { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  dialog.sheet, dialog.sheet[open] { transform: none !important; transition-duration: 120ms !important; }
+  .motion-lift { transform: none !important; }
+}
