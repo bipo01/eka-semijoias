@@ -1,4 +1,11 @@
-import { expect, test } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test, type Page } from '@playwright/test';
+
+async function axe(page: Page) {
+  await page.waitForTimeout(300); // let color transitions settle before measuring contrast
+  const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  return r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).slice(0, 3).join(' | ')}`);
+}
 
 test('admin: PIN gate, edit a price and see it on the public site', async ({ page }) => {
   await page.goto('#/admin');
@@ -34,4 +41,15 @@ test('admin: usable at 360px without horizontal overflow', async ({ browser }) =
     expect(overflow, section).toBeLessThanOrEqual(0);
   }
   await context.close();
+});
+
+test('admin: no serious accessibility violations', async ({ page }) => {
+  await page.goto('#/admin');
+  expect(await axe(page)).toEqual([]);
+  for (const d of '2580') await page.getByRole('button', { name: d, exact: true }).click();
+  for (const section of ['produtos', 'categorias', 'colecoes', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
+    await page.goto(`#/admin/${section}`);
+    await page.waitForLoadState('networkidle');
+    expect(await axe(page), section).toEqual([]);
+  }
 });

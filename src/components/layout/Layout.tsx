@@ -29,7 +29,7 @@ export function Layout() {
         Pular para o conteúdo
       </a>
       <Header />
-      <main id="conteudo" tabIndex={-1} className="outline-none">
+      <main id="conteudo" tabIndex={-1} className="min-h-[70dvh] outline-none">
         <Suspense fallback={<PageFallback />}>
           <Outlet />
         </Suspense>

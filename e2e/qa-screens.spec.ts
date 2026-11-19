@@ -39,6 +39,7 @@ for (const width of WIDTHS) {
         { productId: 'prod-p08', variantId: 'var-p08-dourado', size: '16', qty: 2 },
       ] }));
     });
+    await page.reload(); // stores read localStorage at startup
     for (const [name, route] of ROUTES) {
       await page.goto(`#${route}`);
       await page.locator('main, body').first().waitFor();
@@ -51,7 +52,7 @@ for (const width of WIDTHS) {
       });
       await page.waitForLoadState('networkidle');
       await page.waitForTimeout(300);
-      await page.screenshot({ path: `docs/qa/${name}-${width}.png`, fullPage: true });
+      await page.screenshot({ path: `docs/qa/${name}-${width}.jpg`, fullPage: true, type: 'jpeg', quality: 72 });
     }
     await context.close();
   });

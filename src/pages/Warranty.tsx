@@ -6,7 +6,7 @@ import { useBusiness, warrantyLabel } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { whatsappUrl } from '../lib/whatsapp';
 
-const COVERED = ['Defeitos no banho (descascar ou escurecer) com uso normal', 'Defeitos de fabricação em fechos, tarraxas e soldas'];
+const COVERED = ['Defeitos no banho, como descascar ou escurecer, com uso normal e os cuidados indicados'];
 const NOT_COVERED = ['Pedras que se soltam ou se perdem', 'Peças quebradas, amassadas ou entortadas', 'Desgaste por contato com perfume, cremes, água ou produtos químicos', 'Uso fora dos cuidados indicados'];
 
 export function WarrantyPage() {
@@ -17,7 +17,7 @@ export function WarrantyPage() {
       <PageHeader
         eyebrow="Garantia e trocas"
         title={biz.warrantyMonths ? warrantyLabel(biz.warrantyMonths) : 'Garantia e trocas'}
-        intro={biz.warrantyMonths ? `Todas as nossas peças têm garantia de ${biz.warrantyMonths} meses contra defeitos no banho, contados a partir do recebimento.` : 'Nossas peças têm garantia contra defeitos de fabricação. Fale com a gente para saber os detalhes.'}
+        intro={biz.warrantyMonths ? `Todas as nossas peças têm ${warrantyLabel(biz.warrantyMonths).toLowerCase()} contra defeitos no banho.` : 'Nossas peças têm garantia contra defeitos de fabricação. Fale com a gente para saber os detalhes.'}
       />
       <div className="container-x grid gap-4 md:grid-cols-2 lg:gap-6">
         <section aria-labelledby="coberto" className="rounded-[12px] border border-line bg-white p-6">

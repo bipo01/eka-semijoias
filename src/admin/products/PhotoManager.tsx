@@ -112,7 +112,7 @@ export function PhotoManager({ draft, savedImageIds, update, selectedId, onSelec
               <button
                 type="button"
                 aria-pressed={img.id === selectedId}
-                aria-label={`Foto ${i + 1}${i === 0 ? ' (principal)' : ''}: ${img.alt || 'sem descrição'}`}
+                aria-label={`${i === 0 ? 'Principal, foto 1' : `Foto ${i + 1}`}: ${img.alt || 'sem descrição'}`}
                 onClick={() => onSelect(img.id)}
                 className={cx(
                   'absolute inset-0 rounded-[10px] ring-offset-2 ring-offset-ivory',
