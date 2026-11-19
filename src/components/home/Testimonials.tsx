@@ -27,7 +27,7 @@ export function Testimonials() {
       <div className="container-x">
         <SectionHeading id="home-depoimentos" title="Quem usa, recomenda" />
       </div>
-      <ul ref={rail} className="no-scrollbar flex snap-x snap-mandatory scroll-px-[var(--gutter)] gap-3 overflow-x-auto px-[var(--gutter)] lg:container-x lg:grid lg:grid-cols-4 lg:gap-5">
+      <ul ref={rail} tabIndex={0} aria-label="Depoimentos de clientes" className="no-scrollbar flex snap-x snap-mandatory scroll-px-[var(--gutter)] gap-3 overflow-x-auto px-[var(--gutter)] lg:container-x lg:grid lg:grid-cols-4 lg:gap-5">
         {testimonials.map((t, i) => (
           <li key={t.name} className="w-[86%] shrink-0 snap-start sm:w-[46%] lg:w-auto" aria-label={`Depoimento ${i + 1} de ${testimonials.length}`}>
             <figure className="flex h-full flex-col gap-3 rounded-[12px] bg-champagne/70 p-5">

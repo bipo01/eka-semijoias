@@ -104,9 +104,9 @@ export function ProductCard({ product, priority, sizes = CARD_SIZES, compact }: 
   );
 }
 
-export function ProductGrid({ products, priorityCount = 0, className }: { products: Product[]; priorityCount?: number; className?: string }) {
+export function ProductGrid({ products, priorityCount = 0, className, dense }: { products: Product[]; priorityCount?: number; className?: string; dense?: boolean }) {
   return (
-    <ul className={cx('grid grid-cols-2 gap-x-3 gap-y-7 md:grid-cols-3 md:gap-x-5 lg:grid-cols-4 lg:gap-y-10', className)}>
+    <ul className={cx('grid grid-cols-2 gap-x-3 gap-y-7 md:gap-x-5 lg:grid-cols-4 lg:gap-y-10', dense ? 'md:grid-cols-4' : 'md:grid-cols-3', className)}>
       {products.map((p, i) => (
         <li key={p.id}>
           <ProductCard product={p} priority={i < priorityCount} />

@@ -11,7 +11,7 @@ export function FeaturedProducts() {
   return (
     <section aria-labelledby="home-mais-amadas" className="container-x pt-12 lg:pt-20">
       <SectionHeading id="home-mais-amadas" title="Mais amadas" action={<SeeAll to="/catalogo" />} />
-      <ProductGrid products={featured} />
+      <ProductGrid products={featured} dense />
     </section>
   );
 }
