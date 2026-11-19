@@ -28,8 +28,8 @@ export function Footer() {
   const biz = useBusiness();
   return (
     <footer className="on-dark bg-ink pb-[calc(88px+var(--safe-bottom))] text-on-dark lg:pb-12">
-      <div className="container-x grid gap-10 pt-12 md:grid-cols-[1.2fr_1fr_1fr_1fr] md:gap-8 lg:pt-16">
-        <div className="flex flex-col items-start gap-4">
+      <div className="container-x grid grid-cols-2 gap-x-6 gap-y-10 pt-12 md:grid-cols-[1.2fr_1fr_1fr_1fr] md:gap-8 lg:pt-16">
+        <div className="col-span-2 flex flex-col items-start gap-4 md:col-span-1">
           <img src={asset('brand/eka-emblem-rosegold-240.webp')} alt="ÉKA Semijoias" width={112} height={112} loading="lazy" decoding="async" className="size-28" />
           <p className="max-w-xs font-display text-title text-on-dark">Peças que acompanham você todos os dias, com brilho que dura.</p>
         </div>
@@ -47,7 +47,7 @@ export function Footer() {
             </ul>
           </nav>
         ))}
-        <div>
+        <div className="col-span-2 md:col-span-1">
           <h2 className="eyebrow mb-3 font-sans text-rose-light">Fale com a gente</h2>
           <ul className="flex flex-col">
             <li>

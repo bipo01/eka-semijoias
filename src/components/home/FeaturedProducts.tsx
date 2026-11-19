@@ -1,0 +1,17 @@
+import { byOrder, isPurchasable } from '../../data/catalog';
+import { useCatalog } from '../../store/catalog';
+import { ProductGrid } from '../product/ProductCard';
+import { SectionHeading } from '../ui/Misc';
+import { SeeAll } from './CategoryRail';
+
+export function FeaturedProducts() {
+  const products = useCatalog((s) => s.data.products);
+  const featured = products.filter((p) => p.featured && isPurchasable(p)).sort(byOrder).slice(0, 8);
+  if (!featured.length) return null;
+  return (
+    <section aria-labelledby="home-mais-amadas" className="container-x pt-12 lg:pt-20">
+      <SectionHeading id="home-mais-amadas" title="Mais amadas" action={<SeeAll to="/catalogo" />} />
+      <ProductGrid products={featured} />
+    </section>
+  );
+}

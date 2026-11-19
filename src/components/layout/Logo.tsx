@@ -6,9 +6,9 @@ export function Lockup({ className, tone = 'copper' }: { className?: string; ton
     <img
       src={asset(`brand/eka-lockup-${tone}.svg`)}
       alt="ÉKA Semijoias"
-      width={84}
-      height={28}
-      className={cx('h-7 w-auto lg:h-9', className)}
+      width={108}
+      height={36}
+      className={cx('h-9 w-auto lg:h-11', className)}
       decoding="async"
     />
   );

@@ -31,8 +31,9 @@ export function Header() {
     item.to === '/colecao' ? { ...item, to: `/colecao/${collectionSlug}` } : item,
   );
   return (
+    <>
+    <AnnouncementBar />
     <header className="sticky top-0 z-40 bg-ivory/95 backdrop-blur supports-[backdrop-filter]:bg-ivory/85">
-      <AnnouncementBar />
       <div className="border-b border-line">
         <div className="container-x relative flex h-[var(--header-h)] items-center justify-between gap-2">
           {/* Mobile: menu · centered logo · search + bag */}
@@ -76,5 +77,6 @@ export function Header() {
         </div>
       </div>
     </header>
+    </>
   );
 }

@@ -29,7 +29,7 @@ describe('seed catalog', () => {
   });
 
   it('references image files that exist for every width', () => {
-    const publicDir = path.resolve(__dirname, '../../public');
+    const publicDir = path.resolve(process.cwd(), 'public');
     const stems = new Set([...seed.products.flatMap((p) => p.images.map((i) => i.src)), ...seed.collections.map((c) => c.heroImage!).filter(Boolean)]);
     for (const stem of stems) {
       for (const w of [480, 960]) expect(existsSync(path.join(publicDir, `${stem}-${w}.webp`)), `${stem}-${w}`).toBe(true);
