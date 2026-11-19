@@ -23,17 +23,18 @@ The screens after Home were generated with the approved Home as the style refere
 - Product cards: still-life on champagne, name, finish swatch dots, price, promo with a struck price, quick-add bag button, one "Novo" tag.
 - Editorial "Coleção Rosé" block; the champagne reseller band with the gift-box image.
 - Product page: big gallery with a peek of the on-skin second image, dots, serif name, finish swatches with labels, accordions with label:value rows, trust strip, "Complete o look".
-- Sacola as a bottom sheet with steppers, note/name/city and one copper WhatsApp CTA + the helper line "Você confirma pagamento e entrega direto com a Érika".
+- Sacola as a bottom sheet with steppers, note/name/city and one copper WhatsApp CTA.
 - Revendedoras: sample-case hero, a 4-step vertical timeline with a rose line, benefit cards, a short form with a Sim/Não segmented control and consent.
-- Admin: PIN keypad with the honest demo note, storage meter, list rows with availability toggle, featured star and drag handle, full-screen edit sheet with photo strip, price + promo, finish chips, switches, sticky Excluir/Salvar.
+- Admin: PIN keypad, storage meter, list rows with availability toggle, featured star and drag handle, full-screen edit sheet with photo strip, price + promo, finish chips, switches, sticky Excluir/Salvar.
 
 ## Rejected or corrected in the spec
+- **Copy that sounds like a demo or an outsider:** the bag's helper line "Você confirma pagamento e entrega direto com a Érika", the admin's "Demonstração… não é segurança" note and title "Área da Érika" → removed. The site is the real ÉKA site, and the brand never refers to Érika in the third person (see PLAN §2.1b).
 - **Product page sticky area uses two stacked rows** (stepper + add, then WhatsApp) and eats about 150 px of a phone screen → one 64 px bar: price · "Adicionar à sacola" · WhatsApp icon button. The quantity stepper moves into the page body.
 - **Image ratios drift** (some cards render ~4:3) → every card and tile is strictly 4:5 (`aspect-ratio: 4/5; object-fit: cover`).
 - **Category "a partir de R$ 59" text is ~9 px** → minimum 12 px micro text.
 - **"PROMOÇÃO" pill crowding the price** → promo is shown by the struck price only. The optional tag sits on the image corner.
 - **Header lockup too large in round 1** (fixed in r2) → 28 px tall on mobile.
 - **Claims that are not confirmed** ("Garantia de 6 meses", "Envio para todo o Brasil", "Peças antialérgicas", "Parcelamento em até 6x") → rendered from `business.ts` placeholders, hidden when not set.
-- **Desktop mock shows the domain `ekasemijoias.com.br`** → not owned. The preview lives on GitHub Pages; buying a domain is Érika's decision.
+- **Desktop mock shows the domain `ekasemijoias.com.br`** → not owned. The site runs on GitHub Pages for now; buying a domain is Érika's decision.
 - **Footer emblem drawn by the generator** → use the real `assets/brand` files.
-- **Mockup photos (the model's face, products)** are illustrative → the preview uses the generated product set in `assets/images/` (same art direction) and on-skin crops without faces where possible.
+- **Mockup photos (the model's face, products)** are illustrative → the site uses the generated product set in `assets/images/` (same art direction) and on-skin crops without faces where possible.

@@ -1,8 +1,8 @@
 # Perguntas para a Érika
 
-A prévia funciona com dados de exemplo. Cada resposta abaixo substitui um item marcado como "pendente" no site (`src/config/business.ts` e no Admin → Configurações).
+O site já funciona com informações e fotos provisórias. Cada resposta abaixo substitui uma delas (`src/config/business.ts` e Admin → Configurações).
 
-## Essenciais (para o site parar de ser "demonstração")
+## Essenciais (para o site ir ao ar no endereço definitivo)
 1. **WhatsApp de vendas:** qual número recebe os pedidos (com DDD)? É WhatsApp Business?
 2. **Instagram:** qual é o @ oficial da ÉKA?
 3. **Cidade e atendimento:** em que cidade/UF você atende? Tem showroom ou loja física (endereço e horário), ou é só online e entrega?
@@ -24,5 +24,5 @@ A prévia funciona com dados de exemplo. Cada resposta abaixo substitui um item 
 ## Marca e conteúdo
 14. **Sua história:** como a ÉKA começou, o que significa o nome, o que você quer que as clientes sintam? (Vira a página "Sobre".)
 15. **Depoimentos:** tem prints ou mensagens de clientes que autorizam aparecer no site (primeiro nome + cidade)?
-16. **Domínio:** quer um endereço próprio (ex.: ekasemijoias.com.br)? A prévia está no GitHub Pages, e comprar domínio é decisão e custo seus.
-17. **PIN do painel:** que número de 4 dígitos você quer para entrar no Admin? (Na prévia é só para evitar cliques acidentais, não é segurança.)
+16. **Domínio:** quer um endereço próprio (ex.: ekasemijoias.com.br)? Por enquanto o site está no GitHub Pages; comprar domínio é decisão e custo seus.
+17. **PIN do painel:** que número de 4 dígitos você quer para entrar no painel?

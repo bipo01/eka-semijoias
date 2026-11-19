@@ -1,11 +1,11 @@
-# ÉKA Semijoias — site preview: plan
+# ÉKA Semijoias — website plan
 
 Status: research and design direction done (2026-11-19). Implementation happens in a fresh session driven by `docs/IMPLEMENTATION_PROMPT.md`.
 Inputs: `docs/research/audit.md` (reference audit), `docs/research/benchmarks.md` (premium jewelry patterns), `docs/mockups/` (chosen direction), `assets/brand/` (logo set).
 
-**Goal.** A frontend-only preview that Érika opens on her phone and immediately reads as a premium jewelry brand, clearly better than the Áthama reference. Every sale ends in **one well-formed WhatsApp message**. The catalog is editable by Érika from her phone (localStorage).
+**Goal.** The real ÉKA website (frontend-only, pre-production: GitHub Pages + stand-in photos) that Érika opens on her phone and immediately reads as a premium jewelry brand, clearly better than the Áthama reference. Every sale ends in **one well-formed WhatsApp message**. The catalog is editable by Érika from her phone (localStorage).
 
-**Non-goals for the preview.** Online payment, accounts, a backend, real shipping quotes, virtual try-on, SEO beyond the basics.
+**Non-goals for this version.** Online payment, accounts, a backend, real shipping quotes, virtual try-on, SEO beyond the basics.
 
 ---
 
@@ -59,7 +59,7 @@ A thin line icon set (1.5 px stroke, rounded caps), e.g. **Lucide** via `lucide-
 ### 1.6 Photography art direction (preview)
 - **Product (cards, PDP image 1):** still-life, single piece, warm champagne paper/linen backdrop `≈#F3E6DC`, soft daylight from the upper left, gentle contact shadow, the piece filling ~60 % of a 4:5 frame, no props except an occasional fold of silk. Every product shot must share this setup; consistency is what reads as premium.
 - **On skin (PDP image 2, hero, editorial):** ear, neck, collarbone, hand; warm natural light; close crops, no faces needed; diverse skin tones.
-- **Preview sources:** AI-generated still-lifes (ChatGPT, prompt in IMPLEMENTATION_PROMPT §Imagery) as the default, plus the generated mockup-style hero. Every image is marked as a placeholder in the data (`placeholder: true`) and a discreet "Imagens ilustrativas" note sits in the footer. Real photos from Érika replace them through the admin.
+- **Preview sources:** AI-generated still-lifes (ChatGPT, prompt in IMPLEMENTATION_PROMPT §Imagery) as the default, plus the generated mockup-style hero. Every stand-in image is marked in the data only (`placeholder: true`). **Nothing in the UI calls them illustrative.** Real photos from Érika replace them through the admin.
 
 ---
 
@@ -80,13 +80,19 @@ A thin line icon set (1.5 px stroke, rounded caps), e.g. **Lucide** via `lucide-
 | `/#/garantia` | Garantia e trocas | covered / not covered |
 | `/#/sobre` | Sobre a ÉKA | Érika's story + showroom |
 | `/#/contato` | Contato | WhatsApp, Instagram, showroom map link |
-| `/#/admin` | Catalog admin | PIN gate (demo only) |
+| `/#/admin` | Catalog admin | PIN gate |
 | `*` | 404 "Peça não encontrada" | links back to Catálogo |
+
+### 2.1b Voice and copy rules (apply to every visible string)
+- This is the real ÉKA site, not a demo. Never write demo/demonstração, prévia/preview, exemplo, placeholder, "imagens ilustrativas", "não é segurança", or anything that reveals it is unfinished or was generated.
+- The brand speaks as itself: "a gente", "nós", "nossas peças", "você" for the customer. **Never mention Érika in the third person** ("Fale com a Érika", "combine com a Érika", "Área da Érika"). Her name appears only on Sobre, in her own first person.
+- No helper lines that sound like an outsider explaining the business ("Você confirma pagamento e entrega…").
+- Unconfirmed facts are hidden or generic, never labeled as pending in public.
 
 ### 2.2 Global elements
 - **Header (sticky, 56 px mobile):** menu (drawer) · centered lockup · search · bag (count badge). Desktop: logo left, nav center (Catálogo, Coleções, Revendedoras, Como cuidar, Sobre), search/favorites/bag right. A champagne announcement bar (editable in admin) holds one line.
 - **Menu drawer (mobile):** categories with "a partir de R$ …", Coleções, Seja revendedora (highlighted), Como cuidar, Garantia, Sobre, Contato, Instagram/WhatsApp links.
-- **Footer (espresso):** emblem, short promise, link columns, WhatsApp, Instagram, showroom city {placeholder}, "Imagens ilustrativas · Prévia do site", © ÉKA Semijoias.
+- **Footer (espresso):** emblem, short promise, link columns, WhatsApp, Instagram, showroom city (if set), © ÉKA Semijoias.
 - **WhatsApp FAB:** 52 px round, copper, bottom-right with safe-area inset. Hidden on `/admin`, while a sheet is open, and on Produto, where the sticky bar already contains the action.
 
 ### 2.3 Page specs (mobile first; desktop adapts)
@@ -99,7 +105,7 @@ A thin line icon set (1.5 px stroke, rounded caps), e.g. **Lucide** via `lucide-
 6. Novidades: horizontal carousel of the newest 8 (by `createdAt`).
 7. Reseller band (champagne): "Seja uma revendedora ÉKA", 2 lines, "Quero revender".
 8. Como cuidar teaser: 3 tips + link.
-9. Depoimentos: swipeable cards, 5 stars, first name + city (placeholder).
+9. Depoimentos: swipeable cards, 5 stars, first name + city (seed content written like real testimonials, no label; replace before go-live).
 10. Instagram strip: 6 squares linking to the profile (static images; no embed or API).
 11. FAQ (5 questions, accordion), then the footer.
 
@@ -107,11 +113,11 @@ A thin line icon set (1.5 px stroke, rounded caps), e.g. **Lucide** via `lucide-
 
 **Product card:** 4:5 image (second image on hover, desktop only), name (2 lines max), swatch dots for available finishes, price; promo shows the old price struck in `--c-ink-muted` and the new price in `--c-copper`; one tag max (Novo / Mais vendido / Esgotado); quick-add bag button (adds the default variant, toast "Adicionado à sacola · Ver sacola"); unavailable products show "Esgotado" and "Avise-me" (WhatsApp).
 
-**Produto:** swipeable gallery (scroll-snap, dots, tap to open a fullscreen viewer with pinch-zoom); name; price/promo; finish selector (swatches with labels; changes the gallery and Ref.); size selector when the variant has sizes (rings 12–22, bracelets P/M/G); quantity; description; accordions: Detalhes da peça (material, banho, pedras, medidas, fecho, peso), Cuidados, Garantia; mini trust strip; "Ficou em dúvida? Fale com a Érika" WhatsApp block; "Complete o look" (same `collection` or category complement); "Ref. EKA-BR-001" small. **Sticky bottom bar:** price + "Adicionar à sacola" (primary) + WhatsApp icon button "Pedir agora" (a single-item message).
+**Produto:** swipeable gallery (scroll-snap, dots, tap to open a fullscreen viewer with pinch-zoom); name; price/promo; finish selector (swatches with labels; changes the gallery and Ref.); size selector when the variant has sizes (rings 12–22, bracelets P/M/G); quantity; description; accordions: Detalhes da peça (material, banho, pedras, medidas, fecho, peso), Cuidados, Garantia; mini trust strip; "Ficou com alguma dúvida? Fale com a gente" WhatsApp block; "Complete o look" (same `collection` or category complement); "Ref. EKA-BR-001" small. **Sticky bottom bar:** price + "Adicionar à sacola" (primary) + WhatsApp icon button "Pedir agora" (a single-item message).
 
 **Sacola** (sheet + page): line items (thumb, name, finish, size, stepper, remove with undo toast), subtotal, a note field, optional "Seu nome" and "Cidade" (persisted for next time), primary "Enviar pedido pelo WhatsApp". Message format:
 ```
-Olá, Érika! Quero fazer um pedido pelo site ÉKA:
+Olá! Gostaria de fazer este pedido:
 
 1) Brinco Gota Cristal — Rosé — 1 un. — R$ 129,90
 2) Anel Solitário — Dourado — aro 16 — 2 un. — R$ 279,80
@@ -119,10 +125,8 @@ Olá, Érika! Quero fazer um pedido pelo site ÉKA:
 Total: R$ 409,70
 Nome: Ana · Cidade: Campo Grande/MS
 Obs.: é para presente
-
-(Pedido montado no site — valores sujeitos a confirmação)
 ```
-Built with `encodeURIComponent`, sent to `https://wa.me/<number>?text=…`; while the number is pending, `https://wa.me/?text=…` (WhatsApp asks which contact to send to, so the preview works end to end). The cart is **not** cleared automatically. After the WhatsApp tab opens, show "Pedido enviado? Limpar sacola". Guard: a message over ~1,800 characters triggers a compact format (no blank lines, abbreviated variants).
+Built with `encodeURIComponent`, sent to `https://wa.me/<number>?text=…`; while the number is pending, `https://wa.me/?text=…` (WhatsApp asks which contact to send to, so ordering works end to end). The cart is **not** cleared automatically. After the WhatsApp tab opens, show "Pedido enviado? Limpar sacola". Guard: a message over ~1,800 characters triggers a compact format (no blank lines, abbreviated variants).
 
 **Revendedoras:** hero (sample-case photo) "Renda extra com semijoias que vendem sozinhas" {copy draft}; how it works in 4 steps (Cadastro → Conversa e aprovação → Recebe o mostruário → Vende e recebe sua comissão); benefits (cards); commission table **{placeholder until Érika defines it; hidden when empty}**; FAQ (Preciso investir? Como funciona o consignado? Quanto ganho? Para onde vocês enviam?); a short form: nome*, WhatsApp* (mask `(99) 99999-9999`), cidade/UF*, Instagram, "Já revende?" (sim/não), "Como conheceu a ÉKA?", consent checkbox* ("Autorizo a ÉKA a entrar em contato pelo WhatsApp"). Submit = validate → save the lead in localStorage (visible in admin) → open WhatsApp with a pre-filled introduction. **Never ask for CPF, address or birth date.**
 
@@ -192,17 +196,17 @@ interface CatalogState { schemaVersion: number; products: Product[]; categories:
 - One key per concern: `eka:catalog:v1` (CatalogState), `eka:cart:v1`, `eka:favorites:v1`, `eka:customer:v1` (name and city for the WhatsApp message). Every write goes through `storage.ts`: `JSON.stringify` → `try { localStorage.setItem }` catch `QuotaExceededError` (all browser variants: name or code 22/1014) → a typed `StorageResult` (`ok` | `quota` | `unavailable`). **Never a silent failure:** the admin shows a blocking toast "Espaço do navegador cheio (≈ X MB usados). Exporte um backup e remova fotos antigas." and the edit stays in the form (not lost).
 - `schemaVersion` + `migrations: Record<number, (old) => new>` run on load, and on error fall back to seed **after** saving the broken payload to `eka:catalog:corrupt:<ts>` (recoverable via export).
 - Storage meter in the admin (bytes used ≈ sum of key lengths × 2 / 5 MB budget), with warnings at 70 % and 90 %.
-- Seed on first load (no key) → writes seed with `schemaVersion: 1`. Private mode / storage disabled → read-only demo with a banner in the admin.
+- Seed on first load (no key) → writes seed with `schemaVersion: 1`. Private mode / storage disabled → read-only, with an admin banner "Este navegador não permite salvar alterações (talvez esteja em modo anônimo)".
 - Cross-tab: listen to the `storage` event and reload state, so a second tab never overwrites newer data (last-write warning in the admin if `updatedAt` changed underneath).
 
 ### 4.3 Admin (`/#/admin`)
-- **Gate:** 4–6-digit PIN (default `2580`, changeable in Settings, stored as a SHA-256 hash). Copy on the gate: "Área de demonstração — o PIN só evita cliques acidentais; não é segurança." The session flag lives in `sessionStorage`.
+- **Gate:** 4–6-digit PIN (default `2580`, changeable in Settings, stored as a SHA-256 hash). Gate copy: "Painel ÉKA" / "Digite seu PIN para entrar", with no disclaimers on screen. (Internal note, never shown: a client-side PIN only prevents casual access; real authentication needs a backend.) The session flag lives in `sessionStorage`.
 - **Mobile-first layout:** top bar with sections (Produtos · Categorias · Coleções · Revendedoras · Configurações · Backup). Product list = cards with thumb, name, price, available toggle, featured star, drag handle (pointer events + up/down buttons as the accessible fallback), search and filter by category.
 - **Product form (full-screen sheet on mobile):** name (auto slug, editable, unique), category, collections, price and promo (BRL mask; validation promo < price), description, details, finishes/variants (add finish → its photos, sizes, SKU, available), photos (upload, reorder, set main, alt text required with a suggested default "{nome} — {acabamento}"), available, featured, tags. Save / Save and new / Duplicate / Delete (confirm via an in-app modal, never `window.confirm`; then an undo toast).
 - **Categories and collections:** CRUD + order. Deleting a category with products asks where to move them.
 - **Leads:** list of reseller pre-registrations, "Chamar no WhatsApp", delete, export CSV.
-- **Settings:** announcement bar text, WhatsApp, Instagram, city, warranty months, PIN; the "pendente" checklist of placeholders.
-- **Backup:** Export JSON (`eka-catalogo-AAAA-MM-DD.json`, includes images); Import JSON (validate with zod, show a diff summary "32 produtos, 6 categorias", confirm, migrate); **Restaurar dados de demonstração** (confirm modal, export offered first).
+- **Settings:** announcement bar text, WhatsApp, Instagram, city, warranty months, PIN; a neutral checklist "Complete as informações da loja" for the unconfirmed facts.
+- **Backup:** Export JSON (`eka-catalogo-AAAA-MM-DD.json`, includes images); Import JSON (validate with zod, show a diff summary "32 produtos, 6 categorias", confirm, migrate); **Restaurar catálogo inicial** (confirm modal, export offered first).
 
 ### 4.4 Image upload pipeline
 `<input type="file" accept="image/*" capture="environment" multiple>` → `createImageBitmap` (honors EXIF orientation) → draw on a canvas at max 1200 px on the long side → `canvas.toBlob('image/webp', 0.8)` (fallback `image/jpeg`, 0.82, on Safari versions without WebP encoding) → if > 180 KB, step quality down (0.7, 0.6) and then size (1000, 800) → data URL. Also generate a 480 px thumbnail for cards. Show the per-image size and the remaining budget. Budget: ~180 KB + ~40 KB per image ⇒ ~20 products × 1–2 photos fit in ~5 MB; the UI says so plainly. HEIC that fails to decode → clear message "Formato não suportado — envie em JPG ou PNG".

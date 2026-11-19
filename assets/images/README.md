@@ -1,6 +1,6 @@
-# Preview imagery (placeholders)
+# Stand-in imagery
 
-All images here were **generated with ChatGPT image generation on 2026-11-19** for the ÉKA preview. They are illustrative placeholders, not Érika's real pieces. The site must flag them (`placeholder: true` in the seed data and "Imagens ilustrativas" in the footer) until she sends real photos.
+All images here were **generated with ChatGPT image generation on 2026-11-19** for the ÉKA site. They stand in for Érika's real pieces until she sends photos. Track them with `placeholder: true` **in the seed data only**. The UI never labels them as illustrative.
 
 ## Art direction (shared by every product shot)
 Vertical portrait, one piece, seamless warm champagne paper backdrop (≈ `#F3E6DC`) with a subtle linen texture, soft diffused daylight from the upper left, gentle contact shadow, the piece centered and filling ~55–65 % of the frame, a slight top-down angle, rose-gold plating unless noted, clear zirconia. No props, hands, text or logos.
@@ -30,5 +30,5 @@ Native size ≈ 1086×1448 (3:4). Crop to **4:5** (1086×1358, center-weighted) 
 
 `l01` (1024×1536) shows the **same** p01 earrings and p05 necklace on skin. Crop it for the PDP second images of p01 (ear, upper right) and p05/p12 (neck/pendant, center), and for the Instagram strip. `l02` and `l03` are 1536×1024 landscape. `l03` keeps the left half empty for a headline overlay.
 
-Prices are demo values within the range observed in the market (R$ 39,90–289,90). **Érika sets the real ones.**
+Prices are starting values within the range observed in the market (R$ 39,90–289,90). **Érika sets the real ones.**
 All 16 files were generated (sources stored as JPEG q92). `l04` is 1122×1402. Need more products? Generate them with the prompt in `docs/IMPLEMENTATION_PROMPT.md` §6 (upload `p01` as the reference), or reuse these photos with other finishes.
