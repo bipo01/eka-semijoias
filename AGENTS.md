@@ -5,7 +5,7 @@ The real website of **ÉKA Semijoias** (frontend-only, pre-production: GitHub Pa
 Live: https://bipo01.github.io/eka-semijoias/ (deployed from `main` by `.github/workflows/deploy.yml`).
 
 ## Status
-- Built 2026-11-19 from `docs/PLAN.md` (the spec) and `docs/IMPLEMENTATION_PROMPT.md` (build brief). Mockups: `docs/mockups/`. Open business questions: `docs/PERGUNTAS_ERIKA.md`. QA screenshots: `docs/qa/`.
+- Built 2026-11-19 from `docs/PLAN.md` (the spec) and `docs/IMPLEMENTATION_PROMPT.md` (build brief). Mockups: `docs/mockups/`. Open business questions: `docs/PERGUNTAS_ERIKA.md`. Planned features (Pix, stock, sales report, real time): `docs/pendencias.md`. QA screenshots: `docs/qa/`.
 
 ## Commands
 | Command | What it does |
