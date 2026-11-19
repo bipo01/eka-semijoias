@@ -148,3 +148,15 @@ test('menu drawer is keyboard accessible and returns focus', async ({ page, isMo
   await expect(drawer).toBeHidden();
   await expect(trigger).toBeFocused();
 });
+
+test('product page shows the total for the chosen quantity', async ({ page, isMobile }) => {
+  await open(page, '/produto/brinco-gota-cristal');
+  await page.getByRole('button', { name: 'Aumentar quantidade' }).filter({ visible: true }).first().click();
+  if (isMobile) {
+    const bar = page.locator('div.fixed.bottom-0').filter({ has: page.getByRole('button', { name: 'Adicionar à sacola' }) });
+    await expect(bar.getByText('2 × R$ 129,90')).toBeVisible();
+    await expect(bar.getByText('R$ 259,80')).toBeVisible();
+  } else {
+    await expect(page.getByText('R$ 259,80').filter({ visible: true })).toBeVisible();
+  }
+});

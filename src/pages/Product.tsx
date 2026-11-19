@@ -208,6 +208,11 @@ function ProductView({ product }: { product: Product }) {
             <div className="mt-6 flex items-center gap-4">
               <span className="font-medium" id="qty-label">Quantidade</span>
               <Stepper value={qty} onChange={setQty} label="Quantidade" />
+              {qty > 1 && (
+                <p className="hidden text-ink-muted lg:block">
+                  Total <span className="price text-lg text-ink">{formatBRL(effectivePrice(product) * qty)}</span>
+                </p>
+              )}
             </div>
           )}
 
@@ -276,8 +281,17 @@ function ProductView({ product }: { product: Product }) {
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-ivory/95 pb-[var(--safe-bottom)] shadow-[var(--shadow-1)] backdrop-blur lg:hidden">
         <div className="container-x flex h-16 items-center gap-3">
           <div className="min-w-0 shrink-0">
-            {product.promoPrice != null && <s className="price block text-xs leading-none text-ink-muted">{formatBRL(product.price)}</s>}
-            <span className={cx('price block text-lg leading-tight', product.promoPrice != null && 'text-copper')}>{formatBRL(effectivePrice(product))}</span>
+            {qty > 1 ? (
+              <span className="price block text-xs leading-none text-ink-muted">
+                {qty} × {formatBRL(effectivePrice(product))}
+              </span>
+            ) : (
+              product.promoPrice != null && <s className="price block text-xs leading-none text-ink-muted">{formatBRL(product.price)}</s>
+            )}
+            <span className={cx('price block text-lg leading-tight', product.promoPrice != null && 'text-copper')}>
+              {qty > 1 && <span className="sr-only">Total: </span>}
+              {formatBRL(effectivePrice(product) * qty)}
+            </span>
           </div>
           <div className="flex flex-1 items-center gap-2">{buyButtons(true)}</div>
         </div>
