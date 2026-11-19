@@ -49,7 +49,8 @@ export const useUi = create<UiState>()((set) => ({
     return id;
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
-  openPanel: (panel) => set({ panel }),
+  // Opening a panel answers any pending "Ver sacola"-style toast; keep only errors visible.
+  openPanel: (panel) => set((s) => ({ panel, toasts: s.toasts.filter((t) => t.tone === 'error') })),
   closePanel: () => set({ panel: null }),
   dialogOpened: () => set((s) => ({ openDialogs: s.openDialogs + 1 })),
   dialogClosed: () => set((s) => ({ openDialogs: Math.max(0, s.openDialogs - 1) })),
