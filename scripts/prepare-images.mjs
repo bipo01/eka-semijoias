@@ -60,7 +60,7 @@ async function lifestyle() {
   const l04 = path.join(src, 'l04-mao-aneis.jpg');
   await emit(l04, 'l04-mao-aneis', dir, { region: await crop45(l04), widths: [480, 960], aspect: 4 / 5 });
   for (const n of ['l02-mostruario-revendedora', 'l03-editorial-colecao-rose']) {
-    await emit(path.join(src, `${n}.jpg`), n, dir, { widths: [640, 960, 1440], aspect: 3 / 2 });
+    await emit(path.join(src, `${n}.jpg`), n, dir, { widths: [480, 960, 1440], aspect: 3 / 2 });
   }
   // Social preview image (Open Graph prefers JPEG at 1200x630).
   await sharp(path.join(src, 'l03-editorial-colecao-rose.jpg'))

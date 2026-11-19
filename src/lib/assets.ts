@@ -27,6 +27,14 @@ export function imageSources(src: string, opts: { thumb?: string | undefined; sm
   };
 }
 
+/** Landscape editorial photos also ship a 1440 px width. */
+const WIDE_STEMS = new Set(['images/lifestyle/l02-mostruario-revendedora', 'images/lifestyle/l03-editorial-colecao-rose']);
+
+/** Sources for banners/heroes: adds the 1440 px width when the asset has one. */
+export function bannerSources(src: string): ImageSources {
+  return imageSources(src, { widths: WIDE_STEMS.has(src) ? [480, 960, 1440] : [480, 960] });
+}
+
 export function productImageSources(image: ProductImage, small = false): ImageSources {
   return imageSources(image.src, { thumb: image.thumb, small });
 }
