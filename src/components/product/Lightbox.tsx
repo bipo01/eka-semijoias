@@ -73,7 +73,7 @@ export function Lightbox({ images, index, onIndex, open, onClose, title }: { ima
   const src = productImageSources(image);
   return (
     <Sheet open={open} onClose={onClose} title={title} hideTitle side="full" className="!bg-ink text-on-dark on-dark [&_button[aria-label=Fechar]]:text-on-dark [&_button[aria-label=Fechar]:hover]:bg-white/10">
-      <div className="relative flex h-[calc(100dvh-80px)] items-center justify-center overflow-hidden">
+      <div className="relative flex h-[calc(100dvh-120px)] items-center justify-center overflow-hidden">
         <div
           className="flex h-full w-full touch-none items-center justify-center select-none"
           onPointerDown={onPointerDown}

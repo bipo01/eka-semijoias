@@ -15,7 +15,7 @@ Live: https://bipo01.github.io/eka-semijoias/ (deployed from `main` by `.github/
 | `npm run typecheck` | `tsc -b --noEmit` (strict) |
 | `npm run lint` | ESLint (bans `dangerouslySetInnerHTML` and `alert/confirm/prompt`) |
 | `npm test -- --run` | Vitest unit tests (jsdom) |
-| `npm run e2e` | Playwright (Pixel 7 + desktop Chromium; builds and serves `dist/`). `E2E_BASE_URL=<url>` targets a running server or the live site. |
+| `npm run e2e` | Playwright on Chromium (Pixel 7, desktop) and WebKit/Safari (iPhone 13, desktop Safari); builds and serves `dist/`. `E2E_BASE_URL=<url>` targets a running server or the live site. `--project=mobile-webkit` for a quick Safari pass. |
 | `QA_SCREENS=1 npx playwright test e2e/qa-screens.spec.ts --project=desktop-chromium` | Full-page screenshots of every route at 360/390/768/1280/1440 into `docs/qa/` |
 | `npm run images` | One-off: regenerate `public/images` and `public/brand` from `assets/` (outputs are committed; CI does not run it) |
 

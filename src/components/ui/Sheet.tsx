@@ -28,6 +28,7 @@ interface SheetProps {
  */
 export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', className, children, footer, headerExtra, initialFocus }: SheetProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const dialogOpened = useUi((s) => s.dialogOpened);
   const dialogClosed = useUi((s) => s.dialogClosed);
@@ -51,7 +52,9 @@ export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', classN
       const previouslyFocused = document.activeElement as HTMLElement | null;
       dialog.showModal();
       dialogOpened();
-      initialFocus?.current?.focus();
+      // showModal() focuses the first button (the close X), which Safari draws with a focus ring.
+      // Focus the requested field, or the sheet itself; Tab still reaches the controls.
+      (initialFocus?.current ?? contentRef.current)?.focus({ preventScroll: true });
       return () => {
         dialog.close();
         dialogClosed();
@@ -74,7 +77,7 @@ export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', classN
       }}
     >
       {(open || mounted) && (
-        <div className={cx('flex max-h-[inherit] flex-col', side !== 'center' && 'h-full')} style={side === 'center' ? { maxHeight: 'calc(100dvh - 32px)' } : undefined}>
+        <div ref={contentRef} tabIndex={-1} className={cx('flex max-h-[inherit] flex-col outline-none', side !== 'center' && 'h-full')} style={side === 'center' ? { maxHeight: 'calc(100dvh - 32px)' } : undefined}>
           {side === 'bottom' && <div aria-hidden="true" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line md:hidden" />}
           <div className={cx('flex shrink-0 items-center gap-2 px-5 pt-3 pb-2', hideTitle && 'justify-end')}>
             <h2 id={titleId} className={cx('font-display text-display-m flex-1', hideTitle && 'sr-only')}>
