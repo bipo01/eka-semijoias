@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useBusiness } from '../../hooks/useBusiness';
 import { asset } from '../../lib/assets';
-import { generalMessage, whatsappUrl } from '../../lib/whatsapp';
+import { useMessages } from '../../hooks/useMessages';
+import { whatsappUrl } from '../../lib/whatsapp';
 import { InstagramIcon, WhatsAppIcon } from '../ui/Icons';
 
 const COLUMNS = [
@@ -26,6 +27,7 @@ const COLUMNS = [
 
 export function Footer() {
   const biz = useBusiness();
+  const contactMessage = useMessages()('contato');
   return (
     <footer className="on-dark bg-ink pb-[calc(88px+var(--safe-bottom))] text-on-dark lg:pb-12">
       <div className="container-x grid grid-cols-2 gap-x-6 gap-y-10 pt-12 md:grid-cols-[1.2fr_1fr_1fr_1fr] md:gap-8 lg:pt-16">
@@ -51,7 +53,7 @@ export function Footer() {
           <h2 className="eyebrow mb-3 font-sans text-rose-light">Fale com a gente</h2>
           <ul className="flex flex-col">
             <li>
-              <a href={whatsappUrl(biz.whatsapp, generalMessage)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2.5 hover:text-rose-light">
+              <a href={whatsappUrl(biz.whatsapp, contactMessage)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2.5 hover:text-rose-light">
                 <WhatsAppIcon size={20} /> WhatsApp
               </a>
             </li>

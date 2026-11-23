@@ -5,7 +5,8 @@ import { FINISH_LABEL, type Product } from '../../data/schema';
 import { useBusiness } from '../../hooks/useBusiness';
 import { useCatalog } from '../../store/catalog';
 import { productImageSources } from '../../lib/assets';
-import { notifyMeMessage, whatsappUrl } from '../../lib/whatsapp';
+import { whatsappUrl } from '../../lib/whatsapp';
+import { useMessages } from '../../hooks/useMessages';
 import { Img } from '../ui/Img';
 import { Price, SwatchDot } from '../ui/Misc';
 import { cx } from '../ui/cx';
@@ -17,6 +18,7 @@ export const CARD_SIZES = '(min-width: 1024px) 280px, (min-width: 768px) 30vw, 4
 export function ProductCard({ product, priority, sizes = CARD_SIZES, compact }: { product: Product; priority?: boolean; sizes?: string; compact?: boolean }) {
   const addToBag = useAddToBag();
   const biz = useBusiness();
+  const message = useMessages();
   const stock = useCatalog((s) => s.data.stock);
   const badge = productBadge(product, stock);
   const purchasable = isPurchasable(product, stock);
@@ -106,7 +108,7 @@ export function ProductCard({ product, priority, sizes = CARD_SIZES, compact }: 
         <Price price={product.price} promoPrice={product.promoPrice} size="sm" />
         {!purchasable && (
           <a
-            href={whatsappUrl(biz.whatsapp, notifyMeMessage(product.name))}
+            href={whatsappUrl(biz.whatsapp, message('aviseme', { peca: product.name, link_peca: `${window.location.origin}/produto/${product.slug}` }))}
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Avise-me quando ${product.name} voltar`}

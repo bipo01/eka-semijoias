@@ -9,7 +9,8 @@ import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { bannerSources } from '../lib/assets';
 import { apiUrl } from '../lib/api';
-import { leadFormSchema, leadMessage, maskPhone, UFS, type LeadForm } from '../lib/lead';
+import { leadFormSchema, leadVars, maskPhone, UFS, type LeadForm } from '../lib/lead';
+import { useMessages } from '../hooks/useMessages';
 import { whatsappUrl } from '../lib/whatsapp';
 
 const STEPS = [
@@ -138,6 +139,7 @@ function sendLead(form: Record<string, unknown>): Promise<boolean> {
 }
 
 function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
+  const message = useMessages();
   const [form, setForm] = useState({ name: '', whatsapp: '', city: '', uf: '', instagram: '', alreadySells: null as boolean | null, source: '', consent: false });
   const [errors, setErrors] = useState<Errors>({});
   const [sentUrl, setSentUrl] = useState<string | null>(null);
@@ -169,7 +171,7 @@ function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
     // Both channels: the admin list (server) and the WhatsApp message, which carries every field.
     setStored(null);
     void sendLead({ ...form, alreadySells: lead.alreadySells, website: honeypot.current?.value ?? '' }).then(setStored);
-    const url = whatsappUrl(whatsapp, leadMessage(lead));
+    const url = whatsappUrl(whatsapp, message('revendedora', leadVars(lead)));
     window.open(url, '_blank', 'noopener,noreferrer');
     setSentUrl(url);
   };

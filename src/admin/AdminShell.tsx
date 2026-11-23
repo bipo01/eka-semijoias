@@ -16,6 +16,7 @@ export const SECTIONS = [
   { path: 'produtos', label: 'Produtos' },
   { path: 'estoque', label: 'Estoque' },
   { path: 'relatorio', label: 'Relatório' },
+  { path: 'mensagens', label: 'Mensagens' },
   { path: 'categorias', label: 'Categorias' },
   { path: 'revendedoras', label: 'Revendedoras' },
   { path: 'configuracoes', label: 'Configurações' },

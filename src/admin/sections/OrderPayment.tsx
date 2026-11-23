@@ -1,21 +1,17 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, Download, FileText, Link2, ReceiptText } from 'lucide-react';
-import { Button, ButtonAnchor } from '../../components/ui/Button';
+import { Check, Download, FileText, Link2, ReceiptText } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/Field';
-import { WhatsAppIcon } from '../../components/ui/Icons';
 import { Sheet } from '../../components/ui/Sheet';
 import { cx } from '../../components/ui/cx';
 import { chargeAmount, type Order, type ReceiptMeta } from '../../data/orders';
-import { FINISH_LABEL } from '../../data/schema';
 import { centsToInput, formatBRL, parseBRL } from '../../lib/format';
-import { buildPixPayload, pixTxid } from '../../lib/pix';
-import { buildChargeMessage, whatsappUrl } from '../../lib/whatsapp';
 import { useCatalog } from '../../store/catalog';
-import { toast } from '../../store/ui';
 import { formatDateTime } from '../lib/contact';
 import { ADMIN_BASE } from '../lib/paths';
-import { changeOrderStatus, chargeOrder, paymentLink, receiptObjectUrl, receiptUrl } from '../lib/orders';
+import { changeOrderStatus, chargeOrder, receiptObjectUrl, receiptUrl } from '../lib/orders';
+import { copyText, MessageActions, OrderMessageComposer, useOrderMessage } from './OrderMessages';
 
 /*
  * Payment in the order detail: "Cobrar por Pix" (confirms the order if needed,
@@ -23,52 +19,13 @@ import { changeOrderStatus, chargeOrder, paymentLink, receiptObjectUrl, receiptU
  * message) and the receipts the customer sent through the link.
  */
 
-async function copy(text: string, done: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast(done, { tone: 'success' });
-  } catch {
-    toast('Não foi possível copiar automaticamente. Selecione o texto e copie.', { tone: 'error' });
-  }
-}
+const copy = copyText;
 
-/** The message (and pieces) for the current charge of an order. */
+/** The charge message (active "Cobrança Pix" variation) for an order with a charge. */
 export function useChargeMessage(order: Order) {
   const pix = useCatalog((s) => s.data.settings.pix);
-  return useMemo(() => {
-    const charge = order.charge;
-    if (!charge || !pix) return null;
-    const link = paymentLink(charge.token);
-    const pixCode = buildPixPayload({ key: pix.key, name: pix.name, city: pix.city, amountCents: charge.amountCents, txid: pixTxid(order.number) });
-    const message = buildChargeMessage({
-      number: order.number,
-      firstName: order.anonymized ? '' : (order.customer.name.trim().split(/\s+/)[0] ?? ''),
-      items: order.items.map((i) => ({ name: i.name, finish: FINISH_LABEL[i.finish], ...(i.size ? { size: i.size } : {}), qty: i.qty, lineCents: i.unitCents * i.qty })),
-      shippingCents: charge.shippingCents,
-      discountCents: charge.discountCents,
-      amountCents: charge.amountCents,
-      link,
-      pixCode,
-    });
-    return { link, message };
-  }, [order, pix]);
-}
-
-/** `quiet`: secondary styling, when another action (accepting a receipt) is the main one. */
-function MessageActions({ order, compact, quiet, text }: { order: Order; compact?: boolean; quiet?: boolean; text?: string }) {
-  const ready = useChargeMessage(order);
-  if (!ready) return null;
-  const message = text ?? ready.message;
-  return (
-    <div className={cx('flex flex-col gap-2', compact && 'sm:flex-row')}>
-      <Button block variant={quiet ? 'secondary' : 'primary'} onClick={() => void copy(message, 'Mensagem copiada. É só colar na conversa da cliente.')}>
-        <Copy size={18} strokeWidth={1.5} /> Copiar mensagem
-      </Button>
-      <ButtonAnchor href={whatsappUrl(null, message)} variant={quiet ? 'ghost' : 'secondary'} block>
-        <WhatsAppIcon size={19} /> Abrir WhatsApp
-      </ButtonAnchor>
-    </div>
-  );
+  const om = useOrderMessage(order);
+  return useMemo(() => (order.charge && pix && om.link ? { link: om.link, message: om.compose('cobranca') } : null), [order.charge, pix, om]);
 }
 
 /** "Cobrar por Pix": shipping/discount → charge → ready message. */
@@ -94,8 +51,6 @@ function ChargeBody({ order, onClose, onDone }: { order: Order; onClose: () => v
     onDone(value);
   };
   const ready = useChargeMessage(order);
-  /** The owner's edits to the ready message (null: the generated text). */
-  const [draft, setDraft] = useState<string | null>(null);
   useEffect(() => () => onDone(false), [onDone]);
 
   const shippingCents = shipping.trim() ? parseBRL(shipping) : 0;
@@ -148,26 +103,8 @@ function ChargeBody({ order, onClose, onDone }: { order: Order; onClose: () => v
               Pedido confirmado e cobrança de <span className="price font-medium whitespace-nowrap">{formatBRL(order.charge?.amountCents ?? 0)}</span> criada.
             </span>
           </div>
-          <p className="text-sm text-ink-muted">Confira a mensagem, ajuste o que quiser e copie para a conversa com a cliente. Ela traz o link para pagar e enviar o comprovante.</p>
-          <label htmlFor={`charge-msg-${order.id}`} className="sr-only">
-            Mensagem para a cliente
-          </label>
-          <textarea
-            id={`charge-msg-${order.id}`}
-            value={draft ?? ready.message}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={12}
-            className="w-full resize-y rounded-[12px] border border-line bg-white p-4 text-sm leading-relaxed text-ink focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"
-          />
-          {draft !== null && draft !== ready.message && (
-            <div className="-mt-2 flex flex-col gap-1 text-sm">
-              {!draft.includes(ready.link) && <p className="text-danger">O link de pagamento saiu da mensagem: sem ele a cliente não consegue enviar o comprovante.</p>}
-              <button type="button" className="min-h-9 self-start text-copper underline underline-offset-4" onClick={() => setDraft(null)}>
-                Voltar à mensagem original
-              </button>
-            </div>
-          )}
-          <MessageActions order={order} text={draft ?? ready.message} />
+          <p className="text-sm text-ink-muted">Escolha a variação, ajuste o que quiser e copie para a conversa com a cliente. A mensagem leva o link para pagar e enviar o comprovante.</p>
+          <OrderMessageComposer order={order} types={['cobranca']} />
           <button type="button" className="min-h-11 text-sm text-copper underline underline-offset-4" onClick={() => void copy(ready.link, 'Link copiado.')}>
             Copiar só o link
           </button>
@@ -305,7 +242,7 @@ export function PaymentSection({ order, onCharge }: { order: Order; onCharge: ()
 
       {open && charge && ready && (
         <div className="flex flex-col gap-2 border-t border-line pt-4">
-          <MessageActions order={order} quiet={receipts.length > 0} />
+          <MessageActions text={ready.message} quiet={receipts.length > 0} />
           <div className="flex flex-wrap gap-x-4">
             <button type="button" className="inline-flex min-h-11 items-center gap-1.5 text-sm text-copper underline underline-offset-4" onClick={() => void copy(ready.link, 'Link copiado.')}>
               <Link2 size={15} strokeWidth={1.5} aria-hidden="true" /> Copiar link

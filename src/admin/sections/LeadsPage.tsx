@@ -11,6 +11,8 @@ import { EmptyState } from '../FormBits';
 import { formatDateTime, formatPhone, whatsappDigits } from '../lib/contact';
 import { downloadText, fileDate } from '../lib/download';
 import { useLeads } from '../lib/leads';
+import { useMessages } from '../../hooks/useMessages';
+import { firstNameOf } from '../../data/messages';
 
 export const newestFirst = (leads: ResellerLead[]) => [...leads].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
@@ -32,11 +34,10 @@ export function leadsCsv(leads: ResellerLead[]): string {
   );
 }
 
-const greeting = (lead: ResellerLead) =>
-  `Olá, ${lead.name.trim().split(/\s+/)[0] || 'tudo bem'}! Aqui é da ÉKA Semijoias. Recebemos seu cadastro para revender nossas peças e queremos conversar com você.`;
 
 export function LeadsPage() {
   const { state, reload, remove } = useLeads();
+  const message = useMessages();
   const [deleting, setDeleting] = useState<ResellerLead | null>(null);
   const [busy, setBusy] = useState(false);
   const leads = state.status === 'ready' ? state.leads : [];
@@ -111,7 +112,7 @@ export function LeadsPage() {
                   )}
                 </dl>
                 {digits.length >= 12 && (
-                  <ButtonAnchor href={whatsappUrl(digits, greeting(lead))} size="sm" className="mt-3">
+                  <ButtonAnchor href={whatsappUrl(digits, message('boasvindas', { primeiro_nome: firstNameOf(lead.name) }))} size="sm" className="mt-3">
                     <WhatsAppIcon size={18} /> Chamar no WhatsApp
                   </ButtonAnchor>
                 )}

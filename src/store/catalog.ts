@@ -3,6 +3,7 @@ import { business } from '../config/business';
 import { chunkChanges, diffCatalog, type Change } from '../data/changes';
 import { validateCatalog } from '../data/integrity';
 import { catalogSchema, isDataUrl, SCHEMA_VERSION, type Catalog } from '../data/schema';
+import { readMessageSettings } from '../data/messages';
 import { KEYS, readJSON, writeJSON } from '../data/storage';
 import { api, ApiError, errorMessage, idempotencyKey } from '../lib/api';
 import { connectLive, type LiveConnection } from '../lib/live';
@@ -68,6 +69,12 @@ function parseSnapshot(raw: unknown): Snapshot | null {
   if (!raw || typeof raw !== 'object') return null;
   const version = (raw as { version?: unknown }).version;
   if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) return null;
+  // Message templates never take the site down: invalid ones (another version's) fall back to the defaults.
+  const settings = (raw as { settings?: Record<string, unknown> }).settings;
+  if (settings && 'messages' in settings && !readMessageSettings(settings.messages)) {
+    const { messages: _messages, ...rest } = settings;
+    raw = { ...(raw as object), settings: rest };
+  }
   const parsed = catalogSchema.safeParse(raw);
   return parsed.success ? { ...parsed.data, version } : null;
 }

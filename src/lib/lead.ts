@@ -1,3 +1,4 @@
+import type { MessageVars } from '../data/messages';
 import { z } from 'zod';
 
 export const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'] as const;
@@ -32,17 +33,15 @@ export const leadFormSchema = z.object({
 export type LeadFormInput = z.input<typeof leadFormSchema>;
 export type LeadForm = z.output<typeof leadFormSchema>;
 
-export function leadMessage(lead: LeadForm): string {
-  return [
-    'Olá! Quero ser revendedora ÉKA.',
-    '',
-    `Nome: ${lead.name}`,
-    `WhatsApp: ${maskPhone(lead.whatsapp)}`,
-    `Cidade: ${lead.city}/${lead.uf}`,
-    lead.instagram && `Instagram: @${lead.instagram}`,
-    `Já revendo: ${lead.alreadySells ? 'Sim' : 'Não'}`,
-    lead.source && `Conheci a ÉKA por: ${lead.source}`,
-  ]
-    .filter(Boolean)
-    .join('\n');
+/** The pre-registration as template values (Painel → Mensagens → "Quero ser revendedora"). */
+export function leadVars(lead: LeadForm): MessageVars {
+  return {
+    nome: lead.name,
+    whatsapp: maskPhone(lead.whatsapp),
+    cidade: lead.city,
+    uf: lead.uf,
+    instagram: lead.instagram,
+    ja_revende: lead.alreadySells ? 'Sim' : 'Não',
+    origem: lead.source,
+  };
 }

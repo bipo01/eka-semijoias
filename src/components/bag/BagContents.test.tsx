@@ -85,7 +85,7 @@ describe('bag checkout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Finalizar pedido' }));
     expect(await screen.findByText('Não conseguimos registrar o pedido.', {}, { timeout: 5000 })).toBeInTheDocument();
     const fallback = screen.getByRole('link', { name: /Enviar pelo WhatsApp mesmo assim/ });
-    expect(decodeURIComponent(fallback.getAttribute('href')!)).toContain('Gostaria de fazer este pedido');
+    expect(decodeURIComponent(fallback.getAttribute('href')!)).toContain('Olá! Fiz o pedido pelo site:');
     expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument();
   }, 10_000);
 

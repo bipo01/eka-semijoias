@@ -59,7 +59,7 @@ test('admin: usable at 360px without horizontal overflow', async ({ browser }) =
   await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': `10.250.${Math.floor(Math.random() * 250)}.1` });
   await page.goto('/admin');
   await unlock(page);
-  for (const section of ['pedidos', 'produtos', 'estoque', 'relatorio', 'categorias', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
+  for (const section of ['pedidos', 'produtos', 'estoque', 'relatorio', 'mensagens', 'categorias', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
     await page.goto(`/admin/${section}`);
     await page.waitForLoadState('networkidle');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -73,7 +73,7 @@ test('admin: no serious accessibility violations', async ({ page }) => {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   expect(await axe(page)).toEqual([]);
   await unlock(page);
-  for (const section of ['pedidos', 'produtos', 'estoque', 'relatorio', 'categorias', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
+  for (const section of ['pedidos', 'produtos', 'estoque', 'relatorio', 'mensagens', 'categorias', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
     await page.goto(`/admin/${section}`);
     await page.waitForLoadState('networkidle');
     expect(await axe(page), section).toEqual([]);
@@ -266,5 +266,49 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   // 5. The link now says it is paid.
   await customer.reload();
   await expect(customer.getByRole('heading', { name: 'Pagamento confirmado' })).toBeVisible();
+
+  // 6. A ready "pagamento confirmado" message for the customer (default template).
+  await detail.getByRole('button', { name: 'Enviar mensagem' }).click();
+  const composer = page.getByRole('dialog', { name: `Mensagem · pedido nº ${number}` });
+  await expect(composer.getByRole('textbox', { name: 'Mensagem para a cliente' })).toHaveValue(new RegExp(`Recebemos o pagamento do pedido nº ${number}`));
+  await composer.getByRole('button', { name: 'Carinhosa' }).click();
+  await expect(composer.getByRole('textbox', { name: 'Mensagem para a cliente' })).toHaveValue(/Pagamento recebido!/);
   await customerContext.close();
+});
+
+test('messages: the owner creates her own variation and the site uses it', async ({ page }, testInfo) => {
+  // Settings are shared by the parallel projects: one project edits them.
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'edits shared settings');
+  await page.goto('/admin');
+  await unlock(page);
+  await page.getByRole('link', { name: 'Mensagens', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Mensagens das clientes' })).toBeVisible();
+  const card = page.locator('li').filter({ has: page.getByRole('heading', { name: 'Dúvida sobre uma peça' }) });
+  await card.getByRole('button', { name: /Personalizar/ }).click();
+  const editor = page.getByRole('dialog', { name: 'Dúvida sobre uma peça' });
+  await editor.getByRole('button', { name: /Nova variação/ }).click();
+  await editor.getByRole('textbox', { name: 'Nome da variação' }).fill('Minha teste');
+  const text = editor.getByRole('textbox', { name: 'Texto' });
+  await text.fill('Oi! Vi no site: ');
+  await editor.getByRole('button', { name: '+ Peça', exact: true }).click();
+  await expect(text).toHaveValue('Oi! Vi no site: {peca}');
+  await expect(editor.getByText('Oi! Vi no site: Anel Solitário Delicado')).toBeVisible(); // live preview
+  await editor.getByRole('button', { name: 'Usar esta variação' }).click();
+  await editor.getByRole('button', { name: 'Salvar mensagens' }).click();
+  await expect(page.getByText(/Mensagens salvas/)).toBeVisible();
+  await expect(card.getByText('Minha teste')).toBeVisible();
+
+  await page.goto('/produto/brinco-gota-cristal');
+  const href = await page.getByRole('link', { name: /Fale com a gente/ }).first().getAttribute('href');
+  expect(decodeURIComponent(href!.split('text=')[1]!)).toBe('Oi! Vi no site: Brinco Gota Cristal');
+
+  // Back to the built-in default (deleting her variation).
+  await page.goto('/admin/mensagens');
+  await page.locator('li').filter({ has: page.getByRole('heading', { name: 'Dúvida sobre uma peça' }) }).getByRole('button', { name: /Personalizar/ }).click();
+  const again = page.getByRole('dialog', { name: 'Dúvida sobre uma peça' });
+  await again.getByRole('button', { name: /Minha teste/ }).click();
+  await again.getByRole('button', { name: 'Excluir variação' }).click();
+  await page.getByRole('dialog', { name: /Excluir “Minha teste”/ }).getByRole('button', { name: 'Excluir' }).click();
+  await again.getByRole('button', { name: 'Salvar mensagens' }).click();
+  await expect(page.getByText(/Mensagens salvas/)).toBeVisible();
 });

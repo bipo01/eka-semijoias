@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { normalizePixKey, pixKeyKind } from '../lib/pix';
+import { messageSettingsSchema } from './messages';
 
 export const FINISHES = ['rose', 'dourado', 'prateado', 'rodio-negro'] as const;
 export type Finish = (typeof FINISHES)[number];
@@ -141,6 +142,8 @@ export const settingsSchema = z.object({
     .optional(),
   /** "Últimas unidades" shows when a tracked piece has this many or fewer left (default 2). */
   lowStockThreshold: z.number().int().min(0).max(20).optional(),
+  /** WhatsApp message templates the owner changed (src/data/messages.ts); absent = built-in defaults. */
+  messages: messageSettingsSchema.optional(),
 });
 
 export const MAX_PRODUCTS = 500;

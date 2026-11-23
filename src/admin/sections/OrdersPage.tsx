@@ -9,6 +9,7 @@ import { sizeLabel } from '../../data/catalog';
 import { awaitingReview, canTransition, HOLDS_STOCK, NEXT_STEP, STATUS_LABEL, UNDO_STEP, type Order, type OrderStatus } from '../../data/orders';
 import { ReceiptText } from 'lucide-react';
 import { ChargeSheet, PaymentSection } from './OrderPayment';
+import { OrderMessageButton } from './OrderMessages';
 import { FINISH_LABEL } from '../../data/schema';
 import { formatBRL } from '../../lib/format';
 import { toast } from '../../store/ui';
@@ -196,6 +197,7 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
             {UNDO_LABEL[order.status]}
           </Button>
         )}
+        <OrderMessageButton order={order} />
         {canCancel && (
           <Button variant="ghost" block disabled={busy} className="text-danger" onClick={() => setConfirm('cancelar')}>
             Cancelar pedido

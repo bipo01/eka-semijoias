@@ -4,7 +4,8 @@ import { MapPin, PencilLine, ShoppingBag, Trash2, User } from 'lucide-react';
 import { useBusiness } from '../../hooks/useBusiness';
 import { productImageSources } from '../../lib/assets';
 import { formatBRL } from '../../lib/format';
-import { buildOrderMessage, lineTotal, orderTotal, resolveCart, whatsappUrl, type OrderLine } from '../../lib/whatsapp';
+import { lineTotal, orderTotal, resolveCart, whatsappUrl, type OrderLine } from '../../lib/whatsapp';
+import { messageItems, useMessages } from '../../hooks/useMessages';
 import { sizeLabel } from '../../data/catalog';
 import { finishLabel, pricingMessage, type PricingProblem } from '../../data/orders';
 import { ApiError, errorMessage, idempotencyKey } from '../../lib/api';
@@ -46,7 +47,12 @@ function RegisteredView({ order, onNavigate }: { order: RegisteredOrder; onNavig
   const biz = useBusiness();
   const { sent, markSent, reset } = useCheckout();
   const clearCart = useCart((s) => s.clear);
-  const message = buildOrderMessage({ lines: orderLines(order), name: order.name, city: order.city, ...(order.note ? { note: order.note } : {}), number: order.number });
+  const compose = useMessages();
+  const message = compose(
+    'pedido',
+    { pedido: String(order.number), total: formatBRL(order.totalCents), nome: order.name, cidade: order.city, obs: order.note },
+    { items: messageItems(orderLines(order).map((l) => ({ ...l, lineCents: lineTotal(l) }))) },
+  );
   const units = order.items.reduce((sum, i) => sum + i.qty, 0);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus(), []);
@@ -119,6 +125,7 @@ export function BagContents({ onNavigate, variant }: { onNavigate?: () => void; 
   const toast = useUi((s) => s.toast);
   const { name, city, note, setField } = useCustomer();
   const biz = useBusiness();
+  const compose = useMessages();
   const { order, sent, setOrder, reset } = useCheckout();
   const registeredFrom = useCheckout((s) => s.cartSignature);
   const [phase, setPhase] = useState<Phase>({ state: 'edit' });
@@ -221,7 +228,8 @@ export function BagContents({ onNavigate, variant }: { onNavigate?: () => void; 
   }
 
   // Fallback when the order could not be registered: the sale still goes through WhatsApp.
-  const fallbackMessage = buildOrderMessage({ lines, name, city, note });
+  // Not registered: the same template, without the order number.
+  const fallbackMessage = compose('pedido', { total: formatBRL(total), nome: name, cidade: city, obs: note }, { items: messageItems(lines.map((l) => ({ ...l, lineCents: lineTotal(l) }))) });
 
   return (
     <div className={cx('flex flex-col gap-5', variant === 'page' && 'lg:grid lg:grid-cols-[1fr_380px] lg:items-start lg:gap-12')}>

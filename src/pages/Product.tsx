@@ -17,7 +17,8 @@ import { FINISH_LABEL, type Product, type StockMap } from '../data/schema';
 import { useBusiness, warrantyLabel } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { formatBRL } from '../lib/format';
-import { notifyMeMessage, productQuestionMessage, whatsappUrl } from '../lib/whatsapp';
+import { whatsappUrl } from '../lib/whatsapp';
+import { useMessages } from '../hooks/useMessages';
 import { cartKey, MAX_QTY, useCart } from '../store/cart';
 import { useCatalog } from '../store/catalog';
 import { useUi } from '../store/ui';
@@ -43,6 +44,8 @@ export function ProductPage() {
 function ProductView({ product }: { product: Product }) {
   const data = useCatalog((s) => s.data);
   const biz = useBusiness();
+  const message = useMessages();
+  const productLink = `${window.location.origin}/produto/${product.slug}`;
   const addToBag = useAddToBag();
   const openPanel = useUi((s) => s.openPanel);
   const cartItems = useCart((s) => s.items);
@@ -100,7 +103,7 @@ function ProductView({ product }: { product: Product }) {
   const orderNow = () => {
     if (add({ quiet: true })) openPanel('bag');
   };
-  const notifyHref = whatsappUrl(biz.whatsapp, notifyMeMessage(`${product.name} (${FINISH_LABEL[variant.finish]})`));
+  const notifyHref = whatsappUrl(biz.whatsapp, message('aviseme', { peca: `${product.name} (${FINISH_LABEL[variant.finish]})`, link_peca: productLink }));
 
   const details = DETAIL_LABELS.filter(([k]) => product.details[k]);
 
@@ -288,7 +291,7 @@ function ProductView({ product }: { product: Product }) {
 
           <div className="mt-6 flex items-center justify-between gap-4 rounded-[12px] bg-champagne p-4">
             <p className="font-display text-title leading-snug">Ficou com alguma dúvida?</p>
-            <ButtonAnchor href={whatsappUrl(biz.whatsapp, productQuestionMessage(product.name))} variant="secondary" size="sm" className="shrink-0 bg-ivory/60">
+            <ButtonAnchor href={whatsappUrl(biz.whatsapp, message('duvida', { peca: product.name, link_peca: productLink }))} variant="secondary" size="sm" className="shrink-0 bg-ivory/60">
               <WhatsAppIcon size={18} /> Fale com a gente
             </ButtonAnchor>
           </div>

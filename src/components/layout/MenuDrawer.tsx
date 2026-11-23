@@ -2,7 +2,8 @@ import { ChevronRight, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { sortedCategories } from '../../data/catalog';
 import { useBusiness } from '../../hooks/useBusiness';
-import { generalMessage, whatsappUrl } from '../../lib/whatsapp';
+import { useMessages } from '../../hooks/useMessages';
+import { whatsappUrl } from '../../lib/whatsapp';
 import { useCatalog } from '../../store/catalog';
 import { useUi } from '../../store/ui';
 import { InstagramIcon, WhatsAppIcon } from '../ui/Icons';
@@ -15,6 +16,7 @@ export function MenuDrawer() {
   const close = useUi((s) => s.closePanel);
   const data = useCatalog((s) => s.data);
   const biz = useBusiness();
+  const contactMessage = useMessages()('contato');
 
   return (
     <Sheet open={open} onClose={close} title="Menu" side="left" hideTitle>
@@ -65,7 +67,7 @@ export function MenuDrawer() {
           ))}
         </ul>
         <div className="flex gap-3">
-          <a href={whatsappUrl(biz.whatsapp, generalMessage)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line px-4 text-sm hover:border-copper">
+          <a href={whatsappUrl(biz.whatsapp, contactMessage)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line px-4 text-sm hover:border-copper">
             <WhatsAppIcon size={18} /> WhatsApp
           </a>
           {biz.instagramUrl && (

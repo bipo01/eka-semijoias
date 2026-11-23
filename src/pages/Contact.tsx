@@ -6,18 +6,20 @@ import { TextArea } from '../components/ui/Field';
 import { InstagramIcon, WhatsAppIcon } from '../components/ui/Icons';
 import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { generalMessage, whatsappUrl } from '../lib/whatsapp';
+import { useMessages } from '../hooks/useMessages';
+import { whatsappUrl } from '../lib/whatsapp';
 
 export function ContactPage() {
   useDocumentTitle('Contato');
   const biz = useBusiness();
+  const contactMessage = useMessages()('contato');
   const [message, setMessage] = useState('');
   return (
     <div className="pb-16">
       <PageHeader eyebrow="Contato" title={<>Fale com a <em className="font-medium italic">gente</em></>} intro="Tire dúvidas, peça ajuda para escolher ou faça seu pedido. A gente responde pelo WhatsApp." />
       <div className="container-x grid gap-6 lg:grid-cols-2 lg:gap-10">
         <div className="flex flex-col gap-4">
-          <ButtonAnchor href={whatsappUrl(biz.whatsapp, generalMessage)} size="lg" className="w-full sm:w-fit">
+          <ButtonAnchor href={whatsappUrl(biz.whatsapp, contactMessage)} size="lg" className="w-full sm:w-fit">
             <WhatsAppIcon size={22} /> Chamar no WhatsApp
           </ButtonAnchor>
           {biz.instagramUrl && (
@@ -40,7 +42,7 @@ export function ContactPage() {
           className="flex flex-col gap-4 rounded-[12px] bg-champagne/70 p-5 lg:p-8"
           onSubmit={(e) => {
             e.preventDefault();
-            window.open(whatsappUrl(biz.whatsapp, message.trim() || generalMessage), '_blank', 'noopener,noreferrer');
+            window.open(whatsappUrl(biz.whatsapp, message.trim() || contactMessage), '_blank', 'noopener,noreferrer');
           }}
         >
           <h2 className="font-display text-display-m">Mensagem rápida</h2>

@@ -18,6 +18,7 @@ import { fetchPayView, uploadReceipt } from '../lib/payments';
 import { buildPixPayload, pixText, pixTxid } from '../lib/pix';
 import { isPdf, prepareReceipt } from '../lib/receipt';
 import { whatsappUrl } from '../lib/whatsapp';
+import { useMessages } from '../hooks/useMessages';
 
 /*
  * /pagamento/:token — the payment link the owner sends on WhatsApp after
@@ -285,6 +286,7 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
 
 function StatusCard({ view, onAgain }: { view: PayView; onAgain?: () => void }) {
   const biz = useBusiness();
+  const message = useMessages();
   if (view.state === 'pago') {
     return (
       <section className="flex flex-col items-center gap-3 rounded-[14px] bg-white px-5 py-8 text-center shadow-[var(--shadow-1)]">
@@ -322,7 +324,7 @@ function StatusCard({ view, onAgain }: { view: PayView; onAgain?: () => void }) 
         )}
       </p>
       <div className="mt-1 flex w-full flex-col gap-2">
-        <ButtonAnchor href={whatsappUrl(biz.whatsapp, `Olá! Enviei o comprovante do pedido nº ${view.number} pelo link.`)} variant="secondary" block>
+        <ButtonAnchor href={whatsappUrl(biz.whatsapp, message('comprovante', { pedido: String(view.number), primeiro_nome: view.firstName }))} variant="secondary" block>
           <WhatsAppIcon size={20} /> Avisar no WhatsApp
         </ButtonAnchor>
         {onAgain && (

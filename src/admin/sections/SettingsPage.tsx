@@ -102,6 +102,7 @@ function StoreSettings() {
           ...result.patch,
           ...(d.settings.pix ? { pix: d.settings.pix } : {}),
           ...(d.settings.lowStockThreshold !== undefined ? { lowStockThreshold: d.settings.lowStockThreshold } : {}),
+          ...(d.settings.messages ? { messages: d.settings.messages } : {}),
         },
       }),
       'Informações da loja salvas.',

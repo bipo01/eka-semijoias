@@ -1,15 +1,17 @@
 import { useBusiness } from '../../hooks/useBusiness';
-import { generalMessage, whatsappUrl } from '../../lib/whatsapp';
+import { useMessages } from '../../hooks/useMessages';
+import { whatsappUrl } from '../../lib/whatsapp';
 import { useUi } from '../../store/ui';
 import { WhatsAppIcon } from '../ui/Icons';
 
 export function WhatsAppFab() {
   const biz = useBusiness();
+  const contactMessage = useMessages()('contato');
   const hidden = useUi((s) => s.openDialogs > 0);
   if (hidden) return null;
   return (
     <a
-      href={whatsappUrl(biz.whatsapp, generalMessage)}
+      href={whatsappUrl(biz.whatsapp, contactMessage)}
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Fale com a gente pelo WhatsApp"

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { leadFormSchema, leadMessage, maskPhone } from './lead';
+import { composeMessage } from '../data/messages';
+import { leadFormSchema, leadVars, maskPhone } from './lead';
 
 const valid = { name: 'Ana Souza', whatsapp: '(67) 99999-1234', city: 'Campo Grande', uf: 'MS', instagram: '@ana.semi', alreadySells: false, source: 'Instagram', consent: true };
 
@@ -39,7 +40,7 @@ describe('leadFormSchema', () => {
 
   it('builds the intro message without empty lines for optional fields', () => {
     const r = leadFormSchema.parse({ ...valid, instagram: '', source: '' });
-    const msg = leadMessage(r);
+    const msg = composeMessage(undefined, 'revendedora', leadVars(r));
     expect(msg).toContain('Cidade: Campo Grande/MS');
     expect(msg).toContain('WhatsApp: (67) 99999-1234');
     expect(msg).not.toContain('Instagram');
