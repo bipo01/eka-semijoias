@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import {
+  adminOrderRequestSchema,
   ANONYMIZED_NAME,
   canTransition,
+  EDITABLE_ITEMS,
+  editItemsRequestSchema,
   FIRST_ORDER_NUMBER,
   HOLDS_STOCK,
   movesOf,
@@ -12,7 +15,9 @@ import {
   pricingMessage,
   STATUS_LABEL,
   type Order,
+  type OrderItem,
   type OrderStatus,
+  type PricingProblem,
   type StockMove,
 } from '../src/data/orders';
 import { hitStatement, ipKey, pruneThrottle, requireSession, retryAfter } from './auth';
@@ -21,8 +26,9 @@ import { randomToken, sha256Hex } from './crypto';
 import { guard, isGuardMiss, toHttpError, withReadRetry } from './db';
 import { HttpError, json, readBody, readJson, zodDetails } from './http';
 import { notifyCatalog, notifyOrders } from './live';
+import { notifyOwner, orderNotice } from './push';
 import type { Context } from './router';
-import { movementStatement, publishStatements, rowKey, type StockState } from './stock';
+import { publishStatements, rowKey, type StockState } from './stock';
 import { combosOf, type StockRow } from '../src/data/stock';
 import { sizeLabel } from '../src/data/catalog';
 import { FINISH_LABEL, type Finish } from '../src/data/schema';
@@ -183,6 +189,7 @@ export async function handleCreateOrder(ctx: Context): Promise<Response> {
     number = row.number;
   }
   ctx.waitUntil(notifyOrders(ctx.env));
+  ctx.waitUntil(notifyOwner(ctx.env, ctx.url.origin, orderNotice(number, order.totalCents, order.items.reduce((n, i) => n + i.qty, 0))));
   return json({ order: { ...response.order, number } }, { status: 201 });
 }
 
@@ -265,6 +272,93 @@ const statusSchema = z.object({ from: z.enum(ORDER_STATUSES), to: z.enum(ORDER_S
 /** "Anel Solitário, Dourado, aro 16" for stock messages (labels, never internal ids). */
 const describe = (m: { name: string; size: string }, finish: Finish) => [m.name, FINISH_LABEL[finish], m.size && sizeLabel(m.size)].filter(Boolean).join(', ');
 
+/** A stock movement tied to an order by id (the number is read in the same batch, so a new order's works too). */
+function orderMovement(db: D1Database, at: string, move: { productId: string; variantId: string; size: string }, delta: number, orderId: string): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO stock_movements (at, product_id, variant_id, size, delta, qty_after, reason, order_number)
+       SELECT ?1, ?2, ?3, ?4, ?5, qty, ?6, (SELECT number FROM orders WHERE id = ?7) FROM stock_levels WHERE product_id = ?2 AND variant_id = ?3 AND size = ?4`,
+    )
+    .bind(at, move.productId, move.variantId, move.size, delta, delta < 0 ? 'pedido' : 'devolucao', orderId);
+}
+
+interface StockPlan {
+  /** Guarded updates and movements, net per combination. Empty when nothing moves. */
+  statements: D1PreparedStatement[];
+  /** Every stock row after the change (for the snapshot). */
+  rows: StockRow[];
+  /** What the order holds afterwards (its new `stockMoves`). */
+  taken: StockMove[];
+  /** pt-BR lines for combinations without enough units. */
+  problems: string[];
+}
+
+/**
+ * Gives back `give` and takes `take` (only combinations still under stock control), netted per
+ * combination: swapping a piece in a confirmed order moves only the difference, and every decrease
+ * is guarded (`qty >= n`) besides the CHECK on the table and the catalog-version guard.
+ */
+function planStock(db: D1Database, state: StockState, at: string, orderId: string, give: StockMove[], take: StockMove[], items: OrderItem[]): StockPlan {
+  const before = new Map(state.rows.map((r) => [rowKey(r.product_id, r.variant_id, r.size), r.qty]));
+  const qty = new Map(before);
+  const touched = new Map<string, StockMove>();
+  for (const move of give) {
+    if (!counted(state, move)) continue;
+    const key = rowKey(move.productId, move.variantId, move.size);
+    qty.set(key, (qty.get(key) ?? 0) + move.qty);
+    touched.set(key, move);
+  }
+  const taken: StockMove[] = [];
+  const problems: string[] = [];
+  for (const move of take) {
+    if (!counted(state, move)) continue;
+    const key = rowKey(move.productId, move.variantId, move.size);
+    const have = qty.get(key) ?? 0;
+    if (have < move.qty) {
+      const item = items.find((i) => i.productId === move.productId && i.variantId === move.variantId && (i.size ?? '') === move.size);
+      problems.push(`${item ? describe({ name: item.name, size: move.size }, item.finish) : 'Peça'}: pedido ${move.qty}, disponível ${have}`);
+      continue;
+    }
+    qty.set(key, have - move.qty);
+    taken.push(move);
+    touched.set(key, move);
+  }
+  const rows = new Map(state.rows.map((r) => [rowKey(r.product_id, r.variant_id, r.size), r]));
+  const statements: D1PreparedStatement[] = [];
+  for (const [key, move] of touched) {
+    const after = qty.get(key) ?? 0;
+    const delta = after - (before.get(key) ?? 0);
+    if (!delta) continue;
+    rows.set(key, { product_id: move.productId, variant_id: move.variantId, size: move.size, qty: after });
+    if (delta < 0) {
+      statements.push(
+        guard(db, '(SELECT qty FROM stock_levels WHERE product_id = ?1 AND variant_id = ?2 AND size = ?3) >= ?4', move.productId, move.variantId, move.size, -delta),
+        db.prepare('UPDATE stock_levels SET qty = qty + ?4, updated_at = ?5 WHERE product_id = ?1 AND variant_id = ?2 AND size = ?3').bind(move.productId, move.variantId, move.size, delta, at),
+      );
+    } else {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO stock_levels (product_id, variant_id, size, qty, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (product_id, variant_id, size) DO UPDATE SET qty = qty + excluded.qty, updated_at = excluded.updated_at`,
+          )
+          .bind(move.productId, move.variantId, move.size, delta, at),
+      );
+    }
+    statements.push(orderMovement(db, at, move, delta, orderId));
+  }
+  return { statements, rows: [...rows.values()], taken, problems };
+}
+
+/** pt-BR sentence for pricing problems of an order the owner registers or edits. */
+function ownerPricingMessage(problems: PricingProblem[]): string {
+  const first = problems[0];
+  if (!first) return 'Confira as peças do pedido.';
+  const more = problems.length > 1 ? ` (e mais ${problems.length - 1})` : '';
+  if (first.reason === 'size') return `Escolha o tamanho de ${first.name}${more}.`;
+  return `${first.name}${more} não existe mais no catálogo (ou mudou de acabamento). Recarregue a página e escolha de novo.`;
+}
+
 /**
  * POST /api/admin/orders/:id/status { from, to } — compare-and-swap on the
  * status. Entering a stock-holding status takes the tracked items out of
@@ -299,56 +393,16 @@ export async function handleOrderStatus(ctx: Context): Promise<Response> {
 
     if (taking || giving) {
       const state = stock();
-      const qtyOf = new Map(state.rows.map((r) => [rowKey(r.product_id, r.variant_id, r.size), r]));
-      const rows = new Map(qtyOf);
-      const moves: StockMove[] = [];
-      if (taking) {
-        const problems: string[] = [];
-        for (const move of movesOf(order.items)) {
-          if (!counted(state, move)) continue;
-          const key = rowKey(move.productId, move.variantId, move.size);
-          const have = rows.get(key)?.qty ?? 0;
-          if (have < move.qty) {
-            const item = order.items.find((i) => i.productId === move.productId && i.variantId === move.variantId && (i.size ?? '') === move.size)!;
-            problems.push(`${describe({ name: item.name, size: move.size }, item.finish)}: pedido ${move.qty}, em estoque ${have}`);
-            continue;
-          }
-          rows.set(key, { product_id: move.productId, variant_id: move.variantId, size: move.size, qty: have - move.qty });
-          moves.push(move);
-          statements.push(
-            guard(db, '(SELECT qty FROM stock_levels WHERE product_id = ?1 AND variant_id = ?2 AND size = ?3) >= ?4', move.productId, move.variantId, move.size, move.qty),
-            db.prepare('UPDATE stock_levels SET qty = qty - ?4, updated_at = ?5 WHERE product_id = ?1 AND variant_id = ?2 AND size = ?3').bind(move.productId, move.variantId, move.size, move.qty, at),
-            movementStatement(db, at, move.productId, move.variantId, move.size, -move.qty, 'pedido', order.number),
-          );
-        }
-        if (problems.length) {
-          throw new HttpError('conflict', `Estoque insuficiente para confirmar: ${problems.join('; ')}. Ajuste o estoque ou o pedido.`, { stock: problems });
-        }
-        next.stockMoves = moves;
-      } else {
-        for (const move of order.stockMoves ?? []) {
-          // Give back only to combinations still under stock control (turning control off, or removing
-          // the finish or size, discarded those counts).
-          if (!counted(state, move)) continue;
-          const key = rowKey(move.productId, move.variantId, move.size);
-          const have = rows.get(key)?.qty ?? 0;
-          rows.set(key, { product_id: move.productId, variant_id: move.variantId, size: move.size, qty: have + move.qty });
-          statements.push(
-            db
-              .prepare(
-                `INSERT INTO stock_levels (product_id, variant_id, size, qty, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT (product_id, variant_id, size) DO UPDATE SET qty = qty + excluded.qty, updated_at = excluded.updated_at`,
-              )
-              .bind(move.productId, move.variantId, move.size, move.qty, at),
-            movementStatement(db, at, move.productId, move.variantId, move.size, move.qty, 'devolucao', order.number),
-          );
-        }
-        delete next.stockMoves;
+      const plan = planStock(db, state, at, order.id, giving ? (order.stockMoves ?? []) : [], taking ? movesOf(order.items) : [], order.items);
+      if (plan.problems.length) {
+        throw new HttpError('conflict', `Estoque insuficiente para confirmar: ${plan.problems.join('; ')}. Ajuste o estoque ou o pedido.`, { stock: plan.problems });
       }
-      if (statements.length) {
-        const publish = publishStatements(db, state, [...rows.values()], state.tracked);
+      if (taking) next.stockMoves = plan.taken;
+      else delete next.stockMoves;
+      if (plan.statements.length) {
+        const publish = publishStatements(db, state, plan.rows, state.tracked);
         first = publish.first;
-        statements.push(...publish.statements);
+        statements.push(...plan.statements, ...publish.statements);
         publishVersion = publish.version;
       }
     }
@@ -432,4 +486,216 @@ export async function handleDeleteOrder(ctx: Context): Promise<Response> {
   await db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(new Date().toISOString(), 'order.delete', `Pedido ${number} excluído`).run();
   ctx.waitUntil(notifyOrders(ctx.env));
   return json({ deleted: true });
+}
+
+// ---------------------------------------------------------------------------
+// Admin: manual orders and item edits
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/admin/orders (Idempotency-Key required) — a sale the owner registers herself (it came
+ * straight through WhatsApp or in person). Priced by the server; "confirmado" takes the tracked
+ * pieces out of stock in the same batch that creates the order.
+ */
+export async function handleCreateManualOrder(ctx: Context): Promise<Response> {
+  await requireSession(ctx);
+  const db = ctx.env.DB;
+  const key = ctx.request.headers.get('Idempotency-Key');
+  if (!key || !/^[A-Za-z0-9_-]{16,64}$/.test(key)) throw new HttpError('bad_request', 'Chave de envio inválida.');
+  const raw = await readJson(ctx.request, ORDER_MAX_BYTES);
+  const parsed = adminOrderRequestSchema.safeParse(raw);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new HttpError('bad_request', issue?.message && !issue.message.startsWith('Invalid') && !issue.message.startsWith('Too') ? issue.message : 'Confira os dados do pedido.', zodDetails(parsed.error.issues));
+  }
+  const input = parsed.data;
+  const idemKey = `admin-order:${key}`;
+  const requestHash = await sha256Hex(new TextEncoder().encode(JSON.stringify(input)));
+
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, Math.random() * 25 * Math.min(attempt, 4)));
+    const now = Date.now();
+    const results = await withReadRetry(() =>
+      db.batch<Record<string, unknown>>([
+        db.prepare('SELECT request_hash, response FROM idempotency WHERE key = ?1').bind(idemKey),
+        db.prepare('SELECT version, body FROM catalog_snapshot WHERE id = 1'),
+        db.prepare('SELECT product_id, variant_id, size, qty FROM stock_levels'),
+        db.prepare('SELECT product_id FROM stock_tracked'),
+      ]),
+    );
+    const replay = results[0]?.results[0] as { request_hash: string; response: string } | undefined;
+    if (replay) {
+      if (replay.request_hash !== requestHash) throw new HttpError('bad_request', 'Esta chave de envio já foi usada para outro pedido.');
+      return json(JSON.parse(replay.response), { status: 201 });
+    }
+    const snapshot = (results[1]?.results[0] as { version: number; body: string } | undefined) ?? (await ensureSeeded(db));
+    const state: StockState = {
+      catalog: parseSnapshotBody(snapshot.body),
+      version: snapshot.version,
+      rows: (results[2]?.results ?? []) as unknown as StockRow[],
+      tracked: new Set((results[3]?.results ?? []).map((r) => r.product_id as string)),
+    };
+    const priced = priceOrder(state.catalog, input.items, { owner: true });
+    if (!priced.ok) throw new HttpError('conflict', ownerPricingMessage(priced.problems), { problems: priced.problems });
+
+    const at = new Date(now).toISOString();
+    const confirmed = input.status === 'confirmado';
+    const order: Order = orderSchema.parse({
+      id: `ord_${randomToken().slice(0, 16)}`,
+      number: FIRST_ORDER_NUMBER, // placeholder: the real number is assigned by the INSERT below
+      status: input.status,
+      createdAt: at,
+      updatedAt: at,
+      customer: { name: input.name, city: input.city },
+      ...(input.note ? { note: input.note } : {}),
+      items: priced.items,
+      totalCents: priced.totalCents,
+      pix: false,
+      source: 'manual',
+      history: confirmed ? [{ at, status: 'enviado' }, { at, status: 'confirmado' }] : [{ at, status: 'enviado' }],
+    });
+
+    const stockStatements: D1PreparedStatement[] = [];
+    let publish: ReturnType<typeof publishStatements> | null = null;
+    if (confirmed) {
+      const plan = planStock(db, state, at, order.id, [], movesOf(order.items), order.items);
+      if (plan.problems.length) throw new HttpError('conflict', `Estoque insuficiente: ${plan.problems.join('; ')}. Ajuste o estoque ou registre como “Em negociação”.`, { stock: plan.problems });
+      order.stockMoves = plan.taken;
+      if (plan.statements.length) {
+        publish = publishStatements(db, state, plan.rows, state.tracked);
+        stockStatements.push(...plan.statements, ...publish.statements);
+      }
+    }
+    const response = { order };
+
+    let number: number | undefined;
+    try {
+      const out = await db.batch<{ number?: number }>([
+        ...(publish ? [publish.first] : []),
+        db
+          .prepare(
+            `INSERT INTO counters (name, value) VALUES ('order', (SELECT COALESCE(MAX(number), ?1 - 1) FROM orders) + 1)
+             ON CONFLICT (name) DO UPDATE SET value = MAX(value, (SELECT COALESCE(MAX(number), ?1 - 1) FROM orders)) + 1`,
+          )
+          .bind(FIRST_ORDER_NUMBER),
+        db
+          .prepare(
+            `INSERT INTO orders (id, number, status, created_at, updated_at, total_cents, data)
+             SELECT ?1, value, ?2, ?3, ?3, ?4, ?5 FROM counters WHERE name = 'order' RETURNING number`,
+          )
+          .bind(order.id, order.status, at, order.totalCents, toData(order)),
+        ...stockStatements,
+        db
+          .prepare(
+            `INSERT INTO idempotency (key, request_hash, created_at, response)
+             SELECT ?1, ?2, ?3, json_set(?4, '$.order.number', number) FROM orders WHERE id = ?5`,
+          )
+          .bind(idemKey, requestHash, now, JSON.stringify(response), order.id),
+        db.prepare('DELETE FROM idempotency WHERE created_at < ?1').bind(now - IDEMPOTENCY_TTL_MS),
+        db.prepare('INSERT INTO audit_log (at, action, summary) SELECT ?1, ?2, ?3 || number FROM orders WHERE id = ?4').bind(at, 'order.manual', 'Pedido registrado no painel: ', order.id),
+      ]);
+      number = out[publish ? 2 : 1]?.results[0]?.number;
+    } catch (error) {
+      if (isGuardMiss(error)) continue; // the catalog or the stock changed meanwhile: re-read
+      const message = error instanceof Error ? error.message : '';
+      if (/UNIQUE constraint failed: idempotency/i.test(message)) {
+        const stored = await withReadRetry(() => db.prepare('SELECT request_hash, response FROM idempotency WHERE key = ?1').bind(idemKey).first<{ request_hash: string; response: string }>());
+        if (stored && stored.request_hash === requestHash) return json(JSON.parse(stored.response), { status: 201 });
+        throw new HttpError('bad_request', 'Esta chave de envio já foi usada para outro pedido.');
+      }
+      if (/UNIQUE constraint failed: orders\.number/i.test(message)) continue;
+      if (/CHECK constraint failed/i.test(message)) throw new HttpError('integrity', 'O estoque ficaria fora do limite permitido. Confira o estoque desta peça.');
+      throw toHttpError(error);
+    }
+    if (number === undefined) {
+      const row = await withReadRetry(() => db.prepare('SELECT number FROM orders WHERE id = ?1').bind(order.id).first<{ number: number }>());
+      if (!row) throw new HttpError('internal');
+      number = row.number;
+    }
+    ctx.waitUntil(notifyOrders(ctx.env));
+    if (publish) ctx.waitUntil(notifyCatalog(ctx.env, publish.version));
+    return json({ order: { ...order, number }, ...(publish ? { version: publish.version } : {}) }, { status: 201 });
+  }
+  throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
+}
+
+const lineKey = (l: { productId: string; variantId: string; size?: string | undefined }) => `${l.productId}|${l.variantId}|${l.size ?? ''}`;
+
+/**
+ * PUT /api/admin/orders/:id/items { items, stamp } — changes the pieces of an order "em negociação"
+ * or "confirmado". Pieces already in the order keep the price agreed then; new ones take today's
+ * price. A confirmed order gives back what it held and takes the new pieces in the same batch. A
+ * new total drops the Pix charge (the old payment link stops working); receipts are kept.
+ */
+export async function handleEditOrderItems(ctx: Context): Promise<Response> {
+  await requireSession(ctx);
+  const db = ctx.env.DB;
+  const body = editItemsRequestSchema.safeParse(await readJson(ctx.request, ORDER_MAX_BYTES));
+  if (!body.success) {
+    const issue = body.error.issues[0];
+    throw new HttpError('bad_request', issue?.message && !issue.message.startsWith('Invalid') && !issue.message.startsWith('Too') ? issue.message : 'Confira as peças do pedido.', zodDetails(body.error.issues));
+  }
+  const id = ctx.params.id ?? '';
+
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, Math.random() * 25 * Math.min(attempt, 4)));
+    const { order, stamp, stock } = await readOrderAndStock(db, id);
+    if (stamp !== body.data.stamp && order.updatedAt !== body.data.stamp) {
+      // A retry of an edit that already landed (the answer was lost): the order holds exactly these pieces.
+      const wanted = new Map<string, number>();
+      for (const l of body.data.items) wanted.set(lineKey({ ...l, size: l.size?.trim() || undefined }), (wanted.get(lineKey({ ...l, size: l.size?.trim() || undefined })) ?? 0) + l.qty);
+      if (wanted.size === order.items.length && order.items.every((i) => wanted.get(lineKey(i)) === i.qty)) return json({ order });
+      throw new HttpError('conflict', 'Este pedido mudou enquanto você editava (em outro aparelho ou por um comprovante). Confira e edite de novo.', { order });
+    }
+    if (!EDITABLE_ITEMS.has(order.status)) {
+      throw new HttpError('conflict', `Só dá para mudar as peças de pedidos em negociação ou confirmados. Este está como “${STATUS_LABEL[order.status]}”.`, { order });
+    }
+    const state = stock();
+    const priced = priceOrder(state.catalog, body.data.items, { owner: true });
+    if (!priced.ok) throw new HttpError('conflict', ownerPricingMessage(priced.problems), { problems: priced.problems });
+    const agreed = new Map(order.items.map((i) => [lineKey(i), i.unitCents]));
+    const items = priced.items.map((i) => ({ ...i, unitCents: agreed.get(lineKey(i)) ?? i.unitCents }));
+    const totalCents = items.reduce((sum, i) => sum + i.unitCents * i.qty, 0);
+    const same =
+      items.length === order.items.length && items.every((i) => order.items.some((o) => lineKey(o) === lineKey(i) && o.qty === i.qty && o.unitCents === i.unitCents));
+    if (same) return json({ order });
+
+    const at = nextStamp(stamp);
+    const next: Order = { ...order, items, totalCents, updatedAt: at, history: [...order.history, { at, status: order.status, event: 'itens' as const }].slice(-200) };
+    const dropCharge = !!order.charge && totalCents !== order.totalCents;
+    if (dropCharge) delete next.charge;
+
+    const statements: D1PreparedStatement[] = [];
+    let publish: ReturnType<typeof publishStatements> | null = null;
+    if (HOLDS_STOCK.has(order.status)) {
+      const plan = planStock(db, state, at, order.id, order.stockMoves ?? [], movesOf(items), items);
+      if (plan.problems.length) throw new HttpError('conflict', `Estoque insuficiente: ${plan.problems.join('; ')}. Ajuste o estoque ou o pedido.`, { stock: plan.problems });
+      next.stockMoves = plan.taken;
+      if (plan.statements.length) {
+        publish = publishStatements(db, state, plan.rows, state.tracked);
+        statements.push(...plan.statements, ...publish.statements);
+      }
+    }
+    orderSchema.parse(next);
+
+    try {
+      await db.batch([
+        ...(publish ? [publish.first] : []),
+        unchanged(db, order.id, stamp),
+        ...statements,
+        db
+          .prepare(`UPDATE orders SET total_cents = ?2, updated_at = ?3, data = ?4${dropCharge ? ', pay_token = NULL' : ''} WHERE id = ?1`)
+          .bind(order.id, totalCents, at, toData(next)),
+        db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'order.items', `Pedido ${order.number}: itens alterados`),
+      ]);
+    } catch (error) {
+      if (isGuardMiss(error)) continue;
+      if (/CHECK constraint failed/i.test(error instanceof Error ? error.message : '')) throw new HttpError('integrity', 'O estoque ficaria fora do limite permitido. Confira o estoque desta peça.');
+      throw toHttpError(error);
+    }
+    ctx.waitUntil(notifyOrders(ctx.env));
+    if (publish) ctx.waitUntil(notifyCatalog(ctx.env, publish.version));
+    return json({ order: next, chargeDropped: dropCharge, ...(publish ? { version: publish.version } : {}) });
+  }
+  throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
 }

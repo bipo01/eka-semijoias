@@ -159,3 +159,45 @@ describe('base64 storage', () => {
     expect(bytesToBase64(new TextEncoder().encode('%PDF-'))).toBe('JVBERi0=');
   });
 });
+
+describe('Web Push (RFC 8291 / RFC 8292)', () => {
+  it('encrypts the RFC 8291 example byte for byte', async () => {
+    const { b64urlToBytes, bytesToB64url, encryptPayload, senderKeysFrom } = await import('../webpush');
+    const sender = await senderKeysFrom('yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw', 'BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8');
+    const body = await encryptPayload(
+      new TextEncoder().encode('When I grow up, I want to be a watermelon'),
+      b64urlToBytes('BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4'),
+      b64urlToBytes('BTBZMqHH6r4Tts7J_aSIgg'),
+      { sender, salt: b64urlToBytes('DGv6ra1nlYgDCS1FRnbzlw') },
+    );
+    expect(bytesToB64url(body)).toBe(
+      'DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN',
+    );
+  });
+
+  it('signs a VAPID JWT that verifies with the public key it announces', async () => {
+    const { b64urlToBytes, parseVapidJwk, vapidAuthorization } = await import('../webpush');
+    const pair = (await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])) as CryptoKeyPair;
+    const jwk = parseVapidJwk(JSON.stringify(await crypto.subtle.exportKey('jwk', pair.privateKey)))!;
+    expect(jwk).not.toBeNull();
+    const auth = await vapidAuthorization(jwk, 'https://fcm.googleapis.com', 'https://loja.example', 1_000_000);
+    const [, token, key] = /^vapid t=([^,]+), k=(.+)$/.exec(auth)!;
+    const [h, c, s] = token!.split('.');
+    expect(JSON.parse(new TextDecoder().decode(b64urlToBytes(c!)))).toEqual({ aud: 'https://fcm.googleapis.com', exp: 1_000_000 + 43_200, sub: 'https://loja.example' });
+    const pub = await crypto.subtle.importKey('raw', b64urlToBytes(key!), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    expect(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pub, b64urlToBytes(s!), new TextEncoder().encode(`${h}.${c}`))).toBe(true);
+    expect(parseVapidJwk('{"kty":"EC"}')).toBeNull();
+    expect(parseVapidJwk('nope')).toBeNull();
+  });
+
+  it('only accepts endpoints of real push services', async () => {
+    const { isPushEndpoint } = await import('../webpush');
+    expect(isPushEndpoint('https://fcm.googleapis.com/fcm/send/abc')).toBe(true);
+    expect(isPushEndpoint('https://web.push.apple.com/QGx')).toBe(true);
+    expect(isPushEndpoint('https://updates.push.services.mozilla.com/wpush/v2/x')).toBe(true);
+    expect(isPushEndpoint('http://fcm.googleapis.com/x')).toBe(false);
+    expect(isPushEndpoint('https://evil.example/fcm.googleapis.com')).toBe(false);
+    expect(isPushEndpoint('https://fcm.googleapis.com.evil.example/x')).toBe(false);
+    expect(isPushEndpoint('https://user@fcm.googleapis.com/x')).toBe(false);
+  });
+});

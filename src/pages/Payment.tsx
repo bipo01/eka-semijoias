@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, FileText, ImageIcon, LockKeyhole, ReceiptText, RefreshCw, X } from 'lucide-react';
+import { CheckCircle2, FileText, ImageIcon, LoaderCircle, LockKeyhole, ReceiptText, RefreshCw, X } from 'lucide-react';
+import { TextField } from '../components/ui/Field';
 import { Lockup } from '../components/layout/Logo';
 import { PixCopyField, QrCode } from '../components/pay/PixCode';
 import { Button, ButtonAnchor } from '../components/ui/Button';
@@ -14,7 +15,7 @@ import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { ApiError, errorMessage } from '../lib/api';
 import { formatBRL } from '../lib/format';
-import { fetchPayView, uploadReceipt } from '../lib/payments';
+import { checkAutoPix, createAutoPix, fetchPayView, uploadReceipt } from '../lib/payments';
 import { buildPixPayload, pixText, pixTxid } from '../lib/pix';
 import { isPdf, prepareReceipt } from '../lib/receipt';
 import { whatsappUrl } from '../lib/whatsapp';
@@ -143,6 +144,130 @@ function PixSection({ view }: { view: PayView }) {
             Recebedor: <span className="text-ink">{pixText(pix.name, 25)}</span>
           </p>
         </div>
+      </div>
+    </section>
+  );
+}
+
+const Step = ({ n, children }: { n: number; children: ReactNode }) => (
+  <li className="flex gap-2.5">
+    <span className="price inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-champagne text-xs text-copper">{n}</span>
+    <span>{children}</span>
+  </li>
+);
+
+const untilLabel = (iso: string) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)).replace(',', ' às');
+
+/**
+ * Automatic Pix (Mercado Pago): a QR made for this order; the payment confirms itself (webhook),
+ * the page asks every few seconds and "Já paguei" checks right away.
+ */
+function AutoPixSection({ view, token, onPaid, onRefresh }: { view: PayView; token: string; onPaid: () => void; onRefresh: () => void }) {
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | undefined>();
+  const [busy, setBusy] = useState<'create' | 'check' | null>(null);
+  const [checked, setChecked] = useState(false);
+  const mp = view.mp;
+
+  async function create() {
+    if (busy) return;
+    const value = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      setError('Informe um e-mail válido.');
+      return;
+    }
+    setError(undefined);
+    setBusy('create');
+    try {
+      await createAutoPix(token, value);
+      onRefresh();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function check() {
+    if (busy) return;
+    setBusy('check');
+    try {
+      const r = await checkAutoPix(token);
+      if (r.state === 'pago') onPaid();
+      else setChecked(true);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section aria-labelledby="pix-title" className="flex flex-col gap-5">
+      <RuledTitle id="pix-title">Pague com Pix</RuledTitle>
+      <div className="flex flex-col gap-5 rounded-[14px] bg-white p-5 shadow-[var(--shadow-1)]">
+        {!mp ? (
+          <form
+            noValidate
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void create();
+            }}
+          >
+            <p className="text-sm text-ink-muted">
+              Geramos um Pix só para este pedido, no valor exato. Quando você pagar, a confirmação chega aqui sozinha, sem precisar mandar comprovante.
+            </p>
+            <TextField
+              label="Seu e-mail"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={email}
+              error={error}
+              hint="O Mercado Pago pede um e-mail para gerar o Pix. A gente não guarda."
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError(undefined);
+              }}
+            />
+            <Button type="submit" size="lg" block disabled={!!busy} aria-busy={busy === 'create'}>
+              {busy === 'create' ? 'Gerando o Pix…' : 'Gerar Pix'}
+            </Button>
+          </form>
+        ) : (
+          <>
+            <ol className="flex flex-col gap-2 text-sm text-ink-muted">
+              <Step n={1}>
+                Copie o código e cole em <strong className="font-medium text-ink">Pix Copia e Cola</strong> no app do seu banco.
+              </Step>
+              <Step n={2}>
+                Confira o valor de <span className="price text-ink">{formatBRL(view.amountCents)}</span> e pague.
+              </Step>
+              <Step n={3}>Pronto: a confirmação aparece aqui em instantes.</Step>
+            </ol>
+            <PixCopyField code={mp.qr} id="pix-code" />
+            <div className="flex flex-col items-center gap-2 border-t border-line pt-5">
+              <p className="text-sm text-ink-muted">No computador? Leia o QR Code com o celular.</p>
+              <QrCode value={mp.qr} label={`QR Code Pix de ${formatBRL(view.amountCents)}`} className="size-[188px] ring-1 ring-line" />
+              <p className="text-center text-sm text-ink-muted">Válido até {untilLabel(mp.expiresAt)}</p>
+            </div>
+            <div className="flex flex-col items-center gap-2 border-t border-line pt-5 text-center">
+              <p role="status" className="inline-flex items-center gap-2 text-sm text-ink-muted">
+                <LoaderCircle size={16} strokeWidth={1.75} aria-hidden="true" className="animate-spin text-copper motion-reduce:animate-none" />
+                {checked ? 'O pagamento ainda não apareceu. Alguns bancos levam um minutinho.' : 'Esperando o pagamento…'}
+              </p>
+              <Button variant="secondary" disabled={!!busy} aria-busy={busy === 'check'} onClick={() => void check()}>
+                {busy === 'check' ? 'Conferindo…' : 'Já paguei'}
+              </Button>
+              {error && (
+                <p role="alert" className="text-sm text-danger">
+                  {error}
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );
@@ -364,7 +489,17 @@ export function PaymentPage() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [refresh]);
 
-  const showUpload = view && (view.state === 'aguardando' || (view.state === 'analise' && sendAgain));
+  const [manual, setManual] = useState(false);
+  const auto = !!view?.auto && view.state === 'aguardando' && !manual;
+  const showUpload = view && ((view.state === 'aguardando' && !auto) || (view.state === 'analise' && sendAgain));
+
+  // While an automatic Pix waits, ask every 5 s (only with the page in front): the webhook marks it paid.
+  const waiting = !!view?.mp && view.state === 'aguardando';
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(() => document.visibilityState === 'visible' && void refresh(), 5000);
+    return () => window.clearInterval(timer);
+  }, [waiting, refresh]);
 
   return (
     <div className="min-h-dvh bg-ivory">
@@ -415,7 +550,18 @@ export function PaymentPage() {
 
             <Summary view={view} />
 
-            {view.state === 'aguardando' && <PixSection view={view} />}
+            {auto && <AutoPixSection view={view} token={token} onPaid={() => void refresh()} onRefresh={() => void refresh()} />}
+            {auto && view.pix && (
+              <button type="button" onClick={() => setManual(true)} className="-mt-4 min-h-11 self-center text-sm text-copper underline underline-offset-4">
+                Prefere pagar pela chave Pix e enviar o comprovante?
+              </button>
+            )}
+            {view.state === 'aguardando' && !auto && <PixSection view={view} />}
+            {view.state === 'aguardando' && view.auto && manual && (
+              <button type="button" onClick={() => setManual(false)} className="-mt-4 min-h-11 self-center text-sm text-copper underline underline-offset-4">
+                Voltar para o Pix automático
+              </button>
+            )}
             {(view.state === 'pago' || view.state === 'cancelado' || (view.state === 'analise' && !sendAgain)) && (
               <StatusCard view={view} {...(view.state === 'analise' && view.receipts.length < 6 ? { onAgain: () => setSendAgain(true) } : {})} />
             )}

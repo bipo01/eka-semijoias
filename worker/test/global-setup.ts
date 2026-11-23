@@ -10,6 +10,8 @@ import { join } from 'node:path';
  */
 
 let child: ChildProcess | undefined;
+/** Shared with api.test.ts (signs the simulated Mercado Pago notifications). */
+export const MP_WEBHOOK_SECRET = 'integration-webhook-secret';
 let dir: string | undefined;
 
 export async function setup(): Promise<void> {
@@ -19,7 +21,21 @@ export async function setup(): Promise<void> {
   const migrate = spawnSync('npx', ['wrangler', 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', dir], { encoding: 'utf8', env: { ...process.env, CI: '1' } });
   if (migrate.status !== 0) throw new Error(`migrations failed: ${migrate.stderr || migrate.stdout}`);
   // Local-only secrets passed explicitly, so the suite does not depend on a .dev.vars file (CI has none).
-  const vars = ['PIN_PEPPER:integration-pepper-0123456789abcdef0123456789abcdef', 'ADMIN_INITIAL_PIN:314159', 'DEV_INSECURE_COOKIES:1'].flatMap((v) => ['--var', v]);
+  // Web Push and Mercado Pago point at a mock server the test file starts on MOCK_PORT.
+  const mockPort = 9100 + Math.floor(Math.random() * 200);
+  const vapid = (await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])) as CryptoKeyPair;
+  const { kty, crv, d, x, y } = (await crypto.subtle.exportKey('jwk', vapid.privateKey)) as JsonWebKey;
+  const vars = [
+    'PIN_PEPPER:integration-pepper-0123456789abcdef0123456789abcdef',
+    'ADMIN_INITIAL_PIN:314159',
+    'DEV_INSECURE_COOKIES:1',
+    `VAPID_PRIVATE_KEY:${JSON.stringify({ kty, crv, d, x, y })}`,
+    'MP_ACCESS_TOKEN:TEST-integration-token',
+    `MP_WEBHOOK_SECRET:${MP_WEBHOOK_SECRET}`,
+    `MP_API_BASE:http://127.0.0.1:${mockPort}`,
+    `DEV_PUSH_ORIGIN:http://127.0.0.1:${mockPort}`,
+  ].flatMap((v) => ['--var', v]);
+  process.env.MOCK_PORT = String(mockPort);
   child = spawn('npx', ['wrangler', 'dev', '--port', String(port), '--ip', '127.0.0.1', '--persist-to', dir, '--log-level', 'warn', ...vars], {
     env: { ...process.env, CI: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],

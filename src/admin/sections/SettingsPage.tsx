@@ -14,6 +14,7 @@ import { toast } from '../../store/ui';
 import { useAdminSession } from '../AdminContext';
 import { maskPhone, parseInstagram, parsePhone } from '../lib/contact';
 import { save } from '../lib/persist';
+import { PushSettings } from './PushSettings';
 import { changePin, signalSessionLost } from '../lib/session';
 
 /** Checklist items completed by a settings field; the others stay open. */
@@ -394,6 +395,7 @@ export function SettingsPage() {
       <StoreChecklist />
       <StoreSettings />
       <PixSettings />
+      <PushSettings />
       <StockSettings />
       <PinSettings />
     </div>

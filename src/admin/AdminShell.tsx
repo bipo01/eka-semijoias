@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { ExternalLink, LogOut, Menu, Plus } from 'lucide-react';
 import { ButtonLink, IconButton } from '../components/ui/Button';
 import { Sheet } from '../components/ui/Sheet';
+import { InstallAppButton } from '../components/install/InstallAppButton';
 import { cx } from '../components/ui/cx';
 import { useCatalog } from '../store/catalog';
 import { toast } from '../store/ui';
@@ -152,6 +153,9 @@ export function AdminShell() {
             <Link to="/" className="flex min-h-12 items-center gap-3 rounded-[10px] px-2 hover:bg-champagne" onClick={() => setMenuOpen(false)}>
               <ExternalLink size={20} strokeWidth={1.5} /> Ver o site
             </Link>
+          </li>
+          <li>
+            <InstallAppButton app="admin" variant="list" />
           </li>
           <li>
             <button

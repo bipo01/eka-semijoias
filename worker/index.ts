@@ -5,10 +5,12 @@ import type { Env } from './env';
 import { assertSameOrigin, errorResponse, HttpError, json } from './http';
 import { handleCreateLead, handleDeleteLead, handleListLeads } from './leads';
 import { handleLive } from './live';
-import { handleAnonymizeOrder, handleCreateOrder, handleDeleteOrder, handleListOrders, handleOrderStatus } from './orders';
+import { handleAnonymizeOrder, handleCreateManualOrder, handleCreateOrder, handleDeleteOrder, handleEditOrderItems, handleListOrders, handleOrderStatus } from './orders';
 import { handleCharge, handleGetReceipt, handlePayView, handleUploadReceipt } from './payments';
+import { handlePushDelete, handlePushStatus, handlePushSubscribe, handlePushTest } from './push';
 import { handleGetStock, handlePutStock } from './stock';
 import { handleMedia, handleUpload } from './media';
+import { handleCheckMpPix, handleCreateMpPix, handleMpWebhook } from './mercadopago';
 import { Router, type Context } from './router';
 
 export { LiveHub } from './live';
@@ -32,6 +34,9 @@ const router = new Router()
   .on('POST', '/api/orders', handleCreateOrder)
   .on('GET', '/api/pay/:token', handlePayView)
   .on('POST', '/api/pay/:token/receipt', handleUploadReceipt)
+  .on('POST', '/api/pay/:token/pix', handleCreateMpPix)
+  .on('POST', '/api/pay/:token/pix/check', handleCheckMpPix)
+  .on('POST', '/api/webhooks/mercadopago', handleMpWebhook)
   .on('GET', '/api/admin/session', handleSessionStatus)
   .on('POST', '/api/admin/login', handleLogin)
   .on('POST', '/api/admin/logout', handleLogout)
@@ -42,11 +47,17 @@ const router = new Router()
   .on('GET', '/api/admin/leads', handleListLeads)
   .on('DELETE', '/api/admin/leads/:id', handleDeleteLead)
   .on('GET', '/api/admin/orders', handleListOrders)
+  .on('POST', '/api/admin/orders', handleCreateManualOrder)
+  .on('PUT', '/api/admin/orders/:id/items', handleEditOrderItems)
   .on('POST', '/api/admin/orders/:id/status', handleOrderStatus)
   .on('POST', '/api/admin/orders/:id/anonymize', handleAnonymizeOrder)
   .on('DELETE', '/api/admin/orders/:id', handleDeleteOrder)
   .on('POST', '/api/admin/orders/:id/charge', handleCharge)
   .on('GET', '/api/admin/receipts/:id', handleGetReceipt)
+  .on('GET', '/api/admin/push', handlePushStatus)
+  .on('POST', '/api/admin/push/subscribe', handlePushSubscribe)
+  .on('POST', '/api/admin/push/test', handlePushTest)
+  .on('DELETE', '/api/admin/push/:id', handlePushDelete)
   .on('GET', '/api/admin/stock', handleGetStock)
   .on('PUT', '/api/admin/stock/:productId', handlePutStock)
   .on('GET', '/media/:file', handleMedia);
@@ -112,7 +123,8 @@ export default {
         if (!match) throw new HttpError('not_found');
         if ('allowed' in match) throw new HttpError('method_not_allowed', undefined, undefined, { Allow: match.allowed.join(', ') });
         route = match.name;
-        if (request.method !== 'GET' && request.method !== 'HEAD') assertSameOrigin(request);
+        // Webhooks come from the provider's servers (no Origin); they authenticate by signature instead.
+        if (request.method !== 'GET' && request.method !== 'HEAD' && !url.pathname.startsWith('/api/webhooks/')) assertSameOrigin(request);
         const ctx: Context = { request, env, url, requestId, params: match.params, waitUntil: (p) => executionCtx.waitUntil(p) };
         response = await match.handler(ctx);
       }

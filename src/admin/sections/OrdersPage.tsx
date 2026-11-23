@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronRight, Search } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -6,7 +7,8 @@ import { Chip } from '../../components/ui/Misc';
 import { Sheet } from '../../components/ui/Sheet';
 import { cx } from '../../components/ui/cx';
 import { sizeLabel } from '../../data/catalog';
-import { awaitingReview, canTransition, HOLDS_STOCK, NEXT_STEP, STATUS_LABEL, UNDO_STEP, type Order, type OrderStatus } from '../../data/orders';
+import { awaitingReview, canTransition, EDITABLE_ITEMS, HOLDS_STOCK, NEXT_STEP, STATUS_LABEL, UNDO_STEP, type Order, type OrderStatus } from '../../data/orders';
+import { EditItemsSheet, NewOrderButton } from './OrderForms';
 import { ReceiptText } from 'lucide-react';
 import { ChargeSheet, PaymentSection } from './OrderPayment';
 import { OrderMessageButton } from './OrderMessages';
@@ -73,6 +75,7 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<'cancelar' | 'anonimizar' | 'excluir' | null>(null);
   const [charging, setCharging] = useState(false);
+  const [editing, setEditing] = useState(false);
   const next = NEXT_STEP[order.status];
   const reviewing = awaitingReview(order) && order.status === 'confirmado';
   // Payment-led flow: from "em negociação" the main action is to charge by Pix (which confirms);
@@ -124,6 +127,8 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
         <dd className="break-words">{order.customer.name || '—'}</dd>
         <dt className="text-ink-muted">Cidade</dt>
         <dd className="break-words">{order.customer.city || '—'}</dd>
+        <dt className="text-ink-muted">Origem</dt>
+        <dd>{order.source === 'manual' ? 'Registrado no painel' : 'Sacola do site'}</dd>
         <dt className="text-ink-muted">Pagamento</dt>
         <dd>{order.charge ? `Pix · ${formatBRL(order.charge.amountCents)}` : order.pix ? 'Pix (mostrado à cliente)' : 'A combinar'}</dd>
         {order.note && (
@@ -135,6 +140,14 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
       </dl>
 
       <section aria-label="Peças do pedido">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-medium">Peças</h3>
+          {EDITABLE_ITEMS.has(order.status) && (
+            <button type="button" className="min-h-9 text-sm text-copper underline underline-offset-4" onClick={() => setEditing(true)}>
+              Editar peças
+            </button>
+          )}
+        </div>
         <ul className="divide-y divide-line border-y border-line">
           {order.items.map((item) => (
             <li key={`${item.productId}|${item.variantId}|${item.size ?? ''}`} className="flex items-start justify-between gap-3 py-3">
@@ -210,7 +223,7 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
         <ol className="flex flex-col gap-1.5 border-l border-line pl-4 text-sm">
           {[...order.history].reverse().map((h, i) => (
             <li key={`${h.at}-${i}`} className="flex flex-wrap justify-between gap-x-3">
-              <span>{STATUS_LABEL[h.status]}</span>
+              <span>{h.event === 'itens' ? 'Peças alteradas' : STATUS_LABEL[h.status]}</span>
               <span className="text-ink-muted">{formatDateTime(h.at)}</span>
             </li>
           ))}
@@ -231,6 +244,7 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
       </div>
 
       <ChargeSheet order={order} open={charging} onClose={() => setCharging(false)} />
+      <EditItemsSheet order={order} open={editing} onClose={() => setEditing(false)} />
       <ConfirmDialog
         open={confirm === 'cancelar'}
         title={`Cancelar o pedido nº ${order.number}?`}
@@ -278,7 +292,14 @@ export function OrdersPage() {
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, orders.filter((o) => matchesFilter(o, f.id)).length])) as Record<Filter, number>, [orders]);
   const q = query.trim().toLowerCase().replace(/^n[ºo°]?\s*/, '');
   const visible = orders.filter((o) => matchesFilter(o, filter) && (!q || String(o.number).includes(q) || o.customer.name.toLowerCase().includes(q) || o.customer.city.toLowerCase().includes(q)));
-  const open = orders.find((o) => o.id === openId) ?? null;
+  // A notice on the phone opens /admin/pedidos?pedido=<número>: that order opens on arrival.
+  const [params, setParams] = useSearchParams();
+  const linked = params.get('pedido');
+  const open = orders.find((o) => o.id === openId) ?? (linked ? (orders.find((o) => String(o.number) === linked) ?? null) : null);
+  const close = () => {
+    setOpenId(null);
+    if (linked) setParams((p) => { p.delete('pedido'); return p; }, { replace: true });
+  };
 
   if (state.status === 'loading') return <p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando pedidos…</p>;
   if (state.status === 'error') {
@@ -294,6 +315,16 @@ export function OrdersPage() {
 
   return (
     <>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm text-ink-muted">Venda fechada pelo WhatsApp ou pessoalmente? Registre aqui.</p>
+        <NewOrderButton
+          onCreated={(order) => {
+            setFilter('ativos');
+            setQuery('');
+            setOpenId(order.id);
+          }}
+        />
+      </div>
       <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1">
         {FILTERS.map((f) => (
           <Chip key={f.id} selected={filter === f.id} onClick={() => setFilter(f.id)}>
@@ -353,12 +384,12 @@ export function OrdersPage() {
         <EmptyState>
           {orders.length
             ? 'Nenhum pedido neste filtro.'
-            : 'Nenhum pedido ainda. Quando uma cliente finalizar a sacola no site, o pedido aparece aqui na hora, com número, peças e valores.'}
+            : 'Nenhum pedido ainda. Quando uma cliente finalizar a sacola no site, o pedido aparece aqui na hora, com número, peças e valores. Vendas fechadas fora do site entram por “Novo pedido”.'}
         </EmptyState>
       )}
 
-      <Sheet open={!!open} onClose={() => setOpenId(null)} title={open ? `Pedido nº ${open.number}` : 'Pedido'} side="right">
-        {open && <OrderDetail key={open.id} order={open} onClose={() => setOpenId(null)} />}
+      <Sheet open={!!open} onClose={close} title={open ? `Pedido nº ${open.number}` : 'Pedido'} side="right">
+        {open && <OrderDetail key={open.id} order={open} onClose={close} />}
       </Sheet>
     </>
   );

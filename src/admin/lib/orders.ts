@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { orderSchema, type Order, type OrderStatus } from '../../data/orders';
+import { orderSchema, type AdminOrderRequest, type Order, type OrderStatus } from '../../data/orders';
 import { api, apiUrl, ApiError, errorMessage } from '../../lib/api';
 import { ownWrite, useCatalog } from '../../store/catalog';
 import { signalSessionLost } from './session';
@@ -102,6 +102,59 @@ export function deleteOrder(order: Order): Promise<string | null> {
     () => api<{ deleted: boolean }>(`/api/admin/orders/${encodeURIComponent(order.id)}`, { method: 'DELETE', retries: 1 }),
     () => useOrders.getState().drop(order.id),
   );
+}
+
+export interface OrderLine {
+  productId: string;
+  variantId: string;
+  size?: string;
+  qty: number;
+}
+
+/** Puts an order the server returned at the top of the list (a new manual order). */
+function prepend(order: Order) {
+  const store = useOrders.getState();
+  if (store.state.status === 'ready') useOrders.setState({ state: { status: 'ready', orders: [order, ...store.state.orders.filter((o) => o.id !== order.id)] } });
+}
+
+/**
+ * Registers a sale the owner closed outside the site. `key` (Idempotency-Key) must stay the same
+ * while the form does not change, so a retry never creates a second order.
+ */
+export async function createManualOrder(input: AdminOrderRequest, key: string): Promise<{ order: Order } | { error: string }> {
+  try {
+    const result = await ownWrite(
+      () => api<{ order: Order; version?: number }>('/api/admin/orders', { json: input, headers: { 'Idempotency-Key': key }, retries: 2, timeoutMs: 20_000 }),
+      (r) => r.version,
+    );
+    const order = orderSchema.parse(result.order);
+    prepend(order);
+    return { order };
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'unauthenticated') signalSessionLost();
+    return { error: errorMessage(error) };
+  }
+}
+
+/** Changes the pieces of an order (compare-and-swap on its updatedAt). */
+export async function editOrderItems(order: Order, items: OrderLine[]): Promise<{ order: Order; chargeDropped: boolean } | { error: string }> {
+  let result: { order?: Order; chargeDropped?: boolean } = {};
+  const problem = await run(
+    async () =>
+      (result = await ownWrite(
+        () =>
+          api<{ order: Order; chargeDropped?: boolean; version?: number }>(`/api/admin/orders/${encodeURIComponent(order.id)}/items`, {
+            method: 'PUT',
+            json: { items, stamp: order.updatedAt },
+            retries: 2, // the stamp makes a repeated request harmless (it answers "unchanged" or conflicts)
+            timeoutMs: 20_000,
+          }),
+        (r) => r.version,
+      )),
+    (r) => r.order && useOrders.getState().replace(orderSchema.parse(r.order)),
+  );
+  if (problem) return { error: problem };
+  return { order: orderSchema.parse(result.order), chargeDropped: !!result.chargeDropped };
 }
 
 /** Creates (or updates) the Pix charge of a confirmed order. Resolves to the updated order or an error message. */

@@ -85,6 +85,32 @@ export const orderRequestSchema = z.object({
 });
 export type OrderRequest = z.input<typeof orderRequestSchema>;
 
+const orderLinesSchema = orderRequestSchema.shape.items;
+
+/** A sale registered by the owner in the admin (it came straight through WhatsApp or in person). */
+export const adminOrderRequestSchema = z.object({
+  items: orderLinesSchema,
+  name: personText(2, 80, 'Informe o nome da cliente.'),
+  city: z
+    .string()
+    .max(80, 'Cidade longa demais.')
+    .optional()
+    .transform((v) => v?.replace(/\s+/g, ' ').trim() ?? ''),
+  note: z
+    .string()
+    .max(300, 'Observação longa demais (até 300 caracteres).')
+    .optional()
+    .transform((v) => (v?.trim() ? v.trim() : undefined)),
+  status: z.enum(['enviado', 'confirmado']),
+});
+export type AdminOrderRequest = z.input<typeof adminOrderRequestSchema>;
+
+/** New items for an order (PUT /api/admin/orders/:id/items); `stamp` is the order's updatedAt the editor started from. */
+export const editItemsRequestSchema = z.object({ items: orderLinesSchema, stamp: z.string().min(1).max(40) });
+
+/** Statuses whose items can still be changed. */
+export const EDITABLE_ITEMS: ReadonlySet<OrderStatus> = new Set(['enviado', 'confirmado']);
+
 export const orderItemSchema = z.object({
   productId: id,
   variantId: id,
@@ -109,6 +135,18 @@ export type ReceiptType = (typeof RECEIPT_TYPES)[number];
 export const RECEIPT_MAX_BYTES = 700_000;
 export const MAX_RECEIPTS_PER_ORDER = 6;
 
+/** An automatic Pix created at Mercado Pago for the current charge (dynamic QR, confirmed by webhook). */
+export const mpPixSchema = z.object({
+  /** Mercado Pago payment id. */
+  id: z.string().regex(/^\d{1,20}$/),
+  /** Pix copia e cola of that payment. */
+  qr: z.string().min(10).max(1000),
+  expiresAt: isoDate,
+  /** How many payments were created for this charge (the next one's idempotency key). */
+  seq: z.number().int().min(1).max(50),
+});
+export type MpPix = z.infer<typeof mpPixSchema>;
+
 /** The current Pix charge of an order: what the payment link asks for. */
 export const chargeSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/),
@@ -116,6 +154,9 @@ export const chargeSchema = z.object({
   discountCents: z.number().int().min(0).max(100_000_000),
   amountCents: z.number().int().min(1).max(100_000_000),
   createdAt: isoDate,
+  mp: mpPixSchema.optional(),
+  /** Set when Mercado Pago confirmed the payment (the order moved to "pago" by itself). */
+  paidBy: z.literal('mercadopago').optional(),
 });
 export type Charge = z.infer<typeof chargeSchema>;
 
@@ -149,7 +190,10 @@ export const orderSchema = z.object({
   totalCents: z.number().int().min(0),
   /** Whether the Pix payment block was shown to the customer. */
   pix: z.boolean(),
-  history: z.array(z.object({ at: isoDate, status: z.enum(ORDER_STATUSES) })).max(200),
+  /** Status changes; `event: 'itens'` marks an edit of the items (the status did not change). */
+  history: z.array(z.object({ at: isoDate, status: z.enum(ORDER_STATUSES), event: z.literal('itens').optional() })).max(200),
+  /** 'manual': registered by the owner in the admin. Absent: the site's bag. */
+  source: z.literal('manual').optional(),
   /** Exactly what was taken out of stock while the order holds stock (given back on the way out). */
   stockMoves: z.array(stockMoveSchema).max(MAX_ORDER_ITEMS).optional(),
   anonymized: z.boolean().optional(),
@@ -177,6 +221,10 @@ export interface PayView {
   state: PayState;
   receipts: { at: string }[];
   pix: { key: string; name: string; city: string } | null;
+  /** Automatic Pix (Mercado Pago) can be generated for this charge. */
+  auto: boolean;
+  /** The automatic Pix already generated and still valid. */
+  mp: { qr: string; expiresAt: string } | null;
 }
 
 /** Receipts sent for the current charge (older charges' receipts stay for the admin only). */
@@ -203,8 +251,12 @@ export type PricingResult = { ok: true; items: OrderItem[]; totalCents: number }
  * Prices and checks an order against the catalog: product and finish exist and
  * can be bought, the size is valid, the quantity fits the stock. Lines for the
  * same combination are merged. Pure: the server's verdict is authoritative.
+ *
+ * `owner`: an order the owner registers or edits in the admin. Hidden pieces and
+ * finishes may be sold, and stock is not checked here: the server checks the
+ * exact stock (net of what the order already holds) when the order holds stock.
  */
-export function priceOrder(catalog: Catalog, items: { productId: string; variantId: string; size?: string | undefined; qty: number }[]): PricingResult {
+export function priceOrder(catalog: Catalog, items: { productId: string; variantId: string; size?: string | undefined; qty: number }[], opts: { owner?: boolean } = {}): PricingResult {
   const merged = new Map<string, { productId: string; variantId: string; size?: string; qty: number }>();
   for (const item of items) {
     const size = item.size?.trim() || undefined;
@@ -224,7 +276,7 @@ export function priceOrder(catalog: Catalog, items: { productId: string; variant
       problems.push({ ...base, name: product?.name ?? 'Peça', reason: 'missing' });
       continue;
     }
-    if (!isPurchasable(product, catalog.stock) || !variant.available) {
+    if (!opts.owner && (!isPurchasable(product, catalog.stock) || !variant.available)) {
       problems.push({ ...base, name: product.name, reason: 'unavailable' });
       continue;
     }
@@ -233,7 +285,7 @@ export function priceOrder(catalog: Catalog, items: { productId: string; variant
       problems.push({ ...base, name: product.name, reason: 'size' });
       continue;
     }
-    const units = stockOf(catalog.stock, product.id, variant.id, item.size);
+    const units = opts.owner ? null : stockOf(catalog.stock, product.id, variant.id, item.size);
     if (units !== null && units < item.qty) {
       problems.push({ ...base, name: product.name, reason: units === 0 ? 'unavailable' : 'stock', available: units });
       continue;
