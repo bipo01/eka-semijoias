@@ -578,6 +578,7 @@ describe('orders and stock', () => {
     expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
     const loser = results.find((r) => r.status === 409)!;
     expect(loser.json.error.message).toContain('Estoque insuficiente');
+    expect(loser.json.error.message).toMatch(/, (Rosé|Dourado|Prateado|Ródio negro):/); // labels, not internal ids
     const winnerId = results[0]!.status === 200 ? id1 : id2;
     const loserId = winnerId === id1 ? id2 : id1;
 

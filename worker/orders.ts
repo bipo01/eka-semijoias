@@ -24,6 +24,8 @@ import { notifyCatalog, notifyOrders } from './live';
 import type { Context } from './router';
 import { movementStatement, publishStatements, rowKey, type StockState } from './stock';
 import { combosOf, type StockRow } from '../src/data/stock';
+import { sizeLabel } from '../src/data/catalog';
+import { FINISH_LABEL, type Finish } from '../src/data/schema';
 
 /*
  * Orders. Public: POST /api/orders registers what the bag holds, priced by
@@ -260,7 +262,8 @@ function counted(state: StockState, move: StockMove): boolean {
 
 const statusSchema = z.object({ from: z.enum(ORDER_STATUSES), to: z.enum(ORDER_STATUSES) });
 
-const describe = (m: { name: string; size: string }, finish: string) => [m.name, finish, m.size && `tam. ${m.size}`].filter(Boolean).join(', ');
+/** "Anel Solitário, Dourado, aro 16" for stock messages (labels, never internal ids). */
+const describe = (m: { name: string; size: string }, finish: Finish) => [m.name, FINISH_LABEL[finish], m.size && sizeLabel(m.size)].filter(Boolean).join(', ');
 
 /**
  * POST /api/admin/orders/:id/status { from, to } — compare-and-swap on the
