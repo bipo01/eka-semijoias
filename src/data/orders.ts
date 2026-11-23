@@ -103,9 +103,10 @@ export const RECEIPT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'applicat
 export type ReceiptType = (typeof RECEIPT_TYPES)[number];
 /**
  * Per receipt, as stored. D1 rows allow 2 MB, but the binding serializes BLOBs as JSON number
- * arrays, which costs CPU (Free plan: 10 ms per request); 1 MB keeps uploads and reads in budget.
+ * arrays, which costs CPU (Free plan: 10 ms per request); receipts are stored as base64 text and
+ * kept small (production: ~600 KB cost 16 ms to store, ~5 ms to read).
  */
-export const RECEIPT_MAX_BYTES = 1_000_000;
+export const RECEIPT_MAX_BYTES = 700_000;
 export const MAX_RECEIPTS_PER_ORDER = 6;
 
 /** The current Pix charge of an order: what the payment link asks for. */

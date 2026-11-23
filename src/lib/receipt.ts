@@ -9,7 +9,9 @@ import { decode, fitWithin } from './image';
  */
 
 /** Images up to this size are sent untouched. */
-export const KEEP_AS_IS_BYTES = 700_000;
+export const KEEP_AS_IS_BYTES = 400_000;
+/** Target for images re-encoded in the browser (server CPU grows with the file size). */
+export const RECEIPT_IMAGE_TARGET_BYTES = 380_000;
 /** Files bigger than this are refused before decoding (protects memory on phones). */
 const MAX_INPUT_BYTES = 40 * 1024 * 1024;
 
@@ -17,10 +19,11 @@ export type PreparedReceipt = { ok: true; blob: Blob; type: ReceiptType; name: s
 
 /** JPEG attempts, sharpest first. */
 export const RECEIPT_STEPS = [
-  { maxSide: 2200, quality: 0.84 },
-  { maxSide: 1900, quality: 0.8 },
+  { maxSide: 1800, quality: 0.82 },
   { maxSide: 1600, quality: 0.76 },
-  { maxSide: 1300, quality: 0.7 },
+  { maxSide: 1400, quality: 0.72 },
+  { maxSide: 1200, quality: 0.68 },
+  { maxSide: 1000, quality: 0.62 },
 ] as const;
 
 const IMAGE_TYPES: Record<string, ReceiptType> = { 'image/png': 'image/png', 'image/jpeg': 'image/jpeg', 'image/jpg': 'image/jpeg', 'image/webp': 'image/webp' };
@@ -30,7 +33,7 @@ export const isPdf = (file: Pick<File, 'type' | 'name'>) => file.type === 'appli
 export async function prepareReceipt(file: File): Promise<PreparedReceipt> {
   if (!file.size) return { ok: false, message: 'O arquivo está vazio.' };
   if (isPdf(file)) {
-    if (file.size > RECEIPT_MAX_BYTES) return { ok: false, message: 'Este PDF passou de 1 MB. Envie um print do comprovante.' };
+    if (file.size > RECEIPT_MAX_BYTES) return { ok: false, message: 'Este PDF passou de 700 KB. Envie um print do comprovante.' };
     return { ok: true, blob: file, type: 'application/pdf', name: file.name };
   }
   const asIs = IMAGE_TYPES[file.type.toLowerCase()];
@@ -50,7 +53,7 @@ export async function prepareReceipt(file: File): Promise<PreparedReceipt> {
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(decoded.source, 0, 0, width, height);
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', step.quality));
-      if (blob && blob.size <= RECEIPT_MAX_BYTES * 0.9) return { ok: true, blob, type: 'image/jpeg', name: file.name.replace(/\.[^.]+$/, '') + '.jpg' };
+      if (blob && blob.size <= RECEIPT_IMAGE_TARGET_BYTES) return { ok: true, blob, type: 'image/jpeg', name: file.name.replace(/\.[^.]+$/, '') + '.jpg' };
     }
     return { ok: false, message: 'Não conseguimos reduzir esta imagem. Envie um print menor ou o PDF do comprovante.' };
   } finally {

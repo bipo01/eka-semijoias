@@ -780,7 +780,7 @@ describe('Pix charges and receipts', () => {
     const visitor = new Client();
     expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: new TextEncoder().encode('<html>hi</html>'), type: 'image/png' })).status).toBe(415);
     expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'application/pdf' })).status).toBe(415);
-    expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: new Uint8Array(1_100_000), type: 'image/png' })).status).toBe(413);
+    expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: new Uint8Array(800_000), type: 'image/png' })).status).toBe(413);
     expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png', origin: 'https://evil.example' })).status).toBe(403);
     const sent = await visitor.req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' });
     expect(sent.status).toBe(201);

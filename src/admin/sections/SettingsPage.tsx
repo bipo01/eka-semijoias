@@ -179,7 +179,7 @@ function PixSettings() {
     if (!result.ok) return setErrors(result.errors);
     setErrors({});
     setBusy(true);
-    const ok = await save((d) => ({ ...d, settings: { ...d.settings, pix: result.pix } }), 'Pix salvo. As clientes já veem o QR Code ao finalizar o pedido.');
+    const ok = await save((d) => ({ ...d, settings: { ...d.settings, pix: result.pix } }), 'Pix salvo. Ele vai nos links de pagamento que você gera em “Cobrar por Pix”.');
     setBusy(false);
     if (ok) setForm((f) => ({ ...f, key: formatPixKey(result.pix.key), name: result.pix.name, city: result.pix.city }));
   }
@@ -203,7 +203,7 @@ function PixSettings() {
       <div>
         <h2 className="font-display text-title">Pix para receber os pedidos</h2>
         <p className="mt-1 text-sm text-ink-muted">
-          Depois de finalizar o pedido, a cliente vê o valor exato com o QR Code e o Pix Copia e Cola. Você confere o pagamento no banco e marca o pedido como pago.
+          Usado nos links de pagamento: no pedido, toque em “Cobrar por Pix” e envie a mensagem pronta para a cliente. Ela paga com o QR Code ou o Pix Copia e Cola e envia o comprovante pelo link.
         </p>
       </div>
       <SelectField label="Tipo de chave" value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as PixKeyKind }))}>
