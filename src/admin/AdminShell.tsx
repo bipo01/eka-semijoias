@@ -8,6 +8,7 @@ import { useCatalog } from '../store/catalog';
 import { toast } from '../store/ui';
 import { useAdminSession } from './AdminContext';
 import { useOrders, useOrdersSync } from './lib/orders';
+import { awaitingReview } from '../data/orders';
 import { ADMIN_BASE } from './lib/paths';
 
 export const SECTIONS = [
@@ -47,9 +48,28 @@ function useExternalUpdateNotice() {
   }, [externalVersion]);
 }
 
-/** Orders waiting for the owner ("em negociação"), shown on the Pedidos tab. */
+/** Orders waiting for the owner (new ones, and receipts to check), shown on the Pedidos tab. */
 function useOpenOrders(): number {
-  return useOrders((s) => (s.state.status === 'ready' ? s.state.orders.filter((o) => o.status === 'enviado').length : 0));
+  return useOrders((s) => (s.state.status === 'ready' ? s.state.orders.filter((o) => o.status === 'enviado' || awaitingReview(o)).length : 0));
+}
+
+/** Toast when a receipt arrives while the panel is open. */
+function useNewReceiptNotice() {
+  const latest = useOrders((s) => {
+    if (s.state.status !== 'ready') return null;
+    let best: { at: string; number: number } | null = null;
+    for (const o of s.state.orders) for (const r of o.receipts ?? []) if (!best || r.at > best.at) best = { at: r.at, number: o.number };
+    return best ? `${best.at}|${best.number}` : '';
+  });
+  const seen = useRef<string | null>(null);
+  useEffect(() => {
+    if (latest === null) return;
+    if (seen.current !== null && latest && latest > seen.current) {
+      const number = latest.split('|')[1];
+      toast(`Comprovante recebido no pedido nº ${number}.`, { tone: 'success', action: { label: 'Ver', to: `${ADMIN_BASE}/pedidos` } });
+    }
+    if (seen.current === null || (latest && latest > seen.current)) seen.current = latest;
+  }, [latest]);
 }
 
 /** Toast when a new order arrives while the panel is open. */
@@ -67,6 +87,7 @@ export function AdminShell() {
   const section = useSection();
   useOrdersSync();
   useNewOrderNotice();
+  useNewReceiptNotice();
   const openOrders = useOpenOrders();
   const { lock } = useAdminSession();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -109,7 +130,7 @@ export function AdminShell() {
                   {s.path === 'pedidos' && openOrders > 0 && (
                     <span className="price ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full bg-rose-light px-1.5 text-xs leading-5 text-ink">
                       {openOrders}
-                      <span className="sr-only"> em negociação</span>
+                      <span className="sr-only"> precisando de atenção</span>
                     </span>
                   )}
                 </NavLink>

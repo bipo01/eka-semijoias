@@ -1,5 +1,5 @@
 import { FINISH_LABEL } from './schema';
-import { IS_SALE, type Order } from './orders';
+import { IS_SALE, saleCents, type Order } from './orders';
 
 /*
  * Sales report, computed in the browser from the orders the admin already
@@ -146,11 +146,12 @@ export function computeReport(orders: Order[], period: Period, now = new Date())
     }
     if (!IS_SALE.has(order.status)) continue;
     count++;
-    revenueCents += order.totalCents;
+    const value = saleCents(order);
+    revenueCents += value;
     const created = new Date(order.createdAt);
     const bucket = byKey.get(period.bucket === 'month' ? monthKey(created) : dayKey(created));
     if (bucket) {
-      bucket.cents += order.totalCents;
+      bucket.cents += value;
       bucket.orders++;
     }
     for (const item of order.items) {
@@ -163,7 +164,7 @@ export function computeReport(orders: Order[], period: Period, now = new Date())
     if (!order.anonymized && order.customer.city.trim()) {
       const key = cityKey(order.customer.city);
       const label = cities.get(key)?.label ?? order.customer.city.trim();
-      bump(cities, key, label, 1, order.totalCents);
+      bump(cities, key, label, 1, value);
     }
   }
 

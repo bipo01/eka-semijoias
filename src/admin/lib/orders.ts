@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { orderSchema, type Order, type OrderStatus } from '../../data/orders';
-import { api, ApiError, errorMessage } from '../../lib/api';
+import { api, apiUrl, ApiError, errorMessage } from '../../lib/api';
 import { ownWrite, useCatalog } from '../../store/catalog';
 import { signalSessionLost } from './session';
 
@@ -102,4 +102,33 @@ export function deleteOrder(order: Order): Promise<string | null> {
     () => api<{ deleted: boolean }>(`/api/admin/orders/${encodeURIComponent(order.id)}`, { method: 'DELETE', retries: 1 }),
     () => useOrders.getState().drop(order.id),
   );
+}
+
+/** Creates (or updates) the Pix charge of a confirmed order. Resolves to the updated order or an error message. */
+export async function chargeOrder(order: Order, shippingCents: number, discountCents: number): Promise<{ order: Order } | { error: string }> {
+  try {
+    const result = await api<{ order: Order }>(`/api/admin/orders/${encodeURIComponent(order.id)}/charge`, { json: { shippingCents, discountCents }, retries: 2, timeoutMs: 20_000 });
+    const next = orderSchema.parse(result.order);
+    useOrders.getState().replace(next);
+    return { order: next };
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'unauthenticated') signalSessionLost();
+    return { error: errorMessage(error) };
+  }
+}
+
+/** The public payment link of a charge. */
+export const paymentLink = (token: string) => `${window.location.origin}/pagamento/${token}`;
+
+export const receiptUrl = (id: string) => apiUrl(`/api/admin/receipts/${encodeURIComponent(id)}`);
+
+/** Fetches a receipt as an object URL (images are shown inline; the admin session cookie goes along). */
+export async function receiptObjectUrl(id: string): Promise<string> {
+  const response = await fetch(receiptUrl(id), { credentials: 'same-origin' });
+  if (response.status === 401) {
+    signalSessionLost();
+    throw new ApiError(401, 'unauthenticated', 'Sua sessão terminou.');
+  }
+  if (!response.ok) throw new ApiError(response.status, 'http_error', 'Não foi possível abrir o comprovante.');
+  return URL.createObjectURL(await response.blob());
 }

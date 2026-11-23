@@ -6,7 +6,9 @@ import { Chip } from '../../components/ui/Misc';
 import { Sheet } from '../../components/ui/Sheet';
 import { cx } from '../../components/ui/cx';
 import { sizeLabel } from '../../data/catalog';
-import { canTransition, HOLDS_STOCK, NEXT_STEP, STATUS_LABEL, UNDO_STEP, type Order, type OrderStatus } from '../../data/orders';
+import { awaitingReview, canTransition, HOLDS_STOCK, NEXT_STEP, STATUS_LABEL, UNDO_STEP, type Order, type OrderStatus } from '../../data/orders';
+import { ReceiptText } from 'lucide-react';
+import { ChargeSheet, PaymentSection } from './OrderPayment';
 import { FINISH_LABEL } from '../../data/schema';
 import { formatBRL } from '../../lib/format';
 import { toast } from '../../store/ui';
@@ -14,10 +16,11 @@ import { EmptyState } from '../FormBits';
 import { formatDateTime } from '../lib/contact';
 import { anonymizeOrder, changeOrderStatus, deleteOrder, useOrders } from '../lib/orders';
 
-type Filter = 'ativos' | OrderStatus | 'todos';
+type Filter = 'ativos' | 'comprovantes' | OrderStatus | 'todos';
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'ativos', label: 'Ativos' },
+  { id: 'comprovantes', label: 'Comprovantes' },
   { id: 'enviado', label: 'Em negociação' },
   { id: 'confirmado', label: 'Confirmados' },
   { id: 'pago', label: 'Pagos' },
@@ -28,7 +31,8 @@ const FILTERS: { id: Filter; label: string }[] = [
 
 const ACTIVE: ReadonlySet<OrderStatus> = new Set(['enviado', 'confirmado', 'pago']);
 
-const matchesFilter = (order: Order, filter: Filter) => (filter === 'todos' ? true : filter === 'ativos' ? ACTIVE.has(order.status) : order.status === filter);
+const matchesFilter = (order: Order, filter: Filter) =>
+  filter === 'todos' ? true : filter === 'ativos' ? ACTIVE.has(order.status) : filter === 'comprovantes' ? awaitingReview(order) : order.status === filter;
 
 const STATUS_STYLE: Record<OrderStatus, string> = {
   enviado: 'bg-champagne text-ink',
@@ -67,7 +71,12 @@ function stockNote(from: OrderStatus, to: OrderStatus): string | null {
 function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<'cancelar' | 'anonimizar' | 'excluir' | null>(null);
+  const [charging, setCharging] = useState(false);
   const next = NEXT_STEP[order.status];
+  const reviewing = awaitingReview(order) && order.status === 'confirmado';
+  // Payment-led flow: from "em negociação" the main action is to charge by Pix (which confirms);
+  // once a receipt arrives, the main action is to accept the payment.
+  const chargeFirst = order.status === 'enviado' || (order.status === 'confirmado' && !order.charge && !order.receipts?.length);
   const undo = UNDO_STEP[order.status];
   const canCancel = canTransition(order.status, 'cancelado');
   const canDelete = !HOLDS_STOCK.has(order.status);
@@ -115,7 +124,7 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
         <dt className="text-ink-muted">Cidade</dt>
         <dd className="break-words">{order.customer.city || '—'}</dd>
         <dt className="text-ink-muted">Pagamento</dt>
-        <dd>{order.pix ? 'Pix (mostrado à cliente)' : 'A combinar'}</dd>
+        <dd>{order.charge ? `Pix · ${formatBRL(order.charge.amountCents)}` : order.pix ? 'Pix (mostrado à cliente)' : 'A combinar'}</dd>
         {order.note && (
           <>
             <dt className="text-ink-muted">Observação</dt>
@@ -151,14 +160,36 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
         </div>
       </section>
 
+      <PaymentSection order={order} onCharge={() => setCharging(true)} />
+
       <div className="flex flex-col gap-2">
-        {next && (
+        {chargeFirst ? (
           <>
-            <Button size="lg" block disabled={busy} aria-busy={busy} onClick={() => void move(next.to)}>
-              {busy ? 'Salvando…' : next.label}
+            <Button size="lg" block disabled={busy} onClick={() => setCharging(true)}>
+              Cobrar por Pix
             </Button>
-            {stockNote(order.status, next.to) && <p className="text-center text-sm text-ink-muted">{stockNote(order.status, next.to)}</p>}
+            {next && (
+              <Button variant="secondary" block disabled={busy} aria-busy={busy} onClick={() => void move(next.to)}>
+                {busy ? 'Salvando…' : order.status === 'enviado' ? 'Só confirmar (outra forma de pagamento)' : 'Marcar como pago'}
+              </Button>
+            )}
           </>
+        ) : reviewing ? (
+          <>
+            <Button size="lg" block disabled={busy} aria-busy={busy} onClick={() => void move('pago')}>
+              {busy ? 'Salvando…' : 'Pagamento conferido'}
+            </Button>
+            <p className="text-center text-sm text-ink-muted">Marca o pedido como pago. Confira antes o valor e o recebedor no comprovante.</p>
+          </>
+        ) : (
+          next && (
+            <>
+              <Button size="lg" block disabled={busy} aria-busy={busy} onClick={() => void move(next.to)}>
+                {busy ? 'Salvando…' : next.label}
+              </Button>
+              {stockNote(order.status, next.to) && <p className="text-center text-sm text-ink-muted">{stockNote(order.status, next.to)}</p>}
+            </>
+          )
         )}
         {undo && (
           <Button variant="secondary" block disabled={busy} onClick={() => void move(undo)}>
@@ -197,6 +228,7 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
         )}
       </div>
 
+      <ChargeSheet order={order} open={charging} onClose={() => setCharging(false)} />
       <ConfirmDialog
         open={confirm === 'cancelar'}
         title={`Cancelar o pedido nº ${order.number}?`}
@@ -217,7 +249,7 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
         onConfirm={() => void anonymize()}
         onCancel={() => setConfirm(null)}
       >
-        O nome, a cidade e a observação deste pedido são apagados de vez. As peças e os valores continuam no relatório.
+        O nome, a cidade, a observação e os comprovantes deste pedido são apagados de vez. As peças e os valores continuam no relatório.
       </ConfirmDialog>
       <ConfirmDialog
         open={confirm === 'excluir'}
@@ -295,6 +327,11 @@ export function OrdersPage() {
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="price font-medium">nº {order.number}</span>
                     <StatusPill status={order.status} />
+                    {awaitingReview(order) && (
+                      <span className="inline-flex min-h-6 items-center gap-1 rounded-full bg-rose-light/60 px-2.5 text-xs font-medium text-ink">
+                        <ReceiptText size={13} strokeWidth={1.75} aria-hidden="true" /> Comprovante
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 truncate">
                     {order.customer.name || '—'}
@@ -304,7 +341,7 @@ export function OrdersPage() {
                     {formatDateTime(order.createdAt)} · {unitsOf(order)} {unitsOf(order) === 1 ? 'peça' : 'peças'}
                   </p>
                 </div>
-                <span className="price shrink-0 text-lg">{formatBRL(order.totalCents)}</span>
+                <span className="price shrink-0 text-lg">{formatBRL(order.charge?.amountCents ?? order.totalCents)}</span>
                 <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-muted" />
               </button>
             </li>

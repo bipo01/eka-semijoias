@@ -91,7 +91,7 @@ test('add to bag, register the order and build the WhatsApp message', async ({ p
   const text = decodeURIComponent(href!.split('text=')[1]!);
   expect(href).toMatch(/^https:\/\/wa\.me\/\?text=/);
   expect(text).toBe(
-    `Olá! Fiz o pedido nº ${number} pelo site:\n\n1) Anel Solitário Delicado — Dourado — aro 16 — 2 un. — R$ 279,80\n\nTotal: R$ 279,80\nPagamento: a combinar\nNome: Ana · Cidade: Campo Grande/MS`,
+    `Olá! Fiz o pedido nº ${number} pelo site:\n\n1) Anel Solitário Delicado — Dourado — aro 16 — 2 un. — R$ 279,80\n\nTotal: R$ 279,80\nNome: Ana · Cidade: Campo Grande/MS`,
   );
   // "Alterar pedido" goes back to the bag, which is still there.
   await dialog.getByRole('button', { name: 'Alterar pedido' }).click();

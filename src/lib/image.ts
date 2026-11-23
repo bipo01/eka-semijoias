@@ -96,14 +96,14 @@ function fail(reason: keyof typeof MESSAGES): ProcessedImage {
   return { ok: false, reason, message: MESSAGES[reason] };
 }
 
-interface Decoded {
+export interface Decoded {
   source: CanvasImageSource;
   width: number;
   height: number;
   release: () => void;
 }
 
-async function decode(file: Blob): Promise<Decoded | null> {
+export async function decode(file: Blob): Promise<Decoded | null> {
   if (typeof createImageBitmap === 'function') {
     try {
       const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });

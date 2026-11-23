@@ -183,7 +183,7 @@ test('admin: stock, order and confirmation; the visitor page sells out live', as
   await expect(card).toBeVisible({ timeout: 10_000 });
   await card.click();
   const detail = page.getByRole('dialog', { name: `Pedido nº ${number}` });
-  await detail.getByRole('button', { name: 'Confirmar pedido' }).click();
+  await detail.getByRole('button', { name: /Só confirmar/ }).click();
   await expect(page.getByText('Pedido confirmado.')).toBeVisible();
 
   // 4. The open visitor page shows it sold out, without reload.
@@ -196,4 +196,75 @@ test('admin: stock, order and confirmation; the visitor page sells out live', as
   await expect(page.getByText('Pedido cancelado.')).toBeVisible();
   await expect(visitor.getByText('Últimas unidades')).toBeVisible({ timeout: 8000 });
   await visitorContext.close();
+});
+
+const PAY_PRODUCT: Record<string, { slug: string }> = {
+  'mobile-chromium': { slug: 'brinco-perola-mini' },
+  'desktop-chromium': { slug: 'conjunto-gota-e-ponto-de-luz' },
+  'mobile-webkit': { slug: 'colar-gota-cristal' },
+  'desktop-webkit': { slug: 'choker-riviera' },
+};
+
+test('payment: charge by Pix, customer pays through the link and sends the receipt, admin accepts it', async ({ page, browser }, testInfo) => {
+  const product = PAY_PRODUCT[testInfo.project.name] ?? PAY_PRODUCT['desktop-chromium']!;
+  // 1. A customer registers an order (no Pix at checkout).
+  const customerContext = await browser.newContext();
+  await customerContext.setExtraHTTPHeaders({ 'CF-Connecting-IP': `10.203.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` });
+  const customer = await customerContext.newPage();
+  await customer.goto(`/produto/${product.slug}`);
+  await customer.getByRole('button', { name: 'Pedir agora' }).filter({ visible: true }).first().click();
+  const bag = customer.getByRole('dialog', { name: /Sua sacola/ });
+  await bag.getByPlaceholder('Seu nome').fill('Carla Pagadora');
+  await bag.getByPlaceholder('Cidade').fill('Dourados');
+  await bag.getByRole('button', { name: 'Finalizar pedido' }).click();
+  const heading = bag.getByRole('heading', { name: /Pedido nº \d+ registrado/ });
+  await expect(heading).toBeVisible();
+  await expect(bag.getByText('Pague com Pix')).toHaveCount(0);
+  const number = (await heading.innerText()).match(/\d+/)![0];
+
+  // 2. The owner sets the Pix key (shared by the parallel projects: same value) and charges with shipping.
+  await page.goto('/admin');
+  await unlock(page);
+  await page.getByRole('link', { name: 'Configurações', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Tipo de chave' }).selectOption('phone');
+  await page.getByRole('textbox', { name: 'Chave Pix' }).fill('(67) 99999-8888');
+  await page.getByRole('textbox', { name: 'Nome do recebedor' }).fill('ÉKA Semijoias');
+  await page.getByRole('textbox', { name: 'Cidade da conta' }).fill('Campo Grande');
+  await page.getByRole('button', { name: 'Salvar Pix' }).click();
+  await expect(page.getByText(/Pix salvo/)).toBeVisible();
+  await page.getByRole('link', { name: /^Pedidos/ }).click();
+  await page.getByRole('button', { name: new RegExp(`nº ${number}.*Carla Pagadora`) }).click();
+  const detail = page.getByRole('dialog', { name: `Pedido nº ${number}` });
+  await detail.getByRole('button', { name: 'Cobrar por Pix' }).click();
+  const sheet = page.getByRole('dialog', { name: `Cobrar pedido nº ${number} por Pix` });
+  await sheet.getByRole('textbox', { name: /Frete/ }).fill('20,00');
+  await sheet.getByRole('button', { name: 'Confirmar e gerar cobrança' }).click();
+  const ready = page.getByRole('dialog', { name: 'Cobrança pronta' });
+  const message = await ready.locator('pre').innerText();
+  expect(message).toContain(`Seu pedido nº ${number} está confirmado.`);
+  expect(message).toContain('Frete: R$ 20,00');
+  const link = message.match(/https?:\/\/\S+\/pagamento\/[A-Za-z0-9_-]+/)![0];
+  await page.keyboard.press('Escape');
+
+  // 3. The customer opens the link, sees the exact amount and the Pix, and sends a receipt.
+  await customer.goto(link);
+  await expect(customer.getByRole('heading', { level: 1, name: new RegExp(`Pagamento do pedido nº ${number}`) })).toBeVisible();
+  await expect(customer.getByText('Oi, Carla! Falta pouco')).toBeVisible();
+  await expect(customer.getByText('R$ 20,00')).toBeVisible();
+  await expect(customer.getByRole('button', { name: 'Copiar código Pix' })).toBeVisible();
+  await expect(customer.getByRole('img', { name: /QR Code Pix/ })).toBeVisible();
+  await customer.locator('input[type="file"]').setInputFiles('public/favicon-512.png');
+  await customer.getByRole('button', { name: 'Enviar comprovante' }).click();
+  await expect(customer.getByRole('heading', { name: 'Comprovante recebido!' })).toBeVisible({ timeout: 15_000 });
+
+  // 4. The owner sees it live, checks it and accepts the payment.
+  await expect(detail.getByText(/Comprovante recebido: confira/)).toBeVisible({ timeout: 10_000 });
+  await expect(detail.getByRole('button', { name: /Ver Comprovante 1/ }).locator('img')).toBeVisible();
+  await detail.getByRole('button', { name: 'Pagamento conferido' }).click();
+  await expect(page.getByText('Pagamento registrado.')).toBeVisible();
+
+  // 5. The link now says it is paid.
+  await customer.reload();
+  await expect(customer.getByRole('heading', { name: 'Pagamento confirmado' })).toBeVisible();
+  await customerContext.close();
 });

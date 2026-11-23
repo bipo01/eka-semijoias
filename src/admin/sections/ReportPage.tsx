@@ -24,7 +24,7 @@ const longMonth = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numer
 /** One row per item; every order of the period with its status (pt-BR Excel: semicolons). */
 export function reportCsv(orders: Order[]): string {
   return toCSV(
-    ['Pedido', 'Data', 'Status', 'Cliente', 'Cidade', 'Peça', 'Acabamento', 'Tamanho', 'Ref.', 'Qtd.', 'Preço unitário', 'Total do item', 'Total do pedido'],
+    ['Pedido', 'Data', 'Status', 'Cliente', 'Cidade', 'Peça', 'Acabamento', 'Tamanho', 'Ref.', 'Qtd.', 'Preço unitário', 'Total do item', 'Total do pedido', 'Frete', 'Desconto', 'Valor cobrado'],
     [...orders]
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .flatMap((o) =>
@@ -42,6 +42,9 @@ export function reportCsv(orders: Order[]): string {
           (i.unitCents / 100).toFixed(2).replace('.', ','),
           ((i.unitCents * i.qty) / 100).toFixed(2).replace('.', ','),
           (o.totalCents / 100).toFixed(2).replace('.', ','),
+          o.charge ? (o.charge.shippingCents / 100).toFixed(2).replace('.', ',') : '',
+          o.charge ? (o.charge.discountCents / 100).toFixed(2).replace('.', ',') : '',
+          o.charge ? (o.charge.amountCents / 100).toFixed(2).replace('.', ',') : '',
         ]),
       ),
     { delimiter: ';' },
@@ -216,7 +219,7 @@ export function ReportPage() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <Kpi label="Vendas" value={formatBRL(report.revenueCents)} hint="confirmados, pagos e entregues" />
+            <Kpi label="Vendas" value={formatBRL(report.revenueCents)} hint="confirmados, pagos e entregues; sem frete" />
             <Kpi label="Pedidos" value={String(report.orders)} hint={report.cancelled ? `${report.cancelled} cancelado${report.cancelled === 1 ? '' : 's'} fora da conta` : undefined} />
             <Kpi label="Ticket médio" value={report.orders ? formatBRL(report.averageCents) : '—'} />
             <Kpi label="Peças vendidas" value={String(report.units)} />

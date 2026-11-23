@@ -69,6 +69,9 @@ export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', classN
       aria-labelledby={titleId}
       className={cx('sheet', `sheet-${side}`, className)}
       onCancel={(e) => {
+        // Esc closes the topmost sheet only: React propagates `cancel` through the component tree,
+        // so a sheet opened from inside another would otherwise close its parent too.
+        if (e.target !== e.currentTarget) return;
         e.preventDefault();
         onCloseRef.current();
       }}

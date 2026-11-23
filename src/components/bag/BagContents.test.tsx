@@ -53,7 +53,7 @@ describe('bag checkout', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('registers the order once, then shows the number, the Pix and the WhatsApp link', async () => {
+  it('registers the order once, then shows the number and the WhatsApp link (no Pix: it comes later as a link)', async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify(createdOrder(1024)), { status: 201, headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', fetch);
     setup();
@@ -66,12 +66,12 @@ describe('bag checkout', () => {
     expect(url).toBe('/api/orders');
     expect((init.headers as Record<string, string>)['Idempotency-Key']).toMatch(/^[\w-]{16,}$/);
     expect(JSON.parse(init.body as string)).toEqual({ items: [{ productId: product.id, variantId: variant.id, qty: 2 }], name: 'Ana', city: 'Dourados' });
-    expect(await screen.findByRole('heading', { name: 'Pague com Pix' })).toBeInTheDocument();
-    expect((screen.getByLabelText('Pix Copia e Cola') as HTMLTextAreaElement).value).toMatch(/^000201.*540520\.00.*6304[0-9A-F]{4}$/);
+    expect(screen.queryByText('Pague com Pix')).not.toBeInTheDocument();
+    expect(screen.getByText(/link para pagar com Pix/)).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /Enviar pedido pelo WhatsApp/ });
     const text = decodeURIComponent(link.getAttribute('href')!.split('text=')[1]!);
     expect(text).toContain('Fiz o pedido nº 1024 pelo site');
-    expect(text).toContain('Pagamento: Pix');
+    expect(text).not.toContain('Pagamento');
     await userEvent.click(link);
     expect(useCart.getState().items).toEqual([]);
     expect(screen.getByText('Pedido nº 1024 registrado')).toBeInTheDocument();

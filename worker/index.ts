@@ -6,6 +6,7 @@ import { assertSameOrigin, errorResponse, HttpError, json } from './http';
 import { handleCreateLead, handleDeleteLead, handleListLeads } from './leads';
 import { handleLive } from './live';
 import { handleAnonymizeOrder, handleCreateOrder, handleDeleteOrder, handleListOrders, handleOrderStatus } from './orders';
+import { handleCharge, handleGetReceipt, handlePayView, handleUploadReceipt } from './payments';
 import { handleGetStock, handlePutStock } from './stock';
 import { handleMedia, handleUpload } from './media';
 import { Router, type Context } from './router';
@@ -29,6 +30,8 @@ const router = new Router()
   .on('GET', '/api/live', handleLive)
   .on('POST', '/api/leads', handleCreateLead)
   .on('POST', '/api/orders', handleCreateOrder)
+  .on('GET', '/api/pay/:token', handlePayView)
+  .on('POST', '/api/pay/:token/receipt', handleUploadReceipt)
   .on('GET', '/api/admin/session', handleSessionStatus)
   .on('POST', '/api/admin/login', handleLogin)
   .on('POST', '/api/admin/logout', handleLogout)
@@ -42,6 +45,8 @@ const router = new Router()
   .on('POST', '/api/admin/orders/:id/status', handleOrderStatus)
   .on('POST', '/api/admin/orders/:id/anonymize', handleAnonymizeOrder)
   .on('DELETE', '/api/admin/orders/:id', handleDeleteOrder)
+  .on('POST', '/api/admin/orders/:id/charge', handleCharge)
+  .on('GET', '/api/admin/receipts/:id', handleGetReceipt)
   .on('GET', '/api/admin/stock', handleGetStock)
   .on('PUT', '/api/admin/stock/:productId', handlePutStock)
   .on('GET', '/media/:file', handleMedia);

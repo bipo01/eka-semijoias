@@ -720,6 +720,157 @@ describe('orders and stock', () => {
   });
 });
 
+describe('Pix charges and receipts', () => {
+  const pngBytes = () => {
+    const out = new Uint8Array(64);
+    out.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    out.set(new TextEncoder().encode(randomUUID()), 16);
+    return out;
+  };
+  async function withPix(a: Client, on: boolean) {
+    const c = await catalog();
+    const { pix: _pix, ...rest } = c.settings;
+    const settings = on ? { ...rest, pix: { key: '+5567999998888', name: 'EKA SEMIJOIAS', city: 'CAMPO GRANDE' } } : rest;
+    const res = await a.req('/api/admin/changes', { body: { baseVersion: c.version, changes: [{ kind: 'settings', op: 'upsert', data: settings }] } });
+    expect(res.status).toBe(200);
+  }
+  async function newOrder(a: Client, name = 'Maria Clara Souza') {
+    const c = await catalog();
+    const product = c.products.find((p: any) => p.available && p.variants.every((v: any) => v.available && !v.sizes?.length) && !c.stock?.[p.id]);
+    const created = await new Client().req('/api/orders', { body: { items: [{ productId: product.id, variantId: product.variants[0].id, qty: 1 }], name, city: 'Dourados' }, headers: { 'Idempotency-Key': randomUUID() } });
+    expect(created.status).toBe(201);
+    const order = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.number === created.json.order.number);
+    return { order, product };
+  }
+
+  it('charges a confirmed order, serves the payment page by token and takes receipts for the admin only', async () => {
+    const a = await admin();
+    await withPix(a, true);
+    const { order, product } = await newOrder(a);
+    expect(order.pix).toBe(false); // no Pix at checkout any more
+
+    // Charging needs a confirmed order.
+    const early = await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 2000, discountCents: 500 } });
+    expect(early.status).toBe(409);
+    await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'enviado', to: 'confirmado' } });
+    const charged = await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 2000, discountCents: 500 } });
+    expect(charged.status).toBe(200);
+    const charge = charged.json.order.charge;
+    expect(charge.amountCents).toBe((product.promoPrice ?? product.price) + 2000 - 500);
+    expect(charge.token).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect((await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 0, discountCents: 99_999_999 } })).status).toBe(400);
+
+    // Public payment view: first name only, amounts, Pix data; nothing else personal.
+    const view = await new Client().req(`/api/pay/${charge.token}`);
+    expect(view.status).toBe(200);
+    expect(view.json).toMatchObject({ number: order.number, firstName: 'Maria', amountCents: charge.amountCents, shippingCents: 2000, discountCents: 500, state: 'aguardando', pix: { key: '+5567999998888' } });
+    expect(view.text).not.toContain('Souza');
+    expect(view.text).not.toContain('Dourados');
+    expect((await new Client().req('/api/pay/not-a-real-token-1234567890')).status).toBe(404);
+
+    // Same amount keeps the link; a new amount issues a new one and the old link dies.
+    const same = await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 2000, discountCents: 500 } });
+    expect(same.json.order.charge.token).toBe(charge.token);
+    const changed = await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 1500, discountCents: 0 } });
+    const token = changed.json.order.charge.token;
+    expect(token).not.toBe(charge.token);
+    expect((await new Client().req(`/api/pay/${charge.token}`)).status).toBe(404);
+
+    // Receipts: real type checked, size capped, stored for the admin only.
+    const visitor = new Client();
+    expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: new TextEncoder().encode('<html>hi</html>'), type: 'image/png' })).status).toBe(415);
+    expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'application/pdf' })).status).toBe(415);
+    expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: new Uint8Array(1_100_000), type: 'image/png' })).status).toBe(413);
+    expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png', origin: 'https://evil.example' })).status).toBe(403);
+    const sent = await visitor.req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' });
+    expect(sent.status).toBe(201);
+    const pdf = await visitor.req(`/api/pay/${token}/receipt`, { raw: new TextEncoder().encode('%PDF-1.7\n%comprovante'), type: 'application/pdf' });
+    expect(pdf.status).toBe(201);
+    expect((await new Client().req(`/api/pay/${token}`)).json).toMatchObject({ state: 'analise', receipts: [{}, {}] });
+
+    const stored = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id);
+    expect(stored.receipts.map((r: any) => r.contentType)).toEqual(['image/png', 'application/pdf']);
+    const file = await a.req(`/api/admin/receipts/${stored.receipts[1].id}`);
+    expect(file.status).toBe(200);
+    expect(file.headers.get('Content-Type')).toBe('application/pdf');
+    expect(file.headers.get('Cache-Control')).toContain('no-store');
+    expect(file.text.startsWith('%PDF-')).toBe(true);
+    expect((await new Client().req(`/api/admin/receipts/${stored.receipts[1].id}`)).status).toBe(401);
+    expect(JSON.stringify(await catalog())).not.toContain('rcp_');
+
+    // Paid: the page says so and takes no more receipts.
+    await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'confirmado', to: 'pago' } });
+    expect((await new Client().req(`/api/pay/${token}`)).json.state).toBe('pago');
+    expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(409);
+
+    // Erasing the customer's data erases the receipts too.
+    const anon = await a.req(`/api/admin/orders/${order.id}/anonymize`, { body: {} });
+    expect(anon.json.order.receipts).toBeUndefined();
+    expect((await a.req(`/api/admin/receipts/${stored.receipts[0].id}`)).status).toBe(404);
+    expect((await new Client().req(`/api/pay/${token}`)).status).toBe(404); // the link dies with the personal data
+    await withPix(a, false);
+  });
+
+  it('kills the link when the order goes back to negotiation or is anonymized, and starts fresh after a new amount', async () => {
+    const a = await admin();
+    await withPix(a, true);
+    const { order } = await newOrder(a, 'Lia Mendes');
+    const status = (from: string, to: string) => a.req(`/api/admin/orders/${order.id}/status`, { body: { from, to } });
+    const charge = (shippingCents: number) => a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents, discountCents: 0 } });
+    await status('enviado', 'confirmado');
+    const t1 = (await charge(0)).json.order.charge.token;
+    expect((await new Client().req(`/api/pay/${t1}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
+    expect((await new Client().req(`/api/pay/${t1}`)).json.state).toBe('analise');
+
+    // New amount after a receipt: the new link asks for the new value (Pix shown again).
+    const t2 = (await charge(1500)).json.order.charge.token;
+    const view = await new Client().req(`/api/pay/${t2}`);
+    expect(view.json).toMatchObject({ state: 'aguardando', receipts: [] });
+    expect((await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id).receipts).toHaveLength(1); // the admin still sees it
+
+    // Undo to "em negociação": the link dies and takes nothing.
+    expect((await status('confirmado', 'enviado')).json.order.charge).toBeUndefined();
+    expect((await new Client().req(`/api/pay/${t2}`)).status).toBe(404);
+    expect((await new Client().req(`/api/pay/${t2}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(404);
+
+    // Cancel then reopen: same.
+    await status('enviado', 'confirmado');
+    const t3 = (await charge(0)).json.order.charge.token;
+    await status('confirmado', 'cancelado');
+    expect((await new Client().req(`/api/pay/${t3}`)).json.state).toBe('cancelado');
+    expect((await new Client().req(`/api/pay/${t3}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(409);
+    await status('cancelado', 'enviado');
+    expect((await new Client().req(`/api/pay/${t3}`)).status).toBe(404);
+
+    // Anonymized: the link dies.
+    await status('enviado', 'confirmado');
+    const t4 = (await charge(0)).json.order.charge.token;
+    await a.req(`/api/admin/orders/${order.id}/anonymize`, { body: {} });
+    expect((await new Client().req(`/api/pay/${t4}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(404);
+    await withPix(a, false);
+  });
+
+  it('refuses to charge without a Pix key, caps receipts per order and drops them with the order', async () => {
+    const a = await admin();
+    await withPix(a, false);
+    const { order } = await newOrder(a, 'Bia');
+    await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'enviado', to: 'confirmado' } });
+    const noPix = await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 0, discountCents: 0 } });
+    expect(noPix.status).toBe(503);
+    await withPix(a, true);
+    const token = (await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 0, discountCents: 0 } })).json.order.charge.token;
+    for (let i = 0; i < 6; i++) expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
+    expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(409);
+    const ids = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id).receipts.map((r: any) => r.id);
+    await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'confirmado', to: 'cancelado' } });
+    expect((await new Client().req(`/api/pay/${token}`)).json.state).toBe('cancelado');
+    expect((await a.req(`/api/admin/orders/${order.id}`, { method: 'DELETE' })).json.deleted).toBe(true);
+    expect((await a.req(`/api/admin/receipts/${ids[0]}`)).status).toBe(404);
+    expect((await new Client().req(`/api/pay/${token}`)).status).toBe(404);
+    await withPix(a, false);
+  });
+});
+
 describe('PIN change', () => {
   it('ends a session that keeps answering the current PIN wrong', async () => {
     const a = await admin();

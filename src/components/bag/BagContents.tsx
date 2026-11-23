@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, MapPin, PencilLine, ShoppingBag, Trash2, User } from 'lucide-react';
+import { MapPin, PencilLine, ShoppingBag, Trash2, User } from 'lucide-react';
 import { useBusiness } from '../../hooks/useBusiness';
 import { productImageSources } from '../../lib/assets';
 import { formatBRL } from '../../lib/format';
@@ -16,8 +16,6 @@ import { useCustomer } from '../../store/customer';
 import { useUi } from '../../store/ui';
 import { ButtonAnchor, ButtonLink, Button } from '../ui/Button';
 
-// The QR Code encoder only loads once an order is registered with Pix.
-const PixPayment = lazy(() => import('./PixPayment').then((m) => ({ default: m.PixPayment })));
 import { WhatsAppIcon } from '../ui/Icons';
 import { Img } from '../ui/Img';
 import { Stepper } from '../ui/Misc';
@@ -46,11 +44,9 @@ const orderLines = (order: RegisteredOrder): OrderLine[] =>
 /** After "Finalizar pedido": the order number, the Pix and the WhatsApp button. */
 function RegisteredView({ order, onNavigate }: { order: RegisteredOrder; onNavigate?: (() => void) | undefined }) {
   const biz = useBusiness();
-  const pix = useCatalog((s) => s.data.settings.pix);
   const { sent, markSent, reset } = useCheckout();
   const clearCart = useCart((s) => s.clear);
-  const showPix = order.pix && pix;
-  const message = buildOrderMessage({ lines: orderLines(order), name: order.name, city: order.city, ...(order.note ? { note: order.note } : {}), number: order.number, pix: !!showPix });
+  const message = buildOrderMessage({ lines: orderLines(order), name: order.name, city: order.city, ...(order.note ? { note: order.note } : {}), number: order.number });
   const units = order.items.reduce((sum, i) => sum + i.qty, 0);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus(), []);
@@ -58,14 +54,15 @@ function RegisteredView({ order, onNavigate }: { order: RegisteredOrder; onNavig
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col items-center gap-3 pt-2 text-center">
-        <span className="inline-flex size-14 items-center justify-center rounded-full bg-champagne text-copper">
-          <CheckCircle2 size={28} strokeWidth={1.5} aria-hidden="true" />
-        </span>
+        <picture>
+          <source srcSet="/images/illustrations/pedido-registrado-320.webp 1x, /images/illustrations/pedido-registrado-640.webp 2x" type="image/webp" />
+          <img src="/images/illustrations/pedido-registrado-320.webp" alt="" width={160} height={160} className="size-40" decoding="async" />
+        </picture>
         <h3 ref={heading} tabIndex={-1} className="font-display text-display-m focus:outline-none">
           Pedido nº {order.number} registrado
         </h3>
         <p className="max-w-sm text-ink-muted">
-          {sent ? 'Pronto! Se o WhatsApp não abriu, toque no botão de novo.' : 'Agora envie o pedido pelo WhatsApp para combinarmos a entrega.'}
+          {sent ? 'Pronto! Se o WhatsApp não abriu, toque no botão de novo.' : 'Agora envie o pedido pelo WhatsApp. A gente confirma a disponibilidade e te manda por lá o link para pagar com Pix.'}
         </p>
       </div>
 
@@ -87,12 +84,6 @@ function RegisteredView({ order, onNavigate }: { order: RegisteredOrder; onNavig
       >
         <WhatsAppIcon size={22} /> {sent ? 'Enviar de novo pelo WhatsApp' : 'Enviar pedido pelo WhatsApp'}
       </ButtonAnchor>
-      {showPix && (
-        <Suspense fallback={<div className="h-[420px] animate-pulse rounded-[12px] border border-line bg-white" aria-busy="true" />}>
-          <PixPayment pix={pix} amountCents={order.totalCents} orderNumber={order.number} />
-        </Suspense>
-      )}
-
       {sent ? (
         <ButtonLink
           to="/catalogo"

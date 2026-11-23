@@ -41,7 +41,7 @@ export const ORDERS_GLOBAL_PER_WINDOW = 300;
 const LIST_DAYS = 400;
 const LIST_LIMIT = 5000;
 
-interface OrderRow {
+export interface OrderRow {
   id: string;
   number: number;
   status: OrderStatus;
@@ -50,12 +50,12 @@ interface OrderRow {
 }
 
 /** The stored row as an Order (number and status come from their columns). */
-function toOrder(row: OrderRow): Order {
+export function toOrder(row: OrderRow): Order {
   return { ...(JSON.parse(row.data) as Omit<Order, 'number' | 'status'>), number: row.number, status: row.status };
 }
 
 /** What is stored in `data`: everything but the column-backed fields. */
-function toData(order: Order): string {
+export function toData(order: Order): string {
   const { number: _number, status: _status, ...rest } = order;
   return JSON.stringify(rest);
 }
@@ -131,7 +131,7 @@ export async function handleCreateOrder(ctx: Context): Promise<Response> {
     ...(parsed.data.note ? { note: parsed.data.note } : {}),
     items: priced.items,
     totalCents: priced.totalCents,
-    pix: !!catalog.settings.pix,
+    pix: false, // payment is agreed on WhatsApp; the Pix goes out later as a payment link (charge)
     history: [{ at, status: 'enviado' }],
   });
   const response = { order: { id: order.id, number: 0, createdAt: at, items: order.items, totalCents: order.totalCents, pix: order.pix } };
@@ -203,7 +203,7 @@ export async function handleListOrders(ctx: Context): Promise<Response> {
 }
 
 /** The order plus the stored `updated_at`, which every write checks (compare-and-swap on the whole row). */
-async function readOrder(db: D1Database, id: string): Promise<{ order: Order; stamp: string }> {
+export async function readOrder(db: D1Database, id: string): Promise<{ order: Order; stamp: string }> {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new HttpError('not_found', 'Pedido não encontrado.');
   const row = await withReadRetry(() => db.prepare('SELECT id, number, status, updated_at, data FROM orders WHERE id = ?1').bind(id).first<OrderRow>());
   if (!row) throw new HttpError('not_found', 'Pedido não encontrado.');
@@ -211,7 +211,7 @@ async function readOrder(db: D1Database, id: string): Promise<{ order: Order; st
 }
 
 /** A write timestamp strictly after the stored one (two writes in the same millisecond still differ). */
-function nextStamp(previous: string): string {
+export function nextStamp(previous: string): string {
   const now = Date.now();
   const prev = Date.parse(previous);
   return new Date(Number.isNaN(prev) ? now : Math.max(now, prev + 1)).toISOString();
@@ -251,7 +251,7 @@ async function readOrderAndStock(db: D1Database, id: string): Promise<{ order: O
   };
 }
 
-const unchanged = (db: D1Database, id: string, stamp: string) => guard(db, '(SELECT updated_at FROM orders WHERE id = ?1) = ?2', id, stamp);
+export const unchanged = (db: D1Database, id: string, stamp: string) => guard(db, '(SELECT updated_at FROM orders WHERE id = ?1) = ?2', id, stamp);
 
 /** True when a stock move applies: the product is tracked and the finish/size still exists. */
 function counted(state: StockState, move: StockMove): boolean {
@@ -289,6 +289,10 @@ export async function handleOrderStatus(ctx: Context): Promise<Response> {
     const taking = !HOLDS_STOCK.has(from) && HOLDS_STOCK.has(to);
     const giving = HOLDS_STOCK.has(from) && !HOLDS_STOCK.has(to);
     const next: Order = { ...order, status: to, updatedAt: at, history: [...order.history, { at, status: to }].slice(-200) };
+    // Back to "em negociação" (undo, or reopening a cancelled order): the pieces are no longer held,
+    // so the payment link dies; a new charge is created after confirming again.
+    const dropCharge = to === 'enviado' && !!order.charge;
+    if (dropCharge) delete next.charge;
     const statements: D1PreparedStatement[] = [];
     let publishVersion: number | null = null;
     let first: D1PreparedStatement | null = null;
@@ -355,7 +359,9 @@ export async function handleOrderStatus(ctx: Context): Promise<Response> {
         guard(db, '(SELECT status FROM orders WHERE id = ?1) = ?2', order.id, from),
         unchanged(db, order.id, stamp),
         ...statements,
-        db.prepare('UPDATE orders SET status = ?2, updated_at = ?3, data = ?4 WHERE id = ?1').bind(order.id, to, at, toData(next)),
+        dropCharge
+          ? db.prepare('UPDATE orders SET status = ?2, updated_at = ?3, data = ?4, pay_token = NULL WHERE id = ?1').bind(order.id, to, at, toData(next))
+          : db.prepare('UPDATE orders SET status = ?2, updated_at = ?3, data = ?4 WHERE id = ?1').bind(order.id, to, at, toData(next)),
         db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'order.status', `Pedido ${order.number}: ${from} → ${to}`),
       ]);
     } catch (error) {
@@ -379,11 +385,15 @@ export async function handleAnonymizeOrder(ctx: Context): Promise<Response> {
     if (order.anonymized) return json({ order });
     const at = nextStamp(stamp);
     const { note: _note, ...rest } = order;
-    const next: Order = { ...rest, customer: { name: ANONYMIZED_NAME, city: '' }, anonymized: true, updatedAt: at };
+    const { receipts: _receipts, ...kept } = rest;
+    const next: Order = { ...kept, customer: { name: ANONYMIZED_NAME, city: '' }, anonymized: true, updatedAt: at };
     try {
       await db.batch([
         unchanged(db, order.id, stamp), // a status change landed meanwhile: re-read so neither write is lost
-        db.prepare('UPDATE orders SET data = ?2, updated_at = ?3 WHERE id = ?1').bind(order.id, toData(next), at),
+        // The payment link dies too: nothing personal can be sent to an anonymized order.
+        db.prepare('UPDATE orders SET data = ?2, updated_at = ?3, pay_token = NULL WHERE id = ?1').bind(order.id, toData(next), at),
+        // Receipts carry the payer's name and bank details: erased with the rest.
+        db.prepare('DELETE FROM receipts WHERE order_id = ?1').bind(order.id),
         db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'order.anonymize', `Dados da cliente do pedido ${order.number} apagados`),
       ]);
     } catch (error) {
@@ -396,18 +406,30 @@ export async function handleAnonymizeOrder(ctx: Context): Promise<Response> {
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
 }
 
-/** DELETE /api/admin/orders/:id — only orders that hold no stock. Idempotent. */
+/** DELETE /api/admin/orders/:id — only orders that hold no stock; the receipts go in the same batch. Idempotent. */
 export async function handleDeleteOrder(ctx: Context): Promise<Response> {
   await requireSession(ctx);
+  const db = ctx.env.DB;
   const id = ctx.params.id ?? '';
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new HttpError('not_found', 'Pedido não encontrado.');
-  const result = await ctx.env.DB.prepare(`DELETE FROM orders WHERE id = ?1 AND status IN ('enviado', 'cancelado') RETURNING number`).bind(id).first<{ number: number }>();
-  if (!result) {
-    const exists = await ctx.env.DB.prepare('SELECT status FROM orders WHERE id = ?1').bind(id).first<{ status: string }>();
+  let results: D1Result<{ number?: number }>[];
+  try {
+    results = await db.batch<{ number?: number }>([
+      db.prepare(`DELETE FROM orders WHERE id = ?1 AND status IN ('enviado', 'cancelado') RETURNING number`).bind(id),
+      // Runs after the delete in the same transaction: receipts go whenever the order is gone
+      // (also cleans up after an earlier attempt that may have failed half way).
+      db.prepare('DELETE FROM receipts WHERE order_id = ?1 AND NOT EXISTS (SELECT 1 FROM orders WHERE id = ?1)').bind(id),
+    ]);
+  } catch (error) {
+    throw toHttpError(error);
+  }
+  const number = results[0]?.results[0]?.number;
+  if (number === undefined) {
+    const exists = await db.prepare('SELECT status FROM orders WHERE id = ?1').bind(id).first<{ status: string }>();
     if (exists) throw new HttpError('conflict', 'Cancele o pedido antes de excluir (assim as peças voltam ao estoque).');
     return json({ deleted: false });
   }
-  await ctx.env.DB.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(new Date().toISOString(), 'order.delete', `Pedido ${result.number} excluído`).run();
+  await db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(new Date().toISOString(), 'order.delete', `Pedido ${number} excluído`).run();
   ctx.waitUntil(notifyOrders(ctx.env));
   return json({ deleted: true });
 }

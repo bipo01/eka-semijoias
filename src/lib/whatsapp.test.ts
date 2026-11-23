@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSeed } from '../data/seed';
-import { buildOrderMessage, COMPACT_THRESHOLD, orderTotal, resolveCart, whatsappUrl, type OrderLine } from './whatsapp';
+import { buildChargeMessage, buildOrderMessage, COMPACT_THRESHOLD, orderTotal, resolveCart, whatsappUrl, type OrderLine } from './whatsapp';
 
 const lines: OrderLine[] = [
   { name: 'Brinco Gota Cristal', finish: 'Rosé', qty: 1, unitCents: 12990 },
@@ -8,11 +8,41 @@ const lines: OrderLine[] = [
 ];
 
 describe('buildOrderMessage', () => {
-  it('names the registered order and the payment', () => {
-    const msg = buildOrderMessage({ lines, name: 'Ana', city: 'Dourados', number: 1024, pix: true });
+  it('names the registered order (payment is agreed in the chat)', () => {
+    const msg = buildOrderMessage({ lines, name: 'Ana', city: 'Dourados', number: 1024 });
     expect(msg.split('\n')[0]).toBe('Olá! Fiz o pedido nº 1024 pelo site:');
-    expect(msg).toContain('Total: R$ 409,70\nPagamento: Pix\nNome: Ana · Cidade: Dourados');
-    expect(buildOrderMessage({ lines, number: 7 })).toContain('Pagamento: a combinar');
+    expect(msg).toContain('Total: R$ 409,70\nNome: Ana · Cidade: Dourados');
+    expect(msg).not.toContain('Pagamento');
+  });
+
+  it('builds the charge message with the payment link and the Pix code', () => {
+    const msg = buildChargeMessage({
+      number: 1024,
+      firstName: 'Ana',
+      items: [{ name: 'Kit Riviera', finish: 'Rosé', qty: 1, lineCents: 28990 }, { name: 'Anel', finish: 'Dourado', size: '16', qty: 2, lineCents: 27980 }],
+      shippingCents: 2000,
+      discountCents: 1000,
+      amountCents: 57970,
+      link: 'https://eka.example/pagamento/abc',
+      pixCode: '000201PIX',
+    });
+    expect(msg).toBe(
+      [
+        'Oi, Ana! Seu pedido nº 1024 está confirmado.',
+        '',
+        '• Kit Riviera — Rosé — 1 un. — R$ 289,90',
+        '• Anel — Dourado — aro 16 — 2 un. — R$ 279,80',
+        'Frete: R$ 20,00',
+        'Desconto: −R$ 10,00',
+        '*Total: R$ 579,70*',
+        '',
+        'Para pagar com Pix e enviar o comprovante, é só abrir:',
+        'https://eka.example/pagamento/abc',
+        '',
+        'Se preferir, use o Pix Copia e Cola:',
+        '000201PIX',
+      ].join('\n'),
+    );
   });
 
 

@@ -23,6 +23,13 @@ export const router = createBrowserRouter([
     errorElement: <RouteError />,
   },
   {
+    // The payment link sent on WhatsApp: standalone (no store navigation), its own chunk.
+    path: '/pagamento/:token',
+    lazy: () => import('./pages/Payment').then((m) => ({ Component: m.default })),
+    hydrateFallbackElement: <div className="min-h-dvh bg-ivory" aria-busy="true" />,
+    errorElement: <RouteError />,
+  },
+  {
     element: <Layout />,
     errorElement: <RouteError />,
     children: [

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createCatalogSeed } from './seed';
 import { effectivePrice } from './catalog';
-import { canTransition, HOLDS_STOCK, NEXT_STEP, ORDER_STATUSES, orderRequestSchema, priceOrder, pricingMessage, TRANSITIONS, UNDO_STEP } from './orders';
+import { awaitingReview, canTransition, chargeAmount, HOLDS_STOCK, payState, saleCents, NEXT_STEP, ORDER_STATUSES, orderRequestSchema, priceOrder, pricingMessage, TRANSITIONS, UNDO_STEP } from './orders';
 import { materializeStock } from './stock';
 
 const catalog = createCatalogSeed();
@@ -65,5 +65,25 @@ describe('priceOrder', () => {
     expect(over).toMatchObject({ ok: false, problems: [{ reason: 'stock', available: 2 }] });
     if (!over.ok) expect(pricingMessage(over.problems)).toContain('Só temos 2 unidades');
     expect(priceOrder(limited, [{ productId: ring.id, variantId: rv.id, size: rv.sizes![1]!, qty: 1 }])).toMatchObject({ ok: false, problems: [{ reason: 'unavailable' }] });
+  });
+});
+
+describe('charges and receipts', () => {
+  it('computes the charge and the sale value', () => {
+    expect(chargeAmount(10000, 2000, 500)).toBe(11500);
+    expect(saleCents({ totalCents: 10000, charge: { token: 'x'.repeat(32), shippingCents: 2000, discountCents: 500, amountCents: 11500, createdAt: '2026-11-23T00:00:00Z' } })).toBe(9500);
+    expect(saleCents({ totalCents: 10000 })).toBe(10000);
+  });
+
+  it('maps the order to the payment page state', () => {
+    const r = [{ id: 'rcp_1', at: '2026-11-23T00:00:00Z', contentType: 'image/png' as const, size: 10 }];
+    expect(payState({ status: 'confirmado' })).toBe('aguardando');
+    expect(payState({ status: 'confirmado', receipts: r })).toBe('analise');
+    expect(payState({ status: 'pago', receipts: r })).toBe('pago');
+    expect(payState({ status: 'entregue' })).toBe('pago');
+    expect(payState({ status: 'cancelado', receipts: r })).toBe('cancelado');
+    expect(awaitingReview({ status: 'confirmado', receipts: r })).toBe(true);
+    expect(awaitingReview({ status: 'pago', receipts: r })).toBe(false);
+    expect(awaitingReview({ status: 'confirmado' })).toBe(false);
   });
 });

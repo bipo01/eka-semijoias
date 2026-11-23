@@ -99,6 +99,40 @@ export const orderItemSchema = z.object({
 });
 export type OrderItem = z.infer<typeof orderItemSchema>;
 
+export const RECEIPT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] as const;
+export type ReceiptType = (typeof RECEIPT_TYPES)[number];
+/**
+ * Per receipt, as stored. D1 rows allow 2 MB, but the binding serializes BLOBs as JSON number
+ * arrays, which costs CPU (Free plan: 10 ms per request); 1 MB keeps uploads and reads in budget.
+ */
+export const RECEIPT_MAX_BYTES = 1_000_000;
+export const MAX_RECEIPTS_PER_ORDER = 6;
+
+/** The current Pix charge of an order: what the payment link asks for. */
+export const chargeSchema = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/),
+  shippingCents: z.number().int().min(0).max(10_000_000),
+  discountCents: z.number().int().min(0).max(100_000_000),
+  amountCents: z.number().int().min(1).max(100_000_000),
+  createdAt: isoDate,
+});
+export type Charge = z.infer<typeof chargeSchema>;
+
+export const receiptMetaSchema = z.object({
+  id,
+  at: isoDate,
+  contentType: z.enum(RECEIPT_TYPES),
+  size: z.number().int().min(1).max(RECEIPT_MAX_BYTES),
+  /** The charge (payment link) the receipt answered; a new amount starts a new charge. */
+  chargeToken: z.string().max(64).optional(),
+});
+export type ReceiptMeta = z.infer<typeof receiptMetaSchema>;
+
+/** Amount of a charge: items + shipping − discount (never below one centavo). */
+export function chargeAmount(totalCents: number, shippingCents: number, discountCents: number): number {
+  return totalCents + shippingCents - discountCents;
+}
+
 export const stockMoveSchema = z.object({ productId: id, variantId: id, size: z.string().max(12), qty: z.number().int().min(1) });
 export type StockMove = z.infer<typeof stockMoveSchema>;
 
@@ -118,8 +152,40 @@ export const orderSchema = z.object({
   /** Exactly what was taken out of stock while the order holds stock (given back on the way out). */
   stockMoves: z.array(stockMoveSchema).max(MAX_ORDER_ITEMS).optional(),
   anonymized: z.boolean().optional(),
+  charge: chargeSchema.optional(),
+  receipts: z.array(receiptMetaSchema).max(MAX_RECEIPTS_PER_ORDER).optional(),
 });
 export type Order = z.infer<typeof orderSchema>;
+
+/** What the sale is worth for the report: the items minus any discount (shipping is not a sale). */
+export const saleCents = (order: Pick<Order, 'totalCents' | 'charge'>) => Math.max(0, order.totalCents - (order.charge?.discountCents ?? 0));
+
+/** True when a receipt arrived and the payment is still to be checked. */
+export const awaitingReview = (order: Pick<Order, 'status' | 'receipts'>) => !!order.receipts?.length && (order.status === 'enviado' || order.status === 'confirmado');
+
+/** The public payment page (GET /api/pay/:token): no personal data beyond the first name. */
+export type PayState = 'aguardando' | 'analise' | 'pago' | 'cancelado';
+export interface PayView {
+  number: number;
+  firstName: string;
+  items: { name: string; finish: Finish; size?: string; qty: number; lineCents: number }[];
+  subtotalCents: number;
+  shippingCents: number;
+  discountCents: number;
+  amountCents: number;
+  state: PayState;
+  receipts: { at: string }[];
+  pix: { key: string; name: string; city: string } | null;
+}
+
+/** Receipts sent for the current charge (older charges' receipts stay for the admin only). */
+export const currentReceipts = (order: Pick<Order, 'receipts' | 'charge'>) => (order.receipts ?? []).filter((r) => !order.charge || !r.chargeToken || r.chargeToken === order.charge.token);
+
+export function payState(order: Pick<Order, 'status' | 'receipts' | 'charge'>): PayState {
+  if (order.status === 'cancelado') return 'cancelado';
+  if (order.status === 'pago' || order.status === 'entregue') return 'pago';
+  return currentReceipts(order).length ? 'analise' : 'aguardando';
+}
 
 export interface PricingProblem {
   productId: string;

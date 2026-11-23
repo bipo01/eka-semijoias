@@ -25,6 +25,14 @@ export function sniffImage(bytes: Uint8Array): 'image/webp' | 'image/jpeg' | 'im
   return null;
 }
 
+/** Detects the real type of a payment receipt from its first bytes (images, or PDF by "%PDF-"). */
+export function sniffReceipt(bytes: Uint8Array): 'image/webp' | 'image/jpeg' | 'image/png' | 'application/pdf' | null {
+  const image = sniffImage(bytes);
+  if (image) return image;
+  if (bytes.length >= 5 && startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return 'application/pdf';
+  return null;
+}
+
 /** POST /api/admin/media — raw image body; returns { key: "media/<sha256>.<ext>" }. Idempotent. */
 export async function handleUpload(ctx: Context): Promise<Response> {
   await requireSession(ctx);

@@ -4,7 +4,7 @@ import { createCatalogSeed, createSeed } from '../../src/data/seed';
 import { networkOf, pinProblem } from '../auth';
 import { conflictMessage, findConflicts, type ConflictState } from '../conflicts';
 import { safeEqual } from '../crypto';
-import { sniffImage } from '../media';
+import { sniffImage, sniffReceipt } from '../media';
 import { Router } from '../router';
 
 describe('PIN policy', () => {
@@ -135,5 +135,15 @@ describe('Router', () => {
     expect(m && 'params' in m && m.params).toEqual({ id: '42' });
     expect(router.match('POST', '/a/42')).toEqual({ allowed: ['GET', 'DELETE'] });
     expect(router.match('GET', '/b')).toBeNull();
+  });
+});
+
+describe('sniffReceipt', () => {
+  const b = (...v: number[]) => Uint8Array.from(v);
+  it('accepts images and PDFs by their first bytes only', () => {
+    expect(sniffReceipt(b(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))).toBe('image/png');
+    expect(sniffReceipt(new TextEncoder().encode('%PDF-1.4'))).toBe('application/pdf');
+    expect(sniffReceipt(new TextEncoder().encode('<script>'))).toBeNull();
+    expect(sniffReceipt(new TextEncoder().encode('%PD'))).toBeNull();
   });
 });
