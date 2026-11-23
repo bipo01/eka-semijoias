@@ -305,7 +305,7 @@ export function PaymentSection({ order, onCharge }: { order: Order; onCharge: ()
 
       {open && charge && ready && (
         <div className="flex flex-col gap-2 border-t border-line pt-4">
-          <MessageActions order={order} compact quiet={receipts.length > 0} />
+          <MessageActions order={order} quiet={receipts.length > 0} />
           <div className="flex flex-wrap gap-x-4">
             <button type="button" className="inline-flex min-h-11 items-center gap-1.5 text-sm text-copper underline underline-offset-4" onClick={() => void copy(ready.link, 'Link copiado.')}>
               <Link2 size={15} strokeWidth={1.5} aria-hidden="true" /> Copiar link

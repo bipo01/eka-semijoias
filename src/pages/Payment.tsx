@@ -401,7 +401,10 @@ export function PaymentPage() {
           <>
             <div className="flex flex-col items-center gap-2 text-center">
               <Illustration name="pagamento" size={168} className="-mb-1" />
-              <p className="eyebrow text-ink-muted">{view.firstName ? `Oi, ${view.firstName}! Falta pouco` : 'Falta pouco'}</p>
+              <p className="eyebrow text-ink-muted">
+                {view.firstName ? `Oi, ${view.firstName}! ` : ''}
+                {{ aguardando: 'Falta pouco', analise: 'Quase lá', pago: 'Tudo certo', cancelado: 'Pedido cancelado' }[view.state]}
+              </p>
               <h1 className="font-display text-display-l leading-tight text-ink">
                 Pagamento do pedido <span className="whitespace-nowrap">nº {view.number}</span>
               </h1>
