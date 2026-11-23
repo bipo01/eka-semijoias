@@ -14,8 +14,23 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    // "/" runs the Worker so the document gets a CSP naming this host's WebSocket.
-    "run_worker_first": ["/", "/index.html", "/api/*", "/media/*"]
+    // Page routes (/, /catalogo, /produto/…, /admin…) run the Worker so index.html gets a CSP naming
+    // this host's WebSocket; static files below skip it (served straight from the edge, not metered).
+    "run_worker_first": [
+      "/*",
+      "!/assets/*",
+      "!/images/*",
+      "!/brand/*",
+      "!/favicon.svg",
+      "!/favicon-32.png",
+      "!/favicon-192.png",
+      "!/favicon-512.png",
+      "!/apple-touch-icon.png",
+      "!/icon-maskable-512.png",
+      "!/manifest.webmanifest",
+      "!/og-image.jpg",
+      "!/robots.txt"
+    ]
   },
   // Workers Caching: immutable responses (photos, versioned catalogs) are answered
   // from the edge without running the Worker. Driven by each response's Cache-Control.

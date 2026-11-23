@@ -32,7 +32,9 @@
     <script>
       (function () {
         var target = '__SITE_URL__';
-        var destination = target.replace(/\/$/, '') + '/' + (location.hash || '');
+        // Old hash routes (#/produto/x) become the site's clean paths (/produto/x).
+        var hash = location.hash || '';
+        var destination = target.replace(/\/$/, '') + (hash.indexOf('#/') === 0 ? hash.slice(1) : '/' + hash);
         var raw = null;
         try {
           raw = localStorage.getItem('eka:catalog:v1');

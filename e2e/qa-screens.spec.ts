@@ -41,7 +41,7 @@ for (const width of WIDTHS) {
     });
     await page.reload(); // stores read localStorage at startup
     for (const [name, route] of ROUTES) {
-      await page.goto(`#${route}`);
+      await page.goto(route);
       await page.locator('main, body').first().waitFor();
       await page.evaluate(async () => {
         for (let y = 0; y < document.body.scrollHeight; y += 500) {

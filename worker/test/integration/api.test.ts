@@ -114,6 +114,19 @@ describe('catalog reads', () => {
     expect(method.status).toBe(405);
   });
 
+  it('serves every page route as the SPA document; static files skip the Worker', async () => {
+    for (const path of ['/catalogo', '/produto/brinco-gota-cristal', '/admin/produtos', '/pagina-que-nao-existe']) {
+      const res = await fetch(`${BASE()}${path}`);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('Content-Type'), path).toContain('text/html');
+      expect(res.headers.get('Content-Security-Policy'), path).toContain(`connect-src 'self' ws://${new URL(BASE()).host}`);
+      expect(await res.text(), path).toContain('id="root"');
+    }
+    const icon = await fetch(`${BASE()}/favicon.svg`);
+    expect(icon.status).toBe(200);
+    expect(icon.headers.get('X-Request-Id')).toBeNull(); // served by static assets, not the Worker
+  });
+
   it('serves the SPA document with a CSP naming the WebSocket host', async () => {
     const res = await fetch(`${BASE()}/`);
     expect(res.headers.get('Content-Type')).toContain('text/html');

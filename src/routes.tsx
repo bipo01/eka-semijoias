@@ -1,4 +1,4 @@
-import { createHashRouter } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { RouteError } from './components/layout/RouteError';
 import { HomePage } from './pages/Home';
@@ -14,10 +14,11 @@ import { AboutPage } from './pages/About';
 import { ContactPage } from './pages/Contact';
 import { NotFoundPage } from './pages/NotFound';
 
-export const router = createHashRouter([
+// Clean paths (/catalogo, /produto/<slug>, /admin): the Worker serves index.html for every page route.
+export const router = createBrowserRouter([
   {
     path: '/admin/*',
-    // Code-split: the admin chunk only loads on /#/admin.
+    // Code-split: the admin chunk only loads on /admin.
     lazy: () => import('./admin/AdminApp').then((m) => ({ Component: m.default })),
     hydrateFallbackElement: <div className="min-h-dvh bg-ivory" aria-busy="true" />,
     errorElement: <RouteError />,
@@ -47,4 +48,4 @@ export const router = createHashRouter([
       },
     ],
   },
-]);
+], { basename: import.meta.env.BASE_URL.replace(/\/$/, '') || '/' });

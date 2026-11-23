@@ -30,7 +30,7 @@ const PRICE_PRODUCT: Record<string, { id: string; name: string; slug: string }> 
 
 test('admin: PIN gate, edit a price and see it on the public site', async ({ page }, testInfo) => {
   const product = PRICE_PRODUCT[testInfo.project.name] ?? PRICE_PRODUCT['desktop-chromium']!;
-  await page.goto('#/admin');
+  await page.goto('/admin');
   await expect(page.getByRole('heading', { name: 'Painel ÉKA' })).toBeVisible();
   const text = (await page.locator('body').innerText()).toLowerCase();
   for (const word of ['demonstra', 'não é segur', 'área da érika']) expect(text).not.toContain(word);
@@ -40,13 +40,13 @@ test('admin: PIN gate, edit a price and see it on the public site', async ({ pag
   for (const d of PIN) await page.keyboard.press(d);
   await expect(page.getByRole('heading', { name: 'Produtos', level: 1 })).toBeVisible();
 
-  await page.locator(`a[href="#/admin/produtos/${product.id}"]`).first().click();
+  await page.locator(`a[href="/admin/produtos/${product.id}"]`).first().click();
   const price = page.getByRole('textbox', { name: /^Preço/ }).first();
   await price.fill('274,90');
   await page.getByRole('button', { name: 'Salvar', exact: true }).click();
   await expect(page.getByText('Alterações salvas.')).toBeVisible();
 
-  await page.goto(`#/produto/${product.slug}`);
+  await page.goto(`/produto/${product.slug}`);
   await expect(page.getByRole('heading', { level: 1, name: product.name })).toBeVisible();
   await expect(page.locator('main').getByText('R$ 274,90').first()).toBeVisible();
 });
@@ -55,10 +55,10 @@ test('admin: usable at 360px without horizontal overflow', async ({ browser }) =
   const context = await browser.newContext({ viewport: { width: 360, height: 780 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': `10.250.${Math.floor(Math.random() * 250)}.1` });
-  await page.goto('./#/admin');
+  await page.goto('/admin');
   await unlock(page);
   for (const section of ['produtos', 'categorias', 'colecoes', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
-    await page.goto(`./#/admin/${section}`);
+    await page.goto(`/admin/${section}`);
     await page.waitForLoadState('networkidle');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, section).toBeLessThanOrEqual(0);
@@ -67,12 +67,12 @@ test('admin: usable at 360px without horizontal overflow', async ({ browser }) =
 });
 
 test('admin: no serious accessibility violations', async ({ page }) => {
-  await page.goto('#/admin');
+  await page.goto('/admin');
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   expect(await axe(page)).toEqual([]);
   await unlock(page);
   for (const section of ['produtos', 'categorias', 'colecoes', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
-    await page.goto(`#/admin/${section}`);
+    await page.goto(`/admin/${section}`);
     await page.waitForLoadState('networkidle');
     expect(await axe(page), section).toEqual([]);
   }
@@ -89,12 +89,12 @@ test('admin: an edit reaches an open visitor page live, without reload', async (
   const product = LIVE_PRODUCT[testInfo.project.name] ?? LIVE_PRODUCT['desktop-chromium']!;
   const visitorContext = await browser.newContext();
   const visitor = await visitorContext.newPage();
-  await visitor.goto(`/#/produto/${product.slug}`);
+  await visitor.goto(`/produto/${product.slug}`);
   await expect(visitor.getByRole('heading', { level: 1, name: product.name })).toBeVisible();
   const navigations: string[] = [];
   visitor.on('framenavigated', (f) => f === visitor.mainFrame() && navigations.push(f.url()));
 
-  await page.goto(`#/admin/produtos/${product.id}`);
+  await page.goto(`/admin/produtos/${product.id}`);
   await unlock(page);
   const name = page.getByRole('textbox', { name: 'Nome da peça' });
   await name.fill(`${product.name} Especial`);
@@ -115,7 +115,7 @@ const PHOTO_PRODUCT: Record<string, { id: string; slug: string }> = {
 
 test('admin: a new photo is uploaded on save and becomes the cover on the public site', async ({ page }, testInfo) => {
   const product = PHOTO_PRODUCT[testInfo.project.name] ?? PHOTO_PRODUCT['desktop-chromium']!;
-  await page.goto(`#/admin/produtos/${product.id}`);
+  await page.goto(`/admin/produtos/${product.id}`);
   await unlock(page);
   const uploads: string[] = [];
   page.on('response', (r) => r.url().endsWith('/api/admin/media') && uploads.push(String(r.status())));
@@ -131,8 +131,8 @@ test('admin: a new photo is uploaded on save and becomes the cover on the public
   expect(uploads.every((s) => s === '200' || s === '201')).toBe(true);
 
   // The new main photo is the product's cover in listings (each finish's gallery shows the photos linked to it).
-  await page.goto('#/catalogo');
-  const cover = page.locator(`main article:has(a[href="#/produto/${product.slug}"]) img`).first();
+  await page.goto('/catalogo');
+  const cover = page.locator(`main article:has(a[href="/produto/${product.slug}"]) img`).first();
   await expect(cover).toHaveAttribute('src', /^\/media\/[a-f0-9]{64}\.(webp|jpg)$/);
   await cover.scrollIntoViewIfNeeded();
   await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);

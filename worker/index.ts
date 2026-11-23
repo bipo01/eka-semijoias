@@ -11,9 +11,14 @@ import { Router, type Context } from './router';
 export { LiveHub } from './live';
 
 /*
- * ÉKA Semijoias Worker. Static assets (the SPA) are served by Workers Static
- * Assets; this script runs for "/" (to add a per-host CSP), /api/* and /media/*.
+ * ÉKA Semijoias Worker. Static files (JS, CSS, photos, icons) are served by
+ * Workers Static Assets without running this script. It runs for /api/*,
+ * /media/* and every page route (/, /catalogo, /produto/<slug>, /admin…),
+ * which get index.html (SPA fallback) with a per-host CSP.
  */
+
+/** Page routes: anything that is not the API or an uploaded photo. */
+const isPageRoute = (pathname: string) => !pathname.startsWith('/api/') && pathname !== '/api' && !pathname.startsWith('/media/');
 
 const router = new Router()
   .on('GET', '/api/health', async () => json({ ok: true }))
@@ -74,7 +79,7 @@ export default {
     let route = 'unmatched';
     let response: Response;
     try {
-      if ((url.pathname === '/' || url.pathname === '/index.html') && (request.method === 'GET' || request.method === 'HEAD')) {
+      if (isPageRoute(url.pathname) && (request.method === 'GET' || request.method === 'HEAD')) {
         route = 'document';
         response = await serveDocument(request, env, url);
       } else {

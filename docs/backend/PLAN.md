@@ -11,7 +11,7 @@ Output of `docs/backend/PLANNING_PROMPT.md`. Written 2026-11-23. Scope: the back
 Rationale: same origin means no CORS, `SameSite=Strict` cookies work everywhere (including Safari, which blocks third-party cookies), one CSP with `connect-src 'self'`, and one deploy that keeps frontend and API versions in lockstep.
 
 - Vite `base` becomes `/` for the Cloudflare build (overridable with `VITE_BASE`).
-- **GitHub Pages** stops serving a second, diverging copy of the store. Its workflow publishes a tiny page that forwards to the Cloudflare URL and keeps the `#/route` hash, so old links keep working.
+- **GitHub Pages** stops serving a second, diverging copy of the store. Its workflow publishes a tiny page that forwards to the Cloudflare URL and turns the old `#/route` into the clean path, so old links keep working. (Update 2026-11-23: the SPA moved from hash routes to clean paths; the Worker serves `index.html` for every page route.)
 - Security headers for static assets come from `public/_headers` (supported by Workers Static Assets). The Worker sets them itself on API and media responses.
 
 ## 2. Data model (D1, SQLite)

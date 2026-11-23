@@ -6,7 +6,7 @@ const BANNED_EVERYWHERE = ['demonstra', 'demo', 'prévia', 'preview', 'exemplo',
 const BANNED_OUTSIDE_ABOUT = ['com a érika', 'da érika', 'fale com a érika'];
 
 async function open(page: Page, route: string) {
-  await page.goto(`#${route}`);
+  await page.goto(route);
   await page.locator('main').waitFor();
   await page.waitForLoadState('networkidle');
 }
@@ -161,4 +161,15 @@ test('product page shows the total for the chosen quantity', async ({ page, isMo
   } else {
     await expect(page.getByText('R$ 259,80').filter({ visible: true })).toBeVisible();
   }
+});
+
+test('clean URLs: deep links load directly and old #/ links are redirected', async ({ page }) => {
+  await page.goto('/produto/brinco-gota-cristal');
+  await expect(page.getByRole('heading', { level: 1, name: 'Brinco Gota Cristal' })).toBeVisible();
+  await page.goto('/#/catalogo/brincos?ordem=menor-preco');
+  await expect(page).toHaveURL(/\/catalogo\/brincos\?ordem=menor-preco$/);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await page.reload(); // the clean path survives a reload (served by the Worker)
+  await expect(page).toHaveURL(/\/catalogo\/brincos/);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 });
