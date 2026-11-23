@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { TextArea, TextField } from '../../components/ui/Field';
+import { SelectField, TextArea, TextField } from '../../components/ui/Field';
 import { cx } from '../../components/ui/cx';
 import { business, pendingChecklist } from '../../config/business';
 import type { Settings } from '../../data/schema';
+import { DEFAULT_LOW_STOCK } from '../../data/stock';
+import { formatPixKey, normalizePixKey, PIX_KEY_KIND_LABEL, pixKeyKind, pixText, type PixKeyKind } from '../../lib/pix';
 import { ApiError, errorMessage } from '../../lib/api';
 import { PIN_MAX, PIN_MIN, pinProblem } from '../../lib/pin';
 import { useCatalog } from '../../store/catalog';
@@ -23,6 +25,7 @@ const DONE_WHEN: Partial<Record<string, (s: Settings) => boolean>> = {
   city: (s) => !!s.city.trim(),
   showroom: (s) => !!s.showroom?.trim(),
   warrantyMonths: (s) => s.warrantyMonths > 0 && s.warrantyMonths !== business.warrantyMonths,
+  pix: (s) => !!s.pix,
 };
 
 interface StoreForm {
@@ -91,7 +94,18 @@ function StoreSettings() {
     if (!result.ok) return setErrors(result.errors);
     setErrors({});
     setBusy(true);
-    const ok = await save((d) => ({ ...d, settings: result.patch }), 'Informações da loja salvas.');
+    // Keep the settings edited elsewhere on this page (Pix, stock).
+    const ok = await save(
+      (d) => ({
+        ...d,
+        settings: {
+          ...result.patch,
+          ...(d.settings.pix ? { pix: d.settings.pix } : {}),
+          ...(d.settings.lowStockThreshold !== undefined ? { lowStockThreshold: d.settings.lowStockThreshold } : {}),
+        },
+      }),
+      'Informações da loja salvas.',
+    );
     setBusy(false);
     if (ok) setForm(toForm(result.patch));
   }
@@ -124,6 +138,144 @@ function StoreSettings() {
       <TextField label="Garantia (meses)" inputMode="numeric" maxLength={2} hint="Use 0 para não mostrar garantia no site." {...field('warrantyMonths')} />
       <Button type="submit" className="self-start" disabled={busy} aria-busy={busy}>
         {busy ? 'Salvando…' : 'Salvar informações'}
+      </Button>
+    </form>
+  );
+}
+
+const PIX_KINDS = Object.keys(PIX_KEY_KIND_LABEL) as PixKeyKind[];
+
+/** Validates the Pix form; returns the settings value or the errors. */
+export function parsePixForm(form: { kind: PixKeyKind; key: string; name: string; city: string }):
+  | { ok: true; pix: NonNullable<Settings['pix']> }
+  | { ok: false; errors: Partial<Record<'key' | 'name' | 'city', string>> } {
+  const errors: Partial<Record<'key' | 'name' | 'city', string>> = {};
+  const key = normalizePixKey(form.kind, form.key);
+  if (!key.ok) errors.key = key.error;
+  const name = pixText(form.name, 25);
+  if (name.length < 2) errors.name = 'Informe o nome como aparece no banco.';
+  const city = pixText(form.city, 15);
+  if (city.length < 2) errors.city = 'Informe a cidade da conta.';
+  if (!key.ok || Object.keys(errors).length) return { ok: false, errors };
+  return { ok: true, pix: { key: key.key, name, city } };
+}
+
+function PixSettings() {
+  const pix = useCatalog((s) => s.data.settings.pix);
+  const [form, setForm] = useState(() => ({
+    kind: pix ? pixKeyKind(pix.key) : ('cpf' as PixKeyKind),
+    key: pix ? formatPixKey(pix.key) : '',
+    name: pix?.name ?? '',
+    city: pix?.city ?? '',
+  }));
+  const [errors, setErrors] = useState<Partial<Record<'key' | 'name' | 'city', string>>>({});
+  const [busy, setBusy] = useState(false);
+  const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    const result = parsePixForm(form);
+    if (!result.ok) return setErrors(result.errors);
+    setErrors({});
+    setBusy(true);
+    const ok = await save((d) => ({ ...d, settings: { ...d.settings, pix: result.pix } }), 'Pix salvo. As clientes já veem o QR Code ao finalizar o pedido.');
+    setBusy(false);
+    if (ok) setForm((f) => ({ ...f, key: formatPixKey(result.pix.key), name: result.pix.name, city: result.pix.city }));
+  }
+
+  async function removePix() {
+    if (busy) return;
+    setBusy(true);
+    const ok = await save(
+      (d) => {
+        const { pix: _pix, ...rest } = d.settings;
+        return { ...d, settings: rest };
+      },
+      'Pix removido do site.',
+    );
+    setBusy(false);
+    if (ok) setForm({ kind: 'cpf', key: '', name: '', city: '' });
+  }
+
+  return (
+    <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-[12px] border border-line bg-white p-4">
+      <div>
+        <h2 className="font-display text-title">Pix para receber os pedidos</h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Depois de finalizar o pedido, a cliente vê o valor exato com o QR Code e o Pix Copia e Cola. Você confere o pagamento no banco e marca o pedido como pago.
+        </p>
+      </div>
+      <SelectField label="Tipo de chave" value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as PixKeyKind }))}>
+        {PIX_KINDS.map((k) => (
+          <option key={k} value={k}>
+            {PIX_KEY_KIND_LABEL[k]}
+          </option>
+        ))}
+      </SelectField>
+      <TextField
+        label="Chave Pix"
+        value={form.key}
+        error={errors.key}
+        onChange={set('key')}
+        inputMode={form.kind === 'email' || form.kind === 'random' ? 'text' : 'numeric'}
+        autoCapitalize="none"
+        spellCheck={false}
+        maxLength={77}
+      />
+      <TextField label="Nome do recebedor" hint="Como aparece no banco. Vai sem acento no Pix (até 25 letras)." maxLength={60} value={form.name} error={errors.name} onChange={set('name')} />
+      <TextField label="Cidade da conta" hint="Até 15 letras, sem acento." maxLength={40} value={form.city} error={errors.city} onChange={set('city')} />
+      {pix && (
+        <p className="rounded-[10px] bg-champagne px-3 py-2 text-sm">
+          No site agora: <span className="font-medium">{formatPixKey(pix.key)}</span> · {pix.name} · {pix.city}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={busy} aria-busy={busy}>
+          {busy ? 'Salvando…' : 'Salvar Pix'}
+        </Button>
+        {pix && (
+          <Button variant="ghost" disabled={busy} onClick={() => void removePix()}>
+            Tirar Pix do site
+          </Button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+function StockSettings() {
+  const threshold = useCatalog((s) => s.data.settings.lowStockThreshold ?? DEFAULT_LOW_STOCK);
+  const [value, setValue] = useState(String(threshold));
+  const [error, setError] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    const n = value.trim() === '' ? NaN : Number(value);
+    if (!Number.isInteger(n) || n < 0 || n > 20) return setError('Use um número de 0 a 20.');
+    setError(undefined);
+    setBusy(true);
+    await save((d) => ({ ...d, settings: { ...d.settings, lowStockThreshold: n } }), 'Aviso de últimas unidades salvo.');
+    setBusy(false);
+  }
+
+  return (
+    <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-[12px] border border-line bg-white p-4">
+      <h2 className="font-display text-title">Estoque</h2>
+      <TextField
+        label="Mostrar “Últimas unidades” quando restarem até"
+        inputMode="numeric"
+        maxLength={2}
+        value={value}
+        error={error}
+        hint="Unidades. Vale para peças com controle de estoque; use 0 para nunca mostrar."
+        wrapperClassName="max-w-xs"
+        onChange={(e) => setValue(e.target.value.replace(/\D/g, ''))}
+      />
+      <Button type="submit" variant="secondary" className="self-start" disabled={busy} aria-busy={busy}>
+        {busy ? 'Salvando…' : 'Salvar'}
       </Button>
     </form>
   );
@@ -240,6 +392,8 @@ export function SettingsPage() {
     <div className="flex flex-col gap-4">
       <StoreChecklist />
       <StoreSettings />
+      <PixSettings />
+      <StockSettings />
       <PinSettings />
     </div>
   );

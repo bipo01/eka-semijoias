@@ -8,6 +8,14 @@ const lines: OrderLine[] = [
 ];
 
 describe('buildOrderMessage', () => {
+  it('names the registered order and the payment', () => {
+    const msg = buildOrderMessage({ lines, name: 'Ana', city: 'Dourados', number: 1024, pix: true });
+    expect(msg.split('\n')[0]).toBe('Olá! Fiz o pedido nº 1024 pelo site:');
+    expect(msg).toContain('Total: R$ 409,70\nPagamento: Pix\nNome: Ana · Cidade: Dourados');
+    expect(buildOrderMessage({ lines, number: 7 })).toContain('Pagamento: a combinar');
+  });
+
+
   it('matches the agreed format exactly', () => {
     const msg = buildOrderMessage({ lines, name: 'Ana', city: 'Campo Grande/MS', note: 'é para presente' });
     expect(msg).toBe(

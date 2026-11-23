@@ -11,7 +11,7 @@ test.beforeEach(async ({ context }) => {
 async function unlock(page: Page) {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Produtos', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(Produtos|Pedidos)$/, level: 1 })).toBeVisible();
 }
 
 async function axe(page: Page) {
@@ -38,6 +38,8 @@ test('admin: PIN gate, edit a price and see it on the public site', async ({ pag
   for (const d of '000001') await page.getByRole('button', { name: d, exact: true }).click();
   await expect(page.getByRole('alert')).toContainText(/PIN/);
   for (const d of PIN) await page.keyboard.press(d);
+  await expect(page.getByRole('heading', { name: 'Pedidos', level: 1 })).toBeVisible();
+  await page.getByRole('link', { name: 'Produtos', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Produtos', level: 1 })).toBeVisible();
 
   await page.locator(`a[href="/admin/produtos/${product.id}"]`).first().click();
@@ -57,7 +59,7 @@ test('admin: usable at 360px without horizontal overflow', async ({ browser }) =
   await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': `10.250.${Math.floor(Math.random() * 250)}.1` });
   await page.goto('/admin');
   await unlock(page);
-  for (const section of ['produtos', 'categorias', 'colecoes', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
+  for (const section of ['pedidos', 'produtos', 'estoque', 'relatorio', 'categorias', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
     await page.goto(`/admin/${section}`);
     await page.waitForLoadState('networkidle');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -71,7 +73,7 @@ test('admin: no serious accessibility violations', async ({ page }) => {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   expect(await axe(page)).toEqual([]);
   await unlock(page);
-  for (const section of ['produtos', 'categorias', 'colecoes', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
+  for (const section of ['pedidos', 'produtos', 'estoque', 'relatorio', 'categorias', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
     await page.goto(`/admin/${section}`);
     await page.waitForLoadState('networkidle');
     expect(await axe(page), section).toEqual([]);
@@ -136,4 +138,62 @@ test('admin: a new photo is uploaded on save and becomes the cover on the public
   await expect(cover).toHaveAttribute('src', /^\/media\/[a-f0-9]{64}\.(webp|jpg)$/);
   await cover.scrollIntoViewIfNeeded();
   await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+});
+
+const STOCK_PRODUCT: Record<string, { id: string; slug: string; name: string }> = {
+  'mobile-chromium': { id: 'prod-p15', slug: 'kit-riviera', name: 'Kit Riviera' },
+  'desktop-chromium': { id: 'prod-p19', slug: 'colar-medalha-sol-prateado', name: 'Colar Medalha Sol Prateado' },
+  'mobile-webkit': { id: 'prod-p22', slug: 'ear-cuff-folhagem-dourado', name: 'Ear Cuff Folhagem Dourado' },
+  'desktop-webkit': { id: 'prod-p18', slug: 'argola-cravejada-rodio-negro', name: 'Argola Cravejada Ródio Negro' },
+};
+
+test('admin: stock, order and confirmation; the visitor page sells out live', async ({ page, browser }, testInfo) => {
+  const product = STOCK_PRODUCT[testInfo.project.name] ?? STOCK_PRODUCT['desktop-chromium']!;
+  // 1. Stock control on, one unit.
+  await page.goto('/admin');
+  await unlock(page);
+  await page.getByRole('link', { name: 'Estoque', exact: true }).click();
+  await page.getByRole('button', { name: new RegExp(product.name) }).first().click();
+  const editor = page.getByRole('dialog', { name: product.name });
+  await editor.getByRole('switch', { name: 'Controlar estoque desta peça' }).click();
+  await editor.getByRole('textbox', { name: 'Unidades' }).fill('1');
+  await editor.getByRole('button', { name: 'Salvar estoque' }).click();
+  await expect(page.getByText('Estoque salvo.')).toBeVisible();
+
+  // 2. A visitor sees "Últimas unidades", orders it and gets a number.
+  const visitorContext = await browser.newContext();
+  await visitorContext.setExtraHTTPHeaders({ 'CF-Connecting-IP': `10.202.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` });
+  const visitor = await visitorContext.newPage();
+  await visitor.goto(`/produto/${product.slug}`);
+  await expect(visitor.getByText('Últimas unidades')).toBeVisible();
+  await visitor.getByRole('button', { name: 'Pedir agora' }).filter({ visible: true }).first().click();
+  const bag = visitor.getByRole('dialog', { name: /Sua sacola/ });
+  await bag.getByPlaceholder('Seu nome').fill('Bia Teste');
+  await bag.getByPlaceholder('Cidade').fill('Dourados');
+  await bag.getByRole('button', { name: 'Finalizar pedido' }).click();
+  const heading = bag.getByRole('heading', { name: /Pedido nº \d+ registrado/ });
+  await expect(heading).toBeVisible();
+  const number = (await heading.innerText()).match(/\d+/)![0];
+  await bag.getByRole('button', { name: 'Alterar pedido' }).click(); // keep the bag; back to the product
+  await visitor.keyboard.press('Escape');
+
+  // 3. The order is in the admin (live); confirming takes the unit out of stock.
+  await page.getByRole('link', { name: /^Pedidos/ }).click();
+  const card = page.getByRole('button', { name: new RegExp(`nº ${number}.*Bia Teste`) });
+  await expect(card).toBeVisible({ timeout: 10_000 });
+  await card.click();
+  const detail = page.getByRole('dialog', { name: `Pedido nº ${number}` });
+  await detail.getByRole('button', { name: 'Confirmar pedido' }).click();
+  await expect(page.getByText('Pedido confirmado.')).toBeVisible();
+
+  // 4. The open visitor page shows it sold out, without reload.
+  await expect(visitor.getByText('Esgotado').first()).toBeVisible({ timeout: 8000 });
+  await expect(visitor.getByRole('button', { name: 'Adicionar à sacola' })).toHaveCount(0);
+
+  // 5. Cancelling gives the unit back.
+  await detail.getByRole('button', { name: 'Cancelar pedido' }).click();
+  await page.getByRole('dialog', { name: `Cancelar o pedido nº ${number}?` }).getByRole('button', { name: 'Cancelar pedido' }).click();
+  await expect(page.getByText('Pedido cancelado.')).toBeVisible();
+  await expect(visitor.getByText('Últimas unidades')).toBeVisible({ timeout: 8000 });
+  await visitorContext.close();
 });

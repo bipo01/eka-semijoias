@@ -1,0 +1,326 @@
+import { useMemo, useState } from 'react';
+import { ChevronRight, Search } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { Chip } from '../../components/ui/Misc';
+import { Sheet } from '../../components/ui/Sheet';
+import { cx } from '../../components/ui/cx';
+import { sizeLabel } from '../../data/catalog';
+import { canTransition, HOLDS_STOCK, NEXT_STEP, STATUS_LABEL, UNDO_STEP, type Order, type OrderStatus } from '../../data/orders';
+import { FINISH_LABEL } from '../../data/schema';
+import { formatBRL } from '../../lib/format';
+import { toast } from '../../store/ui';
+import { EmptyState } from '../FormBits';
+import { formatDateTime } from '../lib/contact';
+import { anonymizeOrder, changeOrderStatus, deleteOrder, useOrders } from '../lib/orders';
+
+type Filter = 'ativos' | OrderStatus | 'todos';
+
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: 'ativos', label: 'Ativos' },
+  { id: 'enviado', label: 'Em negociação' },
+  { id: 'confirmado', label: 'Confirmados' },
+  { id: 'pago', label: 'Pagos' },
+  { id: 'entregue', label: 'Entregues' },
+  { id: 'cancelado', label: 'Cancelados' },
+  { id: 'todos', label: 'Todos' },
+];
+
+const ACTIVE: ReadonlySet<OrderStatus> = new Set(['enviado', 'confirmado', 'pago']);
+
+const matchesFilter = (order: Order, filter: Filter) => (filter === 'todos' ? true : filter === 'ativos' ? ACTIVE.has(order.status) : order.status === filter);
+
+const STATUS_STYLE: Record<OrderStatus, string> = {
+  enviado: 'bg-champagne text-ink',
+  confirmado: 'border border-copper text-copper',
+  pago: 'bg-copper text-white',
+  entregue: 'bg-[#e4ece6] text-success',
+  cancelado: 'bg-[#f6e9e6] text-danger',
+};
+
+export function StatusPill({ status, className }: { status: OrderStatus; className?: string }) {
+  return <span className={cx('inline-flex min-h-6 items-center rounded-full px-2.5 text-xs font-medium whitespace-nowrap', STATUS_STYLE[status], className)}>{STATUS_LABEL[status]}</span>;
+}
+
+const unitsOf = (order: Order) => order.items.reduce((sum, i) => sum + i.qty, 0);
+
+const UNDO_LABEL: Partial<Record<OrderStatus, string>> = {
+  confirmado: 'Voltar para Em negociação',
+  pago: 'Voltar para Confirmado',
+  entregue: 'Voltar para Pago',
+};
+
+const STEP_DONE: Record<OrderStatus, string> = {
+  enviado: 'Pedido voltou para Em negociação.',
+  confirmado: 'Pedido confirmado.',
+  pago: 'Pagamento registrado.',
+  entregue: 'Pedido entregue.',
+  cancelado: 'Pedido cancelado.',
+};
+
+function stockNote(from: OrderStatus, to: OrderStatus): string | null {
+  if (!HOLDS_STOCK.has(from) && HOLDS_STOCK.has(to)) return 'As peças com controle de estoque saem do estoque.';
+  if (HOLDS_STOCK.has(from) && !HOLDS_STOCK.has(to)) return 'As peças voltam para o estoque.';
+  return null;
+}
+
+function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<'cancelar' | 'anonimizar' | 'excluir' | null>(null);
+  const next = NEXT_STEP[order.status];
+  const undo = UNDO_STEP[order.status];
+  const canCancel = canTransition(order.status, 'cancelado');
+  const canDelete = !HOLDS_STOCK.has(order.status);
+
+  async function move(to: OrderStatus) {
+    if (busy) return;
+    setBusy(true);
+    const problem = await changeOrderStatus(order, to);
+    setBusy(false);
+    setConfirm(null);
+    if (problem) toast(problem, { tone: 'error', duration: 12_000 });
+    else toast(STEP_DONE[to], { tone: 'success' });
+  }
+
+  async function anonymize() {
+    if (busy) return;
+    setBusy(true);
+    const problem = await anonymizeOrder(order);
+    setBusy(false);
+    setConfirm(null);
+    toast(problem ?? 'Dados da cliente apagados.', { tone: problem ? 'error' : 'success' });
+  }
+
+  async function remove() {
+    if (busy) return;
+    setBusy(true);
+    const problem = await deleteOrder(order);
+    setBusy(false);
+    setConfirm(null);
+    if (problem) return toast(problem, { tone: 'error' });
+    toast('Pedido excluído.', { tone: 'success' });
+    onClose();
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusPill status={order.status} />
+        <span className="text-sm text-ink-muted">{formatDateTime(order.createdAt)}</span>
+      </div>
+
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-[12px] border border-line bg-white p-4 text-sm">
+        <dt className="text-ink-muted">Cliente</dt>
+        <dd className="break-words">{order.customer.name || '—'}</dd>
+        <dt className="text-ink-muted">Cidade</dt>
+        <dd className="break-words">{order.customer.city || '—'}</dd>
+        <dt className="text-ink-muted">Pagamento</dt>
+        <dd>{order.pix ? 'Pix (mostrado à cliente)' : 'A combinar'}</dd>
+        {order.note && (
+          <>
+            <dt className="text-ink-muted">Observação</dt>
+            <dd className="break-words whitespace-pre-line">{order.note}</dd>
+          </>
+        )}
+      </dl>
+
+      <section aria-label="Peças do pedido">
+        <ul className="divide-y divide-line border-y border-line">
+          {order.items.map((item) => (
+            <li key={`${item.productId}|${item.variantId}|${item.size ?? ''}`} className="flex items-start justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="leading-snug">{item.name}</p>
+                <p className="text-sm text-ink-muted">
+                  {FINISH_LABEL[item.finish]}
+                  {item.size && ` · ${sizeLabel(item.size)}`}
+                  {item.sku && ` · Ref. ${item.sku}`}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="price">{formatBRL(item.unitCents * item.qty)}</p>
+                <p className="price text-sm text-ink-muted">
+                  {item.qty} × {formatBRL(item.unitCents)}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="flex items-baseline justify-between pt-3">
+          <span>Total</span>
+          <span className="price text-xl">{formatBRL(order.totalCents)}</span>
+        </div>
+      </section>
+
+      <div className="flex flex-col gap-2">
+        {next && (
+          <>
+            <Button size="lg" block disabled={busy} aria-busy={busy} onClick={() => void move(next.to)}>
+              {busy ? 'Salvando…' : next.label}
+            </Button>
+            {stockNote(order.status, next.to) && <p className="text-center text-sm text-ink-muted">{stockNote(order.status, next.to)}</p>}
+          </>
+        )}
+        {undo && (
+          <Button variant="secondary" block disabled={busy} onClick={() => void move(undo)}>
+            {UNDO_LABEL[order.status]}
+          </Button>
+        )}
+        {canCancel && (
+          <Button variant="ghost" block disabled={busy} className="text-danger" onClick={() => setConfirm('cancelar')}>
+            Cancelar pedido
+          </Button>
+        )}
+      </div>
+
+      <section aria-labelledby={`hist-${order.id}`}>
+        <h3 id={`hist-${order.id}`} className="mb-2 text-sm font-medium">Histórico</h3>
+        <ol className="flex flex-col gap-1.5 border-l border-line pl-4 text-sm">
+          {[...order.history].reverse().map((h, i) => (
+            <li key={`${h.at}-${i}`} className="flex flex-wrap justify-between gap-x-3">
+              <span>{STATUS_LABEL[h.status]}</span>
+              <span className="text-ink-muted">{formatDateTime(h.at)}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <div className="flex flex-col gap-1 border-t border-line pt-4">
+        {!order.anonymized && (
+          <button type="button" className="min-h-11 self-start text-sm text-ink-muted underline underline-offset-4 hover:text-ink" onClick={() => setConfirm('anonimizar')}>
+            Apagar dados da cliente
+          </button>
+        )}
+        {canDelete && (
+          <button type="button" className="min-h-11 self-start text-sm text-danger underline underline-offset-4" onClick={() => setConfirm('excluir')}>
+            Excluir pedido
+          </button>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={confirm === 'cancelar'}
+        title={`Cancelar o pedido nº ${order.number}?`}
+        confirmLabel="Cancelar pedido"
+        cancelLabel="Voltar"
+        tone="danger"
+        onConfirm={() => void move('cancelado')}
+        onCancel={() => setConfirm(null)}
+      >
+        {HOLDS_STOCK.has(order.status) ? 'As peças voltam para o estoque. ' : ''}O pedido continua na lista como cancelado e pode ser reaberto.
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirm === 'anonimizar'}
+        title="Apagar os dados da cliente?"
+        confirmLabel="Apagar dados"
+        cancelLabel="Voltar"
+        tone="danger"
+        onConfirm={() => void anonymize()}
+        onCancel={() => setConfirm(null)}
+      >
+        O nome, a cidade e a observação deste pedido são apagados de vez. As peças e os valores continuam no relatório.
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirm === 'excluir'}
+        title={`Excluir o pedido nº ${order.number}?`}
+        confirmLabel="Excluir"
+        cancelLabel="Voltar"
+        tone="danger"
+        onConfirm={() => void remove()}
+        onCancel={() => setConfirm(null)}
+      >
+        O pedido sai da lista e do relatório. Use para pedidos de teste ou enviados por engano.
+      </ConfirmDialog>
+    </div>
+  );
+}
+
+export function OrdersPage() {
+  const state = useOrders((s) => s.state);
+  const load = useOrders((s) => s.load);
+  const [filter, setFilter] = useState<Filter>('ativos');
+  const [query, setQuery] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const orders = useMemo(() => (state.status === 'ready' ? state.orders : []), [state]);
+  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, orders.filter((o) => matchesFilter(o, f.id)).length])) as Record<Filter, number>, [orders]);
+  const q = query.trim().toLowerCase().replace(/^n[ºo°]?\s*/, '');
+  const visible = orders.filter((o) => matchesFilter(o, filter) && (!q || String(o.number).includes(q) || o.customer.name.toLowerCase().includes(q) || o.customer.city.toLowerCase().includes(q)));
+  const open = orders.find((o) => o.id === openId) ?? null;
+
+  if (state.status === 'loading') return <p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando pedidos…</p>;
+  if (state.status === 'error') {
+    return (
+      <div role="alert" className="flex flex-col items-center gap-3 py-10 text-center">
+        <p className="text-ink-muted">{state.message}</p>
+        <Button variant="secondary" onClick={() => void load()}>
+          Tentar de novo
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1">
+        {FILTERS.map((f) => (
+          <Chip key={f.id} selected={filter === f.id} onClick={() => setFilter(f.id)}>
+            {f.label}
+            <span className={cx('price text-xs', filter === f.id ? 'text-white/85' : 'text-ink-muted')}>{counts[f.id]}</span>
+          </Chip>
+        ))}
+      </div>
+      <div className="relative mb-4">
+        <label htmlFor="orders-search" className="sr-only">Buscar pedido</label>
+        <Search size={18} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
+        <input
+          id="orders-search"
+          type="search"
+          inputMode="search"
+          placeholder="Buscar por número, nome ou cidade"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="min-h-12 w-full rounded-[10px] border border-line bg-white pr-3 pl-10 text-base placeholder:text-ink-muted focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"
+        />
+      </div>
+
+      {visible.length ? (
+        <ul className="flex flex-col gap-2">
+          {visible.map((order) => (
+            <li key={order.id}>
+              <button
+                type="button"
+                onClick={() => setOpenId(order.id)}
+                className="flex w-full items-center gap-3 rounded-[12px] border border-line bg-white p-4 text-left transition-colors hover:border-copper focus-visible:outline-2 focus-visible:outline-copper"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="price font-medium">nº {order.number}</span>
+                    <StatusPill status={order.status} />
+                  </div>
+                  <p className="mt-1 truncate">
+                    {order.customer.name || '—'}
+                    {order.customer.city && <span className="text-ink-muted"> · {order.customer.city}</span>}
+                  </p>
+                  <p className="text-sm text-ink-muted">
+                    {formatDateTime(order.createdAt)} · {unitsOf(order)} {unitsOf(order) === 1 ? 'peça' : 'peças'}
+                  </p>
+                </div>
+                <span className="price shrink-0 text-lg">{formatBRL(order.totalCents)}</span>
+                <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-muted" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <EmptyState>
+          {orders.length
+            ? 'Nenhum pedido neste filtro.'
+            : 'Nenhum pedido ainda. Quando uma cliente finalizar a sacola no site, o pedido aparece aqui na hora, com número, peças e valores.'}
+        </EmptyState>
+      )}
+
+      <Sheet open={!!open} onClose={() => setOpenId(null)} title={open ? `Pedido nº ${open.number}` : 'Pedido'} side="right">
+        {open && <OrderDetail key={open.id} order={open} onClose={() => setOpenId(null)} />}
+      </Sheet>
+    </>
+  );
+}

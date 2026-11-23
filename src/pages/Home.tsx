@@ -1,6 +1,5 @@
 import { CareTeaser } from '../components/home/CareTeaser';
 import { CategoryRail } from '../components/home/CategoryRail';
-import { Editorial } from '../components/home/Editorial';
 import { Faq } from '../components/home/Faq';
 import { FeaturedProducts } from '../components/home/FeaturedProducts';
 import { Hero } from '../components/home/Hero';
@@ -19,7 +18,6 @@ export function HomePage() {
       <TrustStrip />
       <CategoryRail />
       <FeaturedProducts />
-      <Editorial />
       <NewArrivals />
       <ResellerBand />
       <CareTeaser />

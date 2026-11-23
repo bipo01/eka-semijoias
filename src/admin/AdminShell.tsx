@@ -7,12 +7,15 @@ import { cx } from '../components/ui/cx';
 import { useCatalog } from '../store/catalog';
 import { toast } from '../store/ui';
 import { useAdminSession } from './AdminContext';
+import { useOrders, useOrdersSync } from './lib/orders';
 import { ADMIN_BASE } from './lib/paths';
 
 export const SECTIONS = [
+  { path: 'pedidos', label: 'Pedidos' },
   { path: 'produtos', label: 'Produtos' },
+  { path: 'estoque', label: 'Estoque' },
+  { path: 'relatorio', label: 'Relatório' },
   { path: 'categorias', label: 'Categorias' },
-  { path: 'colecoes', label: 'Coleções' },
   { path: 'revendedoras', label: 'Revendedoras' },
   { path: 'configuracoes', label: 'Configurações' },
   { path: 'backup', label: 'Backup' },
@@ -44,8 +47,27 @@ function useExternalUpdateNotice() {
   }, [externalVersion]);
 }
 
+/** Orders waiting for the owner ("em negociação"), shown on the Pedidos tab. */
+function useOpenOrders(): number {
+  return useOrders((s) => (s.state.status === 'ready' ? s.state.orders.filter((o) => o.status === 'enviado').length : 0));
+}
+
+/** Toast when a new order arrives while the panel is open. */
+function useNewOrderNotice() {
+  const newest = useOrders((s) => (s.state.status === 'ready' ? Math.max(0, ...s.state.orders.map((o) => o.number)) : null));
+  const seen = useRef<number | null>(null);
+  useEffect(() => {
+    if (newest === null) return;
+    if (seen.current !== null && newest > seen.current) toast(`Novo pedido nº ${newest} no site.`, { tone: 'success', action: { label: 'Ver', to: `${ADMIN_BASE}/pedidos` } });
+    seen.current = Math.max(seen.current ?? 0, newest);
+  }, [newest]);
+}
+
 export function AdminShell() {
   const section = useSection();
+  useOrdersSync();
+  useNewOrderNotice();
+  const openOrders = useOpenOrders();
   const { lock } = useAdminSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const activeTab = useRef<HTMLAnchorElement>(null);
@@ -84,6 +106,12 @@ export function AdminShell() {
                   }
                 >
                   {s.label}
+                  {s.path === 'pedidos' && openOrders > 0 && (
+                    <span className="price ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full bg-rose-light px-1.5 text-xs leading-5 text-ink">
+                      {openOrders}
+                      <span className="sr-only"> em negociação</span>
+                    </span>
+                  )}
                 </NavLink>
               </li>
             ))}

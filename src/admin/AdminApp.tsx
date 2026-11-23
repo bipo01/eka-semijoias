@@ -15,8 +15,10 @@ import { PinGate } from './PinGate';
 import { ProductsPage } from './products/ProductsPage';
 import { ProductFormRoute } from './products/ProductFormRoute';
 import { CategoriesPage } from './sections/CategoriesPage';
-import { CollectionsPage } from './sections/CollectionsPage';
 import { LeadsPage } from './sections/LeadsPage';
+import { OrdersPage } from './sections/OrdersPage';
+import { ReportPage } from './sections/ReportPage';
+import { StockPage } from './sections/StockPage';
 import { SettingsPage } from './sections/SettingsPage';
 import { BackupPage } from './sections/BackupPage';
 
@@ -110,16 +112,18 @@ export default function AdminApp() {
       {relogin}
       <Routes>
         <Route element={<AdminShell />}>
-          <Route index element={<Navigate to={`${ADMIN_BASE}/produtos`} replace />} />
+          <Route index element={<Navigate to={`${ADMIN_BASE}/pedidos`} replace />} />
+          <Route path="pedidos" element={<OrdersPage />} />
+          <Route path="estoque" element={<StockPage />} />
+          <Route path="relatorio" element={<ReportPage />} />
           <Route path="produtos" element={<ProductsPage />}>
             <Route path=":productId" element={<ProductFormRoute />} />
           </Route>
           <Route path="categorias" element={<CategoriesPage />} />
-          <Route path="colecoes" element={<CollectionsPage />} />
           <Route path="revendedoras" element={<LeadsPage />} />
           <Route path="configuracoes" element={<SettingsPage />} />
           <Route path="backup" element={<BackupPage />} />
-          <Route path="*" element={<Navigate to={`${ADMIN_BASE}/produtos`} replace />} />
+          <Route path="*" element={<Navigate to={`${ADMIN_BASE}/pedidos`} replace />} />
         </Route>
       </Routes>
       </>

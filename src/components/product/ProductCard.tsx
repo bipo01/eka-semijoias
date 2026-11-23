@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { BADGE_LABEL, defaultVariant, isPurchasable, productBadge } from '../../data/catalog';
 import { FINISH_LABEL, type Product } from '../../data/schema';
 import { useBusiness } from '../../hooks/useBusiness';
+import { useCatalog } from '../../store/catalog';
 import { productImageSources } from '../../lib/assets';
 import { notifyMeMessage, whatsappUrl } from '../../lib/whatsapp';
 import { Img } from '../ui/Img';
@@ -16,13 +17,14 @@ export const CARD_SIZES = '(min-width: 1024px) 280px, (min-width: 768px) 30vw, 4
 export function ProductCard({ product, priority, sizes = CARD_SIZES, compact }: { product: Product; priority?: boolean; sizes?: string; compact?: boolean }) {
   const addToBag = useAddToBag();
   const biz = useBusiness();
-  const badge = productBadge(product);
-  const purchasable = isPurchasable(product);
+  const stock = useCatalog((s) => s.data.stock);
+  const badge = productBadge(product, stock);
+  const purchasable = isPurchasable(product, stock);
   const [first, second] = product.images;
   const firstSrc = first ? productImageSources(first, true) : null;
   const secondSrc = second ? productImageSources(second, true) : null;
   const finishes = [...new Set(product.variants.map((v) => v.finish))];
-  const variant = defaultVariant(product);
+  const variant = defaultVariant(product, stock);
   const needsChoice = Boolean(variant.sizes?.length);
 
   return (

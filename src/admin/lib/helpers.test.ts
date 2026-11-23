@@ -3,7 +3,6 @@ import { formatPhone, maskPhone, parseInstagram, parsePhone, whatsappDigits } fr
 import { move, reorderSubset } from './reorder';
 import { leadsCsv } from '../sections/LeadsPage';
 import { deleteCategory } from '../sections/CategoriesPage';
-import { deleteCollection, upsertCollection } from '../sections/CollectionsPage';
 import { parseStoreForm } from '../sections/SettingsPage';
 import { createSeed } from '../../data/seed';
 
@@ -60,25 +59,13 @@ describe('settings form', () => {
   });
 });
 
-describe('categories and collections', () => {
+describe('categories', () => {
   it('moves products to another category when deleting one', () => {
     const data = createSeed();
     const next = deleteCategory(data, 'cat-brincos', 'cat-colares', 'now');
     expect(next.categories.some((c) => c.id === 'cat-brincos')).toBe(false);
     expect(next.products.some((p) => p.categoryId === 'cat-brincos')).toBe(false);
     expect(next.categories.map((c) => c.order)).toEqual(next.categories.map((_, i) => i));
-  });
-
-  it('removes a deleted collection from products', () => {
-    const next = deleteCollection(createSeed(), 'col-rose', 'now');
-    expect(next.products.some((p) => p.collectionIds.includes('col-rose'))).toBe(false);
-  });
-
-  it('keeps a single collection on the home page', () => {
-    const data = createSeed();
-    const presentes = data.collections.find((c) => c.id === 'col-presentes')!;
-    const next = upsertCollection(data, { ...presentes, featuredOnHome: true });
-    expect(next.collections.filter((c) => c.featuredOnHome).map((c) => c.id)).toEqual(['col-presentes']);
   });
 });
 

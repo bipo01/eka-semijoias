@@ -12,13 +12,15 @@ import { WhatsAppIcon } from '../components/ui/Icons';
 import { FINISH_SWATCH, Price, Stepper } from '../components/ui/Misc';
 import { cx } from '../components/ui/cx';
 import { byOrder, defaultVariant, effectivePrice, galleryFor, isPurchasable, sizeFieldLabel } from '../data/catalog';
-import { FINISH_LABEL, type Product } from '../data/schema';
+import { isLowStock, stockOf, variantInStock } from '../data/stock';
+import { FINISH_LABEL, type Product, type StockMap } from '../data/schema';
 import { useBusiness, warrantyLabel } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { formatBRL } from '../lib/format';
-import { buildOrderMessage, notifyMeMessage, productQuestionMessage, whatsappUrl } from '../lib/whatsapp';
+import { notifyMeMessage, productQuestionMessage, whatsappUrl } from '../lib/whatsapp';
+import { cartKey, MAX_QTY, useCart } from '../store/cart';
 import { useCatalog } from '../store/catalog';
-import { useCustomer } from '../store/customer';
+import { useUi } from '../store/ui';
 import { NotFoundPage } from './NotFound';
 
 const DETAIL_LABELS: [keyof Product['details'], string][] = [
@@ -42,22 +44,32 @@ function ProductView({ product }: { product: Product }) {
   const data = useCatalog((s) => s.data);
   const biz = useBusiness();
   const addToBag = useAddToBag();
-  const { name: customerName, city: customerCity } = useCustomer();
+  const openPanel = useUi((s) => s.openPanel);
+  const cartItems = useCart((s) => s.items);
+  const stock = data.stock;
   const [params, setParams] = useSearchParams();
-  const variant = product.variants.find((v) => v.finish === params.get('acabamento')) ?? defaultVariant(product);
+  const variant = product.variants.find((v) => v.finish === params.get('acabamento')) ?? defaultVariant(product, stock);
   const [size, setSize] = useState<string | null>(null);
   const [sizeError, setSizeError] = useState(false);
-  const [qty, setQty] = useState(1);
+  const [qtyChoice, setQty] = useState(1);
   const trust = useTrustItems('product');
 
   const gallery = galleryFor(product, variant);
   const category = data.categories.find((c) => c.id === product.categoryId);
-  const purchasable = isPurchasable(product) && variant.available;
+  const purchasable = isPurchasable(product, stock) && variantInStock(stock, product, variant);
   const sizes = variant.sizes ?? [];
   const sizeName = sizes.length ? sizeFieldLabel(sizes) : '';
-  const validSize = size && sizes.includes(size) ? size : null;
+  const sizeUnits = (s: string) => stockOf(stock, product.id, variant.id, s);
+  const validSize = size && sizes.includes(size) && sizeUnits(size) !== 0 ? size : null;
+  // Units of the chosen combination (null: no stock control, or a size still to be chosen).
+  const units = sizes.length ? (validSize ? sizeUnits(validSize) : null) : stockOf(stock, product.id, variant.id);
+  const inBag = cartItems.find((i) => cartKey(i) === cartKey({ productId: product.id, variantId: variant.id, ...(validSize ? { size: validSize } : {}) }))?.qty ?? 0;
+  const maxQty = units === null ? MAX_QTY : Math.max(0, Math.min(MAX_QTY, units - inBag));
+  const qty = Math.max(1, Math.min(qtyChoice, maxQty || 1));
+  const allInBag = units !== null && units > 0 && maxQty === 0;
+  const lowStock = isLowStock(units, data.settings.lowStockThreshold);
 
-  const related = useMemo(() => completeTheLook(product, data.products), [product, data.products]);
+  const related = useMemo(() => completeTheLook(product, data.products, stock), [product, data.products, stock]);
 
   const selectFinish = (finish: string) => {
     const next = new URLSearchParams(params);
@@ -74,17 +86,20 @@ function ProductView({ product }: { product: Product }) {
     return true;
   };
 
-  const add = () => {
-    if (!requireSize()) return;
-    addToBag(product, variant, { qty, ...(validSize ? { size: validSize } : {}) });
+  const add = (opts: { quiet?: boolean } = {}): boolean => {
+    if (!requireSize()) return false;
+    if (allInBag) {
+      openPanel('bag');
+      return false;
+    }
+    addToBag(product, variant, { qty, ...(validSize ? { size: validSize } : {}), ...(opts.quiet ? { quiet: true } : {}) });
+    return true;
   };
 
-  const orderNowMessage = buildOrderMessage({
-    lines: [{ name: product.name, finish: FINISH_LABEL[variant.finish], ...(validSize ? { size: validSize } : {}), qty, unitCents: effectivePrice(product) }],
-    name: customerName,
-    city: customerCity,
-  });
-  const orderNowHref = whatsappUrl(biz.whatsapp, orderNowMessage);
+  /** "Pedir agora": the piece goes to the bag and the bag opens to finish the order (every order is registered). */
+  const orderNow = () => {
+    if (add({ quiet: true })) openPanel('bag');
+  };
   const notifyHref = whatsappUrl(biz.whatsapp, notifyMeMessage(`${product.name} (${FINISH_LABEL[variant.finish]})`));
 
   const details = DETAIL_LABELS.filter(([k]) => product.details[k]);
@@ -92,23 +107,20 @@ function ProductView({ product }: { product: Product }) {
   const buyButtons = (inBar: boolean) =>
     purchasable ? (
       <>
-        <Button size={inBar ? 'md' : 'lg'} onClick={add} className={cx('flex-1 whitespace-nowrap', inBar && 'min-w-0 !gap-1.5 !px-3 text-[0.9375rem]')}>
+        <Button size={inBar ? 'md' : 'lg'} onClick={() => add()} className={cx('flex-1 whitespace-nowrap', inBar && 'min-w-0 !gap-1.5 !px-3 text-[0.9375rem]')}>
           <ShoppingBag size={19} strokeWidth={1.5} aria-hidden="true" className={cx(inBar && 'max-[379px]:hidden')} /> Adicionar à sacola
         </Button>
-        <ButtonAnchor
-          href={orderNowHref}
+        <Button
           variant="secondary"
           size={inBar ? 'md' : 'lg'}
-          aria-label="Pedir agora pelo WhatsApp"
-          title="Pedir agora pelo WhatsApp"
+          aria-label="Pedir agora"
+          title="Pedir agora"
           className={inBar ? 'w-12 shrink-0 !px-0' : ''}
-          onClick={(e) => {
-            if (!requireSize()) e.preventDefault();
-          }}
+          onClick={orderNow}
         >
           <WhatsAppIcon size={22} />
           {!inBar && 'Pedir agora'}
-        </ButtonAnchor>
+        </Button>
       </>
     ) : (
       <ButtonAnchor href={notifyHref} size={inBar ? 'md' : 'lg'} variant="secondary" className="flex-1">
@@ -153,20 +165,21 @@ function ProductView({ product }: { product: Product }) {
             <div role="radiogroup" aria-label="Acabamento" className="flex flex-wrap gap-4">
               {product.variants.map((v) => {
                 const checked = v.id === variant.id;
+                const inStock = variantInStock(stock, product, v);
                 return (
                   <button
                     key={v.id}
                     type="button"
                     role="radio"
                     aria-checked={checked}
-                    aria-label={`${FINISH_LABEL[v.finish]}${v.available ? '' : ' (esgotado)'}`}
+                    aria-label={`${FINISH_LABEL[v.finish]}${inStock ? '' : ' (esgotado)'}`}
                     onClick={() => selectFinish(v.finish)}
                     className="group flex min-w-16 flex-col items-center gap-1.5"
                   >
                     <span className={cx('inline-flex size-12 items-center justify-center rounded-full transition-shadow', checked ? 'ring-1 ring-copper ring-offset-2 ring-offset-ivory' : 'group-hover:ring-1 group-hover:ring-line')}>
-                      <span className={cx('size-10 rounded-full ring-1 ring-black/10', !v.available && 'opacity-40')} style={{ background: FINISH_SWATCH[v.finish] }} />
+                      <span className={cx('size-10 rounded-full ring-1 ring-black/10', !inStock && 'opacity-40')} style={{ background: FINISH_SWATCH[v.finish] }} />
                     </span>
-                    <span className={cx('text-sm', checked ? 'font-medium text-copper' : 'text-ink-muted', !v.available && 'line-through')}>{FINISH_LABEL[v.finish]}</span>
+                    <span className={cx('text-sm', checked ? 'font-medium text-copper' : 'text-ink-muted', !inStock && 'line-through')}>{FINISH_LABEL[v.finish]}</span>
                   </button>
                 );
               })}
@@ -180,21 +193,34 @@ function ProductView({ product }: { product: Product }) {
                 {validSize && <span className="font-normal text-ink-muted">: {validSize}</span>}
               </legend>
               <div role="radiogroup" aria-label={sizeName} aria-describedby={sizeError ? 'size-error' : undefined} className="flex flex-wrap gap-2">
-                {sizes.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    role="radio"
-                    aria-checked={validSize === s}
-                    onClick={() => {
-                      setSize(s);
-                      setSizeError(false);
-                    }}
-                    className={cx('price inline-flex size-11 items-center justify-center rounded-full border text-sm', validSize === s ? 'border-copper bg-copper text-white' : 'border-line bg-white hover:border-copper')}
-                  >
-                    {s}
-                  </button>
-                ))}
+                {sizes.map((s) => {
+                  const soldOut = sizeUnits(s) === 0;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      role="radio"
+                      aria-checked={validSize === s}
+                      aria-disabled={soldOut || undefined}
+                      aria-label={soldOut ? `${s} (esgotado)` : undefined}
+                      onClick={() => {
+                        if (soldOut) return;
+                        setSize(s);
+                        setSizeError(false);
+                      }}
+                      className={cx(
+                        'price inline-flex size-11 items-center justify-center rounded-full border text-sm',
+                        soldOut
+                          ? 'cursor-not-allowed border-line bg-transparent text-ink-muted line-through decoration-ink-muted/70'
+                          : validSize === s
+                            ? 'border-copper bg-copper text-white'
+                            : 'border-line bg-white hover:border-copper',
+                      )}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
               </div>
               {sizeError && (
                 <p id="size-error" role="alert" className="mt-2 text-sm text-danger">
@@ -204,10 +230,19 @@ function ProductView({ product }: { product: Product }) {
             </fieldset>
           )}
 
+          {purchasable && lowStock && (
+            <p className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-copper">
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-copper" /> Últimas unidades
+            </p>
+          )}
+          {purchasable && allInBag && (
+            <p className="mt-4 text-sm text-ink-muted">Você já colocou na sacola todas as unidades disponíveis.</p>
+          )}
+
           {purchasable && (
             <div className="mt-6 flex items-center gap-4">
               <span className="font-medium" id="qty-label">Quantidade</span>
-              <Stepper value={qty} onChange={setQty} label="Quantidade" />
+              <Stepper value={qty} onChange={setQty} max={Math.max(1, maxQty)} label="Quantidade" />
               {qty > 1 && (
                 <p className="hidden text-ink-muted lg:block">
                   Total <span className="price text-lg text-ink">{formatBRL(effectivePrice(product) * qty)}</span>
@@ -301,8 +336,8 @@ function ProductView({ product }: { product: Product }) {
 }
 
 /** Same collection first, then other categories, never the product itself; purchasable only. */
-function completeTheLook(product: Product, all: Product[]): Product[] {
-  const pool = all.filter((p) => p.id !== product.id && isPurchasable(p));
+function completeTheLook(product: Product, all: Product[], stock: StockMap | undefined): Product[] {
+  const pool = all.filter((p) => p.id !== product.id && isPurchasable(p, stock));
   const sameCollection = pool.filter((p) => p.collectionIds.some((c) => product.collectionIds.includes(c)) && p.categoryId !== product.categoryId);
   const otherCategory = pool.filter((p) => p.categoryId !== product.categoryId && !sameCollection.includes(p));
   const seenNames = new Set<string>();

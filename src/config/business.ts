@@ -53,6 +53,7 @@ export const pendingChecklist: { key: string; label: string }[] = [
   { key: 'showroom', label: 'Showroom ou loja física (endereço e horário)' },
   { key: 'warrantyMonths', label: 'Prazo e regras da garantia' },
   { key: 'shipping', label: 'Formas de envio e frete' },
+  { key: 'pix', label: 'Chave Pix para receber os pedidos' },
   { key: 'payment', label: 'Formas de pagamento e parcelamento' },
   { key: 'plating', label: 'Material e especificação do banho das peças' },
   { key: 'hypoallergenic', label: 'Se as peças são antialérgicas/sem níquel' },

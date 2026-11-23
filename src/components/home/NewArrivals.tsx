@@ -8,8 +8,9 @@ import { SectionHeading } from '../ui/Misc';
 
 export function NewArrivals() {
   const products = useCatalog((s) => s.data.products);
+  const stock = useCatalog((s) => s.data.stock);
   const newest = products
-    .filter(isPurchasable)
+    .filter((p) => isPurchasable(p, stock))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 8);
   const rail = useRef<HTMLUListElement>(null);

@@ -1,13 +1,18 @@
-import { FINISH_LABEL, type Catalog, type Category, type Product, type ProductImage, type Variant } from './schema';
+import { FINISH_LABEL, type Catalog, type Category, type Product, type ProductImage, type StockMap, type Variant } from './schema';
+import { variantInStock } from './stock';
 
 export const effectivePrice = (p: Product): number => p.promoPrice ?? p.price;
 export const isOnSale = (p: Product): boolean => p.promoPrice != null && p.promoPrice < p.price;
 
-/** A product can be bought when the master switch is on and at least one finish is available. */
-export const isPurchasable = (p: Product): boolean => p.available && p.variants.some((v) => v.available);
+/**
+ * A product can be bought when the master switch is on and at least one finish
+ * is available (and, with stock control, has units). Pass the catalog's
+ * `stock`; without it only the switches count.
+ */
+export const isPurchasable = (p: Product, stock?: StockMap): boolean => p.available && p.variants.some((v) => variantInStock(stock, p, v));
 
-export function defaultVariant(p: Product): Variant {
-  return p.variants.find((v) => v.available) ?? p.variants[0]!;
+export function defaultVariant(p: Product, stock?: StockMap): Variant {
+  return p.variants.find((v) => variantInStock(stock, p, v)) ?? p.variants.find((v) => v.available) ?? p.variants[0]!;
 }
 
 export function findVariant(p: Product, variantId: string | null | undefined): Variant | undefined {
@@ -47,8 +52,8 @@ export const mainImage = (p: Product): ProductImage | undefined => p.images[0];
 export type ProductBadge = 'esgotado' | 'novo' | 'mais-vendido' | null;
 
 /** One tag at most, by priority. */
-export function productBadge(p: Product): ProductBadge {
-  if (!isPurchasable(p)) return 'esgotado';
+export function productBadge(p: Product, stock?: StockMap): ProductBadge {
+  if (!isPurchasable(p, stock)) return 'esgotado';
   if (p.tags.includes('novo')) return 'novo';
   if (p.tags.includes('mais-vendido')) return 'mais-vendido';
   return null;
@@ -71,7 +76,7 @@ export function categoryProducts(data: Catalog, categoryId: string): Product[] {
 
 /** Lowest current price among purchasable products of a category, or null when empty. */
 export function categoryFromPrice(data: Catalog, categoryId: string): number | null {
-  const prices = categoryProducts(data, categoryId).filter(isPurchasable).map(effectivePrice);
+  const prices = categoryProducts(data, categoryId).filter((p) => isPurchasable(p, data.stock)).map(effectivePrice);
   return prices.length ? Math.min(...prices) : null;
 }
 

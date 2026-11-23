@@ -30,6 +30,8 @@ interface CatalogStore {
   externalVersion: number;
   /** Bumps when reseller leads changed (admin live channel). */
   leadsVersion: number;
+  /** Bumps when orders changed (admin live channel). */
+  ordersVersion: number;
   load: () => Promise<void>;
   /**
    * Fetches `version` (or the latest) when it is newer than what is shown.
@@ -88,6 +90,28 @@ let commitSeq = 0;
 /** Commits run one at a time, each on top of the previous result. */
 let commitQueue: Promise<unknown> = Promise.resolve();
 let live: LiveConnection | null = null;
+/** Admin writes in flight that bump the catalog version (stock, orders), and the versions they produced. */
+let ownWritesPending = 0;
+const ownVersions = new Set<number>();
+
+/**
+ * Wraps an admin write that moves the catalog version outside `commit` (stock edits, order status
+ * changes), so the version it produces is not reported as "updated on another device".
+ */
+export async function ownWrite<T>(run: () => Promise<T>, versionOf: (result: T) => number | undefined): Promise<T> {
+  ownWritesPending++;
+  try {
+    const result = await run();
+    const version = versionOf(result);
+    if (version !== undefined) {
+      ownVersions.add(version);
+      void useCatalog.getState().refresh(version);
+    }
+    return result;
+  } finally {
+    ownWritesPending--;
+  }
+}
 
 async function fetchSnapshot(path: string): Promise<Snapshot> {
   const raw = await api<unknown>(path, { retries: 2, timeoutMs: 12_000 });
@@ -160,6 +184,7 @@ export const useCatalog = create<CatalogStore>()((set, get) => ({
   offline: false,
   externalVersion: 0,
   leadsVersion: 0,
+  ordersVersion: 0,
 
   load: async () => {
     const seq = ++fetchSeq;
@@ -200,7 +225,9 @@ export const useCatalog = create<CatalogStore>()((set, get) => ({
       if (snapshot.version < get().version || (snapshot.version === get().version && !opts.force)) return;
       const { version: v, ...data } = snapshot;
       commitSeq++;
-      set((s) => ({ data, version: v, offline: false, externalVersion: s.externalVersion + 1 }));
+      // Our own stock/order writes (finished or still in flight) are not news from another device.
+      const own = ownVersions.has(v) || ownWritesPending > 0;
+      set((s) => ({ data, version: v, offline: false, externalVersion: s.externalVersion + (own ? 0 : 1) }));
       writeCache(data, v);
     } catch {
       set({ offline: true });
@@ -252,6 +279,7 @@ export function startCatalog(): void {
   live = connectLive({
     onVersion: (version) => void useCatalog.getState().refresh(version),
     onLeads: () => useCatalog.setState((s) => ({ leadsVersion: s.leadsVersion + 1 })),
+    onOrders: () => useCatalog.setState((s) => ({ ordersVersion: s.ordersVersion + 1 })),
     onConnected: () => {
       // After a reconnection, heal anything missed while disconnected (a 304 when nothing changed).
       // The first connection needs nothing: `hello` reports the version and the first load is fresh.

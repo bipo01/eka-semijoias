@@ -2,6 +2,7 @@ import { applyChanges, changeSetSchema, imageSourcesOf, jsonEqual, type Change, 
 import { conflictMessage, entityKey, findConflicts } from './conflicts';
 import { checkIntegrity } from '../src/data/integrity';
 import { createCatalogSeed } from '../src/data/seed';
+import { materializeStock, orphanRows, type StockRow } from '../src/data/stock';
 import {
   isDataUrl,
   MAX_CATEGORIES,
@@ -32,8 +33,8 @@ import type { Context } from './router';
 /** D1 rows top out at 2 MB; keep a margin for the snapshot body. */
 export const SNAPSHOT_MAX_BYTES = 1_900_000;
 const CHANGES_MAX_BYTES = 2_000_000;
-const WRITE_ATTEMPTS = 10;
-const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+export const WRITE_ATTEMPTS = 10;
+export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Catalog versions are strictly increasing integers that also follow the clock
@@ -61,10 +62,18 @@ export function snapshotBody(catalog: Catalog, version: number): string {
     categories: catalog.categories,
     collections: catalog.collections,
     settings: catalog.settings,
+    stock: catalog.stock ?? {},
   });
 }
 
-function readSnapshot(db: D1Database): Promise<Snapshot | null> {
+/** Parses a stored snapshot body into the catalog it holds (without the version field). */
+export function parseSnapshotBody(body: string): Catalog {
+  const parsed = JSON.parse(body) as Catalog & { version?: number };
+  delete parsed.version;
+  return parsed;
+}
+
+export function readSnapshot(db: D1Database): Promise<Snapshot | null> {
   return db.prepare('SELECT version, body FROM catalog_snapshot WHERE id = 1').first<Snapshot>();
 }
 
@@ -98,6 +107,12 @@ function deleteStatements(db: D1Database, kind: EntityKind, ids: string[], versi
   if (!ids.length) return [];
   const list = JSON.stringify(ids);
   return [
+    ...(kind === 'product'
+      ? [
+          db.prepare('DELETE FROM stock_levels WHERE product_id IN (SELECT value FROM json_each(?1))').bind(list),
+          db.prepare('DELETE FROM stock_tracked WHERE product_id IN (SELECT value FROM json_each(?1))').bind(list),
+        ]
+      : []),
     db.prepare(`DELETE FROM ${TABLE[kind]} WHERE id IN (SELECT value FROM json_each(?1))`).bind(list),
     db
       .prepare(
@@ -125,7 +140,7 @@ export async function ensureSeeded(db: D1Database): Promise<Snapshot> {
       ...upsertStatements(db, 'collection', seed.collections, version),
       ...upsertStatements(db, 'product', seed.products, version),
       db.prepare('INSERT INTO settings (id, version, data) VALUES (1, ?1, ?2)').bind(version, JSON.stringify(seed.settings)),
-      db.prepare('INSERT INTO catalog_snapshot (id, version, body) VALUES (1, ?1, ?2)').bind(version, snapshotBody(seed, version)),
+      db.prepare('INSERT INTO catalog_snapshot (id, version, body) VALUES (1, ?1, ?2)').bind(version, snapshotBody({ ...seed, stock: {} }, version)),
       db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(new Date().toISOString(), 'catalog.seed', 'Catálogo inicial criado'),
     ]);
   } catch (error) {
@@ -184,6 +199,8 @@ interface ReadState {
   settingsVersion: number;
   existingMedia: Set<string>;
   replay: { request_hash: string; response: string } | null;
+  stockRows: StockRow[];
+  tracked: string[];
 }
 
 async function readState(db: D1Database, changes: Change[], mediaKeys: string[], idempotencyKey: string | null): Promise<ReadState> {
@@ -203,6 +220,8 @@ async function readState(db: D1Database, changes: Change[], mediaKeys: string[],
       db.prepare('SELECT version FROM settings WHERE id = 1'),
       db.prepare('SELECT key FROM media WHERE key IN (SELECT value FROM json_each(?1))').bind(JSON.stringify(mediaKeys)),
       db.prepare('SELECT request_hash, response FROM idempotency WHERE key = ?1').bind(idempotencyKey ?? ''),
+      db.prepare('SELECT product_id, variant_id, size, qty FROM stock_levels'),
+      db.prepare('SELECT product_id FROM stock_tracked'),
     ]),
   );
   const snapshot = results[0]?.results[0] as Snapshot | undefined;
@@ -215,6 +234,8 @@ async function readState(db: D1Database, changes: Change[], mediaKeys: string[],
     settingsVersion: (results[3]?.results[0]?.version as number | undefined) ?? 0,
     existingMedia: new Set((results[4]?.results ?? []).map((r) => r.key as string)),
     replay: (results[5]?.results[0] as ReadState['replay']) ?? null,
+    stockRows: (results[6]?.results ?? []) as unknown as StockRow[],
+    tracked: (results[7]?.results ?? []).map((r) => r.product_id as string),
   };
 }
 
@@ -296,7 +317,10 @@ export async function handleChanges(ctx: Context): Promise<Response> {
     const effective = effectiveChanges(state.catalog, changes);
     if (!effective.length) return json({ version: state.catalog.version, from: state.catalog.version, applied: 0 });
 
-    const next = applyChanges(state.catalog, effective);
+    const applied = applyChanges(state.catalog, effective);
+    // Stock lives in its own tables; the snapshot copy follows the new catalog (removed finishes/sizes drop out).
+    const next: Catalog = { ...applied, stock: materializeStock(applied.products, state.tracked, state.stockRows) };
+    const orphans = orphanRows(applied.products, state.stockRows);
     if (next.products.length > MAX_PRODUCTS || next.categories.length > MAX_CATEGORIES || next.collections.length > MAX_COLLECTIONS) {
       throw new HttpError('integrity', 'O catálogo atingiu o limite de itens.');
     }
@@ -325,6 +349,15 @@ export async function handleChanges(ctx: Context): Promise<Response> {
       ...deleteStatements(db, 'product', deletes('product'), version),
       ...deleteStatements(db, 'collection', deletes('collection'), version),
       ...deleteStatements(db, 'category', deletes('category'), version),
+      ...(orphans.length
+        ? [
+            db
+              .prepare(
+                `DELETE FROM stock_levels WHERE (product_id || '|' || variant_id || '|' || size) IN (SELECT value FROM json_each(?1))`,
+              )
+              .bind(JSON.stringify(orphans.map((o) => `${o.product_id}|${o.variant_id}|${o.size}`))),
+          ]
+        : []),
       ...(settingsChange
         ? [
             db.prepare('INSERT INTO settings (id, version, data) VALUES (1, ?1, ?2) ON CONFLICT (id) DO UPDATE SET version = excluded.version, data = excluded.data').bind(

@@ -2,7 +2,7 @@ import { apiUrl } from './api';
 
 /*
  * Live updates over WebSocket (/api/live). Messages:
- *   {"type":"hello","version":N} | {"type":"catalog","version":N} | {"type":"leads"}
+ *   {"type":"hello","version":N} | {"type":"catalog","version":N} | {"type":"leads"} | {"type":"orders"}
  * Keeps one connection alive with a heartbeat, reconnects with exponential
  * backoff + jitter, and reconnects at once when the tab becomes visible or the
  * network comes back. Missed updates heal through `hello` and the HTTP
@@ -12,6 +12,7 @@ import { apiUrl } from './api';
 export interface LiveHandlers {
   onVersion(version: number): void;
   onLeads?(): void;
+  onOrders?(): void;
   /** Called after every (re)connection, so the caller can revalidate over HTTP. */
   onConnected?(): void;
 }
@@ -106,6 +107,7 @@ export function connectLive(handlers: LiveHandlers): LiveConnection {
       }
       if ((message.type === 'hello' || message.type === 'catalog') && typeof message.version === 'number') handlers.onVersion(message.version);
       else if (message.type === 'leads') handlers.onLeads?.();
+      else if (message.type === 'orders') handlers.onOrders?.();
     };
     ws.onclose = () => {
       if (socket !== ws) return;

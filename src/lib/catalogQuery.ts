@@ -77,7 +77,7 @@ export function filterProducts(data: Catalog, categoryId: string | null, f: Cata
     const price = effectivePrice(p);
     if (f.priceMin != null && price < f.priceMin * 100) return false;
     if (f.priceMax != null && price > f.priceMax * 100) return false;
-    if (f.onlyAvailable && !isPurchasable(p)) return false;
+    if (f.onlyAvailable && !isPurchasable(p, data.stock)) return false;
     if (f.onlyPromo && !isOnSale(p)) return false;
     return true;
   });
@@ -88,7 +88,7 @@ export function filterProducts(data: Catalog, categoryId: string | null, f: Cata
     'maior-preco': (a, b) => effectivePrice(b) - effectivePrice(a),
   };
   // Sold-out pieces always go to the end.
-  return list.sort((a, b) => Number(isPurchasable(b)) - Number(isPurchasable(a)) || compare[f.sort](a, b));
+  return list.sort((a, b) => Number(isPurchasable(b, data.stock)) - Number(isPurchasable(a, data.stock)) || compare[f.sort](a, b));
 }
 
 export function activeFilterCount(f: CatalogFilters): number {

@@ -276,24 +276,6 @@ export function ProductForm({ source }: { source: FormSource }) {
           />
         </div>
 
-        {data.collections.length > 0 && (
-          <div role="group" aria-labelledby={`${formId}-collections`}>
-            <p id={`${formId}-collections`} className="mb-2 text-sm font-medium">
-              Coleções
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {data.collections.map((c) => {
-                const on = draft.collectionIds.includes(c.id);
-                return (
-                  <Chip key={c.id} selected={on} onClick={() => set('collectionIds', on ? draft.collectionIds.filter((x) => x !== c.id) : [...draft.collectionIds, c.id])}>
-                    {c.name}
-                  </Chip>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         <FormSection title="Acabamentos (cores disponíveis)">
           <VariantsEditor draft={draft} update={update} errors={errors} />
         </FormSection>

@@ -1,10 +1,9 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { RouteError } from './components/layout/RouteError';
 import { HomePage } from './pages/Home';
 import { CatalogPage } from './pages/Catalog';
 import { ProductPage } from './pages/Product';
-import { CollectionPage } from './pages/Collection';
 import { BagPage } from './pages/Bag';
 import { FavoritesPage } from './pages/Favorites';
 import { ResellersPage } from './pages/Resellers';
@@ -35,7 +34,8 @@ export const router = createBrowserRouter([
           { path: 'catalogo', element: <CatalogPage /> },
           { path: 'catalogo/:categoria', element: <CatalogPage /> },
           { path: 'produto/:slug', element: <ProductPage /> },
-          { path: 'colecao/:slug', element: <CollectionPage /> },
+          // Collections were retired from the site; old links land on the catalog.
+          { path: 'colecao/*', element: <Navigate to="/catalogo" replace /> },
           { path: 'sacola', element: <BagPage /> },
           { path: 'favoritos', element: <FavoritesPage /> },
           { path: 'revendedoras', element: <ResellersPage /> },

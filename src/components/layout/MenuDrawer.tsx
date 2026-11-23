@@ -1,8 +1,7 @@
 import { ChevronRight, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { categoryFromPrice, sortedCategories } from '../../data/catalog';
+import { sortedCategories } from '../../data/catalog';
 import { useBusiness } from '../../hooks/useBusiness';
-import { formatBRL } from '../../lib/format';
 import { generalMessage, whatsappUrl } from '../../lib/whatsapp';
 import { useCatalog } from '../../store/catalog';
 import { useUi } from '../../store/ui';
@@ -16,7 +15,6 @@ export function MenuDrawer() {
   const close = useUi((s) => s.closePanel);
   const data = useCatalog((s) => s.data);
   const biz = useBusiness();
-  const collections = [...data.collections].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   return (
     <Sheet open={open} onClose={close} title="Menu" side="left" hideTitle>
@@ -30,37 +28,16 @@ export function MenuDrawer() {
                 <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" />
               </Link>
             </li>
-            {sortedCategories(data).map((c) => {
-              const from = categoryFromPrice(data, c.id);
-              return (
-                <li key={c.id}>
-                  <Link to={`/catalogo/${c.slug}`} onClick={close} className={linkRow}>
-                    <span className="font-display text-title">{c.name}</span>
-                    <span className="flex items-center gap-2 text-sm text-ink-muted">
-                      {from != null && <span>a partir de {formatBRL(from)}</span>}
-                      <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" />
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
+            {sortedCategories(data).map((c) => (
+              <li key={c.id}>
+                <Link to={`/catalogo/${c.slug}`} onClick={close} className={linkRow}>
+                  <span className="font-display text-title">{c.name}</span>
+                  <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" />
+                </Link>
+              </li>
+            ))}
           </ul>
         </section>
-        {collections.length > 0 && (
-          <section aria-labelledby="menu-col">
-            <h3 id="menu-col" className="eyebrow mb-1 text-ink-muted">Coleções</h3>
-            <ul>
-              {collections.map((c) => (
-                <li key={c.id}>
-                  <Link to={`/colecao/${c.slug}`} onClick={close} className={linkRow}>
-                    <span>{c.name}</span>
-                    <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
         <Link to="/revendedoras" onClick={close} className="flex min-h-14 items-center justify-between rounded-[12px] bg-champagne px-4 text-ink">
           <span>
             <span className="block font-display text-title">Seja revendedora</span>

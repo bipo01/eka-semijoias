@@ -43,18 +43,18 @@ export function Price({ price, promoPrice, size = 'md', className }: { price: nu
   );
 }
 
-export function Stepper({ value, onChange, min = 1, max = 20, label, size = 'md' }: { value: number; onChange: (v: number) => void; min?: number; max?: number; label: string; size?: 'sm' | 'md' }) {
+export function Stepper({ value, onChange, min = 1, max = 20, label, size = 'md', disabled }: { value: number; onChange: (v: number) => void; min?: number; max?: number; label: string; size?: 'sm' | 'md'; disabled?: boolean }) {
   const btn = cx('inline-flex items-center justify-center rounded-full text-ink hover:bg-champagne disabled:opacity-35', size === 'sm' ? 'size-10' : 'size-11');
   return (
     <div role="group" aria-label={label} className={cx('inline-flex items-center rounded-full border border-line bg-white', size === 'sm' ? 'h-11' : 'h-12')}>
-      <button type="button" className={btn} aria-label="Diminuir quantidade" disabled={value <= min} onClick={() => onChange(value - 1)}>
+      <button type="button" className={btn} aria-label="Diminuir quantidade" disabled={disabled || value <= min} onClick={() => onChange(value - 1)}>
         <Minus size={16} strokeWidth={1.5} />
       </button>
       <span aria-live="polite" className="price min-w-7 text-center">
         <span className="sr-only">Quantidade: </span>
         {value}
       </span>
-      <button type="button" className={btn} aria-label="Aumentar quantidade" disabled={value >= max} onClick={() => onChange(value + 1)}>
+      <button type="button" className={btn} aria-label="Aumentar quantidade" disabled={disabled || value >= max} onClick={() => onChange(value + 1)}>
         <Plus size={16} strokeWidth={1.5} />
       </button>
     </div>

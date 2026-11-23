@@ -486,6 +486,239 @@ describe('live updates (WebSocket)', () => {
   });
 });
 
+describe('orders and stock', () => {
+  const price = (p: any) => p.promoPrice ?? p.price;
+  /** A purchasable product whose finishes have no sizes (optionally with at least `finishes` finishes). */
+  async function plainProduct(finishes = 1, skip: string[] = []) {
+    const c = await catalog();
+    return c.products.find(
+      (p: any) => p.available && !skip.includes(p.id) && p.variants.length >= finishes && p.variants.every((v: any) => v.available && !v.sizes?.length) && !c.stock?.[p.id],
+    );
+  }
+  const order = (items: any[], extra: Record<string, unknown> = {}) => ({ items, name: 'Cliente Teste', city: 'Dourados', ...extra });
+  const place = (body: unknown, key = randomUUID(), client = new Client()) => client.req('/api/orders', { body, headers: { 'Idempotency-Key': key } });
+
+  it('registers an order priced by the server, idempotently, without exposing it publicly', async () => {
+    const product = await plainProduct();
+    const v = product.variants[0];
+    const secretName = `Fulana ${randomUUID().slice(0, 8)}`;
+    const body = order([{ productId: product.id, variantId: v.id, qty: 2 }], { name: secretName, note: 'presente' });
+    const key = randomUUID();
+    const first = await place(body, key);
+    expect(first.status).toBe(201);
+    expect(first.json.order.number).toBeGreaterThanOrEqual(1001);
+    expect(first.json.order.totalCents).toBe(price(product) * 2);
+    expect(first.json.order.items[0]).toMatchObject({ productId: product.id, qty: 2, unitCents: price(product) });
+
+    // A retry (or a double tap) returns the same order; the key cannot be reused for another body.
+    const replay = await place(body, key);
+    expect(replay.status).toBe(201);
+    expect(replay.json.order.number).toBe(first.json.order.number);
+    expect((await place({ ...body, city: 'Outra' }, key)).status).toBe(400);
+
+    expect((await new Client().req('/api/orders', { body })).status).toBe(400); // no key
+    expect((await place({ ...body, name: ' ' })).json.error.message).toBe('Informe seu nome.');
+    const bot = await place({ ...body, website: 'http://spam' });
+    expect(bot.status).toBe(202);
+    expect(bot.json.order).toBeNull();
+    // Prices sent by the browser are ignored (none accepted in the schema): unknown fields do not change the total.
+    const tampered = await place({ ...body, items: [{ productId: product.id, variantId: v.id, qty: 1, unitCents: 1 }] });
+    expect(tampered.json.order.totalCents).toBe(price(product));
+
+    expect(JSON.stringify(await catalog())).not.toContain(secretName);
+    expect((await new Client().req('/api/admin/orders')).status).toBe(401);
+    const a = await admin();
+    const list = await a.req('/api/admin/orders');
+    const stored = list.json.orders.find((o: any) => o.number === first.json.order.number);
+    expect(stored).toMatchObject({ status: 'enviado', customer: { name: secretName, city: 'Dourados' }, note: 'presente', totalCents: price(product) * 2 });
+
+    const anon = await a.req(`/api/admin/orders/${stored.id}/anonymize`, { body: {} });
+    expect(anon.json.order).toMatchObject({ customer: { name: 'Cliente removida', city: '' }, anonymized: true });
+    expect(anon.json.order.note).toBeUndefined();
+  });
+
+  it('refuses unknown products, wrong sizes and missing details', async () => {
+    const c = await catalog();
+    const ring = c.products.find((p: any) => p.available && p.variants.some((v: any) => v.available && v.sizes?.length));
+    const rv = ring.variants.find((v: any) => v.sizes?.length);
+    expect((await place(order([{ productId: 'nope', variantId: 'x', qty: 1 }]))).status).toBe(409);
+    const noSize = await place(order([{ productId: ring.id, variantId: rv.id, qty: 1 }]));
+    expect(noSize.status).toBe(409);
+    expect(noSize.json.error.details.problems[0].reason).toBe('size');
+    expect((await place(order([{ productId: ring.id, variantId: rv.id, size: rv.sizes[0], qty: 21 }]))).status).toBe(400);
+    expect((await place({ items: [], name: 'Ana', city: 'Rio' })).status).toBe(400);
+  });
+
+  it('takes stock on confirmation, gives it back on cancel, and never sells the last unit twice', async () => {
+    const a = await admin();
+    const product = await plainProduct();
+    const v = product.variants[0];
+    const key = `${v.id}|`;
+
+    const set = await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: true, levels: [{ variantId: v.id, size: '', qty: 1, expected: null }] } });
+    expect(set.status).toBe(200);
+    let pub = await catalog();
+    expect(pub.version).toBe(set.json.version);
+    expect(pub.stock[product.id]).toEqual({ [key]: 1 });
+    // A stale editor (expected the old value) is refused instead of overwriting.
+    const stale = await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: true, levels: [{ variantId: v.id, size: '', qty: 5, expected: null }] } });
+    expect(stale.status).toBe(409);
+    expect(stale.json.error.details.conflicts[0].current).toBe(1);
+
+    // More than the stock is refused at registration; two orders of 1 are accepted (stock moves only on confirmation).
+    expect((await place(order([{ productId: product.id, variantId: v.id, qty: 2 }]))).json.error.details.problems[0]).toMatchObject({ reason: 'stock', available: 1 });
+    const o1 = (await place(order([{ productId: product.id, variantId: v.id, qty: 1 }]))).json.order;
+    const o2 = (await place(order([{ productId: product.id, variantId: v.id, qty: 1 }]))).json.order;
+    const list = (await a.req('/api/admin/orders')).json.orders;
+    const id1 = list.find((o: any) => o.number === o1.number).id;
+    const id2 = list.find((o: any) => o.number === o2.number).id;
+
+    // Both confirmed at the same time: exactly one wins the last unit.
+    const results = await Promise.all([id1, id2].map((id) => a.req(`/api/admin/orders/${id}/status`, { body: { from: 'enviado', to: 'confirmado' } })));
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    const loser = results.find((r) => r.status === 409)!;
+    expect(loser.json.error.message).toContain('Estoque insuficiente');
+    const winnerId = results[0]!.status === 200 ? id1 : id2;
+    const loserId = winnerId === id1 ? id2 : id1;
+
+    pub = await catalog();
+    expect(pub.stock[product.id][key]).toBe(0);
+    expect((await place(order([{ productId: product.id, variantId: v.id, qty: 1 }]))).json.error.details.problems[0].reason).toBe('unavailable');
+
+    // Compare-and-swap on the status: a wrong `from` is refused, a repeated move is harmless.
+    expect((await a.req(`/api/admin/orders/${winnerId}/status`, { body: { from: 'enviado', to: 'confirmado' } })).status).toBe(200);
+    expect((await a.req(`/api/admin/orders/${winnerId}/status`, { body: { from: 'pago', to: 'entregue' } })).status).toBe(409);
+    expect((await a.req(`/api/admin/orders/${winnerId}/status`, { body: { from: 'confirmado', to: 'entregue' } })).status).toBe(400);
+    expect((await a.req(`/api/admin/orders/${winnerId}`, { method: 'DELETE' })).status).toBe(409); // holds stock
+
+    // Paid then cancelled: the unit comes back exactly once.
+    expect((await a.req(`/api/admin/orders/${winnerId}/status`, { body: { from: 'confirmado', to: 'pago' } })).json.order.status).toBe('pago');
+    const cancelled = await a.req(`/api/admin/orders/${winnerId}/status`, { body: { from: 'pago', to: 'cancelado' } });
+    expect(cancelled.json.order.status).toBe('cancelado');
+    expect(cancelled.json.order.stockMoves).toBeUndefined();
+    expect((await catalog()).stock[product.id][key]).toBe(1);
+
+    // Now the other order can be confirmed.
+    expect((await a.req(`/api/admin/orders/${loserId}/status`, { body: { from: 'enviado', to: 'confirmado' } })).status).toBe(200);
+    expect((await catalog()).stock[product.id][key]).toBe(0);
+
+    const stock = (await a.req('/api/admin/stock')).json;
+    const moves = stock.movements.filter((m: any) => m.productId === product.id).map((m: any) => [m.reason, m.delta, m.qtyAfter]);
+    expect(moves).toEqual([
+      ['pedido', -1, 0],
+      ['devolucao', 1, 1],
+      ['pedido', -1, 0],
+      ['ajuste', 1, 1],
+    ]);
+
+    expect((await a.req(`/api/admin/orders/${winnerId}`, { method: 'DELETE' })).json.deleted).toBe(true);
+    expect((await a.req(`/api/admin/orders/${winnerId}`, { method: 'DELETE' })).json.deleted).toBe(false);
+
+    // Turning control off restores the plain behaviour.
+    const off = await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: false, levels: [] } });
+    expect(off.status).toBe(200);
+    expect((await catalog()).stock[product.id]).toBeUndefined();
+  });
+
+  it('keeps the stock map through catalog edits and drops the rows of a removed finish', async () => {
+    const a = await admin();
+    const product = await plainProduct(2);
+    const [v1, v2] = product.variants;
+    await a.req(`/api/admin/stock/${product.id}`, {
+      method: 'PUT',
+      body: { tracked: true, levels: [{ variantId: v1.id, size: '', qty: 4, expected: null }, { variantId: v2.id, size: '', qty: 3, expected: null }] },
+    });
+    const before = await catalog();
+    expect(before.stock[product.id]).toEqual({ [`${v1.id}|`]: 4, [`${v2.id}|`]: 3 });
+
+    // An unrelated edit keeps the map.
+    const other = before.products.find((p: any) => p.id !== product.id);
+    await a.req('/api/admin/changes', { body: { baseVersion: before.version, changes: [{ kind: 'product', op: 'upsert', id: other.id, data: { ...other, featured: !other.featured } }] } });
+    expect((await catalog()).stock[product.id]).toEqual({ [`${v1.id}|`]: 4, [`${v2.id}|`]: 3 });
+
+    // Removing a finish drops its stock (snapshot and table); the product stays tracked.
+    const now = await catalog();
+    const edited = { ...product, variants: [v1], images: product.images, updatedAt: new Date().toISOString() };
+    const res = await a.req('/api/admin/changes', { body: { baseVersion: now.version, changes: [{ kind: 'product', op: 'upsert', id: product.id, data: edited }] } });
+    expect(res.status).toBe(200);
+    expect((await catalog()).stock[product.id]).toEqual({ [`${v1.id}|`]: 4 });
+    const rows = (await a.req('/api/admin/stock')).json.levels.filter((l: any) => l.productId === product.id);
+    expect(rows.map((r: any) => r.variantId)).toEqual([v1.id]);
+  });
+
+  it('never reuses the number of a deleted order', async () => {
+    const a = await admin();
+    const product = await plainProduct();
+    const body = order([{ productId: product.id, variantId: product.variants[0].id, qty: 1 }]);
+    const first = (await place(body)).json.order;
+    const id = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.number === first.number).id;
+    expect((await a.req(`/api/admin/orders/${id}`, { method: 'DELETE' })).json.deleted).toBe(true);
+    const next = (await place(body)).json.order;
+    expect(next.number).toBe(first.number + 1);
+  });
+
+  it('keeps both the erasure and the stock record when anonymizing and moving an order', async () => {
+    const a = await admin();
+    const product = await plainProduct();
+    const v = product.variants[0];
+    await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: true, levels: [{ variantId: v.id, size: '', qty: 3, expected: null }] } });
+    const placed = (await place(order([{ productId: product.id, variantId: v.id, qty: 2 }], { name: 'Para Apagar', note: 'nota' }))).json.order;
+    const id = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.number === placed.number).id;
+    // Anonymize and confirm at the same time: neither write may undo the other.
+    const [anon, confirmed] = await Promise.all([
+      a.req(`/api/admin/orders/${id}/anonymize`, { body: {} }),
+      a.req(`/api/admin/orders/${id}/status`, { body: { from: 'enviado', to: 'confirmado' } }),
+    ]);
+    expect(anon.status).toBe(200);
+    expect(confirmed.status).toBe(200);
+    const stored = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === id);
+    expect(stored).toMatchObject({ status: 'confirmado', anonymized: true, customer: { name: 'Cliente removida', city: '' } });
+    expect(stored.note).toBeUndefined();
+    expect(stored.stockMoves).toEqual([{ productId: product.id, variantId: v.id, size: '', qty: 2 }]);
+    expect((await catalog()).stock[product.id][`${v.id}|`]).toBe(1);
+    expect((await a.req(`/api/admin/orders/${id}/status`, { body: { from: 'confirmado', to: 'cancelado' } })).status).toBe(200);
+    expect((await catalog()).stock[product.id][`${v.id}|`]).toBe(3);
+    await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: false, levels: [] } });
+  });
+
+  it('refuses a malformed Pix key in the settings', async () => {
+    const a = await admin();
+    const c = await catalog();
+    const bad = await a.req('/api/admin/changes', { body: { baseVersion: c.version, changes: [{ kind: 'settings', op: 'upsert', data: { ...c.settings, pix: { key: '(67) 99999-8888', name: 'EKA', city: 'RIO' } } }] } });
+    expect(bad.status).toBe(400);
+    const good = await a.req('/api/admin/changes', { body: { baseVersion: c.version, changes: [{ kind: 'settings', op: 'upsert', data: { ...c.settings, pix: { key: '+5567999998888', name: 'EKA', city: 'RIO' } } }] } });
+    expect(good.status).toBe(200);
+    expect((await catalog()).settings.pix.key).toBe('+5567999998888');
+    const back = await catalog();
+    const { pix: _pix, ...rest } = back.settings;
+    expect((await a.req('/api/admin/changes', { body: { baseVersion: back.version, changes: [{ kind: 'settings', op: 'upsert', data: rest }] } })).status).toBe(200);
+  });
+
+  it('pushes an orders notice to admin sockets only', async () => {
+    const a = await admin();
+    const wsUrl = BASE().replace(/^http/, 'ws') + '/api/live';
+    const listen = (headers: Record<string, string>) =>
+      new Promise<{ ws: WebSocket; got: string[] }>((resolve) => {
+        const ws = new WebSocket(wsUrl, { headers } as any);
+        const got: string[] = [];
+        ws.addEventListener('message', (e) => got.push(String(e.data)));
+        ws.addEventListener('open', () => resolve({ ws, got }));
+      });
+    const cookie = [...a.cookies].map(([k, v]) => `${k}=${v}`).join('; ');
+    const adminWs = await listen({ Origin: BASE(), Cookie: cookie, 'CF-Connecting-IP': a.ip });
+    const publicWs = await listen({ Origin: BASE() });
+    const product = await plainProduct();
+    await place(order([{ productId: product.id, variantId: product.variants[0].id, qty: 1 }]));
+    const deadline = Date.now() + 5000;
+    while (!adminWs.got.some((m) => m.includes('"orders"')) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+    expect(adminWs.got.some((m) => m.includes('"orders"'))).toBe(true);
+    expect(publicWs.got.some((m) => m.includes('"orders"'))).toBe(false);
+    for (const m of adminWs.got) expect(m).not.toContain('Cliente Teste');
+    adminWs.ws.close();
+    publicWs.ws.close();
+  });
+});
+
 describe('PIN change', () => {
   it('ends a session that keeps answering the current PIN wrong', async () => {
     const a = await admin();

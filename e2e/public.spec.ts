@@ -48,7 +48,8 @@ test('one h1 per page and no horizontal overflow', async ({ page }) => {
   }
 });
 
-test('add to bag and build the WhatsApp order', async ({ page, isMobile }) => {
+test('add to bag, register the order and build the WhatsApp message', async ({ page, isMobile, context }) => {
+  await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': `10.201.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` });
   await open(page, '/produto/anel-solitario-delicado');
   const add = page.getByRole('button', { name: 'Adicionar à sacola' }).filter({ visible: true }).first();
   await add.click();
@@ -68,24 +69,48 @@ test('add to bag and build the WhatsApp order', async ({ page, isMobile }) => {
   await page.getByRole('button', { name: /Sacola, 2 itens/ }).click();
   const dialog = page.getByRole('dialog', { name: /Sua sacola/ });
   await expect(dialog).toBeVisible();
+  // Name and city are required to register the order.
+  await dialog.getByRole('button', { name: 'Finalizar pedido' }).click();
+  await expect(dialog.getByText('Informe seu nome.')).toBeVisible();
   await dialog.getByPlaceholder('Seu nome').fill('Ana');
   await dialog.getByPlaceholder('Cidade').fill('Campo Grande/MS');
-  const href = await dialog.getByRole('link', { name: 'Enviar pedido pelo WhatsApp' }).getAttribute('href');
-  const text = decodeURIComponent(href!.split('text=')[1]!);
-  expect(href).toMatch(/^https:\/\/wa\.me\/\?text=/);
-  expect(text).toBe(
-    'Olá! Gostaria de fazer este pedido:\n\n1) Anel Solitário Delicado — Dourado — aro 16 — 2 un. — R$ 279,80\n\nTotal: R$ 279,80\nNome: Ana · Cidade: Campo Grande/MS',
-  );
   // Remove with undo
   await dialog.getByRole('button', { name: 'Remover Anel Solitário Delicado' }).click();
   await expect(dialog.getByText('Sua sacola está vazia')).toBeVisible();
   await dialog.getByRole('button', { name: 'Desfazer' }).click();
   await expect(dialog.getByText('Anel Solitário Delicado')).toBeVisible();
+
+  // Register the order: the server prices it and gives it a number; the message carries it.
+  const created = page.waitForResponse((r) => r.url().endsWith('/api/orders') && r.request().method() === 'POST');
+  await dialog.getByRole('button', { name: 'Finalizar pedido' }).click();
+  const response = await created;
+  expect(response.status()).toBe(201);
+  const number = ((await response.json()) as { order: { number: number } }).order.number;
+  await expect(dialog.getByRole('heading', { name: `Pedido nº ${number} registrado` })).toBeVisible();
+  const href = await dialog.getByRole('link', { name: 'Enviar pedido pelo WhatsApp' }).getAttribute('href');
+  const text = decodeURIComponent(href!.split('text=')[1]!);
+  expect(href).toMatch(/^https:\/\/wa\.me\/\?text=/);
+  expect(text).toBe(
+    `Olá! Fiz o pedido nº ${number} pelo site:\n\n1) Anel Solitário Delicado — Dourado — aro 16 — 2 un. — R$ 279,80\n\nTotal: R$ 279,80\nPagamento: a combinar\nNome: Ana · Cidade: Campo Grande/MS`,
+  );
+  // "Alterar pedido" goes back to the bag, which is still there.
+  await dialog.getByRole('button', { name: 'Alterar pedido' }).click();
+  await expect(dialog.getByRole('button', { name: 'Finalizar pedido' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   // The cart and customer survive a reload.
   await page.reload();
   await expect(page.getByRole('button', { name: /Sacola, 2 itens/ })).toBeVisible();
+});
+
+test('collections are gone: old links land on the catalog', async ({ page }) => {
+  await page.goto('/colecao/rose');
+  await expect(page).toHaveURL(/\/catalogo$/);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await open(page, '/');
+  const text = (await page.locator('body').innerText()).toLowerCase();
+  expect(text).not.toContain('coleção rosé');
+  expect(text).not.toContain('explorar coleção');
 });
 
 test('catalog filters live in the URL and survive back navigation', async ({ page }) => {
@@ -145,7 +170,10 @@ test('menu drawer is keyboard accessible and returns focus', async ({ page, isMo
   await page.keyboard.press('Enter');
   const drawer = page.getByRole('dialog', { name: 'Menu' });
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole('link', { name: /Brincos a partir de R\$ 49,90/ })).toBeVisible();
+  await expect(drawer.getByRole('link', { name: 'Brincos', exact: true })).toBeVisible();
+  // No prices and no collections in the menu.
+  await expect(drawer.getByText(/a partir de|R\$/)).toHaveCount(0);
+  await expect(drawer.getByText('Coleções')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(drawer).toBeHidden();
   await expect(trigger).toBeFocused();

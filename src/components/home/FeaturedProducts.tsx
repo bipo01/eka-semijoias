@@ -6,7 +6,8 @@ import { SeeAll } from './CategoryRail';
 
 export function FeaturedProducts() {
   const products = useCatalog((s) => s.data.products);
-  const featured = products.filter((p) => p.featured && isPurchasable(p)).sort(byOrder).slice(0, 8);
+  const stock = useCatalog((s) => s.data.stock);
+  const featured = products.filter((p) => p.featured && isPurchasable(p, stock)).sort(byOrder).slice(0, 8);
   if (!featured.length) return null;
   return (
     <section aria-labelledby="home-mais-amadas" className="container-x pt-12 lg:pt-20">

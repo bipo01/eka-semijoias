@@ -1,6 +1,7 @@
 import { formatBRL } from './format';
 import { FINISH_LABEL, type CartItem, type Catalog } from '../data/schema';
 import { effectivePrice, findVariant, isPurchasable, sizeLabel } from '../data/catalog';
+import { stockOf } from '../data/stock';
 
 /** Messages above this length switch to the compact format (wa.me links get unreliable when very long). */
 export const COMPACT_THRESHOLD = 1800;
@@ -25,7 +26,14 @@ export interface OrderDetails {
   name?: string;
   city?: string;
   note?: string;
+  /** Number of the order registered on the site. */
+  number?: number;
+  /** True when the customer was shown the Pix payment. */
+  pix?: boolean;
 }
+
+const greeting = (order: OrderDetails) => (order.number ? `Olá! Fiz o pedido nº ${order.number} pelo site:` : 'Olá! Gostaria de fazer este pedido:');
+const paymentLine = (order: OrderDetails) => (order.number ? `Pagamento: ${order.pix ? 'Pix' : 'a combinar'}` : null);
 
 export const lineTotal = (line: OrderLine) => line.unitCents * line.qty;
 export const orderTotal = (lines: OrderLine[]) => lines.reduce((sum, l) => sum + lineTotal(l), 0);
@@ -44,26 +52,31 @@ function buildFull(order: OrderDetails): string {
   const items = order.lines.map((l, i) =>
     [`${i + 1}) ${l.name}`, l.finish, l.size && sizeLabel(l.size), `${l.qty} un.`, formatBRL(lineTotal(l))].filter(Boolean).join(' — '),
   );
-  const footer = [`Total: ${formatBRL(orderTotal(order.lines))}`, customerLine(order, ' · '), order.note?.trim() && `Obs.: ${order.note.trim()}`].filter(Boolean);
-  return ['Olá! Gostaria de fazer este pedido:', '', ...items, '', ...footer].join('\n');
+  const footer = [`Total: ${formatBRL(orderTotal(order.lines))}`, paymentLine(order), customerLine(order, ' · '), order.note?.trim() && `Obs.: ${order.note.trim()}`].filter(Boolean);
+  return [greeting(order), '', ...items, '', ...footer].join('\n');
 }
 
 function buildCompact(order: OrderDetails): string {
   const items = order.lines.map((l, i) =>
     [`${i + 1}) ${l.name}`, l.finish.slice(0, 4), l.size, `${l.qty}x`, formatBRL(lineTotal(l))].filter(Boolean).join(' · '),
   );
-  const footer = [`Total: ${formatBRL(orderTotal(order.lines))}`, customerLine(order, ' · '), order.note?.trim() && `Obs.: ${order.note.trim().slice(0, 300)}`].filter(Boolean);
-  return ['Olá! Gostaria de fazer este pedido:', ...items, ...footer].join('\n');
+  const footer = [`Total: ${formatBRL(orderTotal(order.lines))}`, paymentLine(order), customerLine(order, ' · '), order.note?.trim() && `Obs.: ${order.note.trim().slice(0, 300)}`].filter(Boolean);
+  return [greeting(order), ...items, ...footer].join('\n');
 }
 
-/** Resolves cart items against the catalog. Items whose product is gone or unavailable are reported separately. */
+/**
+ * Resolves cart items against the catalog. Items whose product is gone,
+ * unavailable or out of stock are reported separately; `available` is the
+ * stock of the line's combination (null without stock control).
+ */
 export function resolveCart(items: CartItem[], data: Catalog) {
-  const lines: (OrderLine & { key: string; item: CartItem })[] = [];
+  const lines: (OrderLine & { key: string; item: CartItem; available: number | null })[] = [];
   const unavailable: CartItem[] = [];
   for (const item of items) {
     const product = data.products.find((p) => p.id === item.productId);
     const variant = product && findVariant(product, item.variantId);
-    if (!product || !variant || !isPurchasable(product) || !variant.available) {
+    const available = product && variant ? stockOf(data.stock, product.id, variant.id, item.size) : null;
+    if (!product || !variant || !isPurchasable(product, data.stock) || !variant.available || available === 0) {
       unavailable.push(item);
       continue;
     }
@@ -75,6 +88,7 @@ export function resolveCart(items: CartItem[], data: Catalog) {
       ...(item.size ? { size: item.size } : {}),
       qty: item.qty,
       unitCents: effectivePrice(product),
+      available,
     });
   }
   return { lines, unavailable };

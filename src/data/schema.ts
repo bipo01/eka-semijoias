@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizePixKey, pixKeyKind } from '../lib/pix';
 
 export const FINISHES = ['rose', 'dourado', 'prateado', 'rodio-negro'] as const;
 export type Finish = (typeof FINISHES)[number];
@@ -125,12 +126,34 @@ export const settingsSchema = z.object({
   showroom: shortText(200).optional(),
   openingHours: shortText(120).optional(),
   warrantyMonths: z.number().int().min(0).max(60),
+  /** Static Pix shown after an order is registered. Absent until the owner fills it in. */
+  pix: z
+    .object({
+      // Stored normalized (see src/lib/pix.ts); anything else would make a code the banks refuse.
+      key: z
+        .string()
+        .min(1)
+        .max(77)
+        .refine((k) => /^[\x21-\x7E]+$/.test(k) && (({ ok, key }) => ok && key === k)(normalizePixKey(pixKeyKind(k), k) as { ok: boolean; key?: string }), 'Chave Pix inválida'),
+      name: z.string().min(1).max(25),
+      city: z.string().min(1).max(15),
+    })
+    .optional(),
+  /** "Últimas unidades" shows when a tracked piece has this many or fewer left (default 2). */
+  lowStockThreshold: z.number().int().min(0).max(20).optional(),
 });
 
 export const MAX_PRODUCTS = 500;
 export const MAX_CATEGORIES = 50;
 export const MAX_COLLECTIONS = 50;
 export const MAX_LEADS = 20_000;
+
+/**
+ * Public stock: productId → "<variantId>|<size>" → units (capped, see src/data/stock.ts).
+ * Only products with stock control appear. Materialized by the server from the
+ * stock_levels table; the browser never writes it.
+ */
+export const stockMapSchema = z.record(z.string().max(64), z.record(z.string().max(80), z.number().int().min(0).max(100_000)));
 
 /** The public catalog, as served by GET /api/catalog (no leads, no credentials). */
 export const catalogSchema = z.object({
@@ -139,6 +162,7 @@ export const catalogSchema = z.object({
   categories: z.array(categorySchema).max(MAX_CATEGORIES),
   collections: z.array(collectionSchema).max(MAX_COLLECTIONS),
   settings: settingsSchema,
+  stock: stockMapSchema.optional(),
 });
 
 /** Full backup: the catalog plus reseller leads. */
@@ -155,6 +179,7 @@ export type ResellerLead = z.infer<typeof resellerLeadSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
 export type Catalog = z.infer<typeof catalogSchema>;
 export type CatalogState = z.infer<typeof catalogStateSchema>;
+export type StockMap = z.infer<typeof stockMapSchema>;
 
 export const cartItemSchema = z.object({
   productId: id,

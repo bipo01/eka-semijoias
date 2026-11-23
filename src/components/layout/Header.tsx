@@ -1,7 +1,6 @@
 import { Heart, Menu, Search, ShoppingBag } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
 import { cartCount, useCart } from '../../store/cart';
-import { useCatalog } from '../../store/catalog';
 import { useUi } from '../../store/ui';
 import { IconButton } from '../ui/Button';
 import { cx } from '../ui/cx';
@@ -26,10 +25,6 @@ function BagButton() {
 
 export function Header() {
   const openPanel = useUi((s) => s.openPanel);
-  const collectionSlug = useCatalog((s) => (s.data.collections.find((c) => c.featuredOnHome) ?? s.data.collections[0])?.slug);
-  const nav = MAIN_NAV.filter((item) => item.to !== '/colecao' || collectionSlug).map((item) =>
-    item.to === '/colecao' ? { ...item, to: `/colecao/${collectionSlug}` } : item,
-  );
   return (
     <>
     <AnnouncementBar />
@@ -47,7 +42,7 @@ export function Header() {
           </Link>
           <nav aria-label="Principal" className="hidden lg:block">
             <ul className="flex items-center gap-8">
-              {nav.map((item) => (
+              {MAIN_NAV.map((item) => (
                 <li key={item.to}>
                   <NavLink
                     to={item.to}

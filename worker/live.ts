@@ -12,6 +12,7 @@ import type { Context } from './router';
  *   {"type":"hello","version":N}    on connect
  *   {"type":"catalog","version":N}  after a catalog write
  *   {"type":"leads"}                 admin sockets only, after a lead changes
+ *   {"type":"orders"}                admin sockets only, after an order changes
  * Clients only send "ping" (answered with "pong" without waking the object).
  */
 
@@ -104,6 +105,10 @@ export class LiveHub extends DurableObject<Env> {
   async publishLeads(): Promise<void> {
     this.broadcast(JSON.stringify({ type: 'leads' }), 'admin');
   }
+
+  async publishOrders(): Promise<void> {
+    this.broadcast(JSON.stringify({ type: 'orders' }), 'admin');
+  }
 }
 
 const hub = (env: Env) => env.LIVE.get(env.LIVE.idFromName(HUB_NAME));
@@ -122,6 +127,14 @@ export async function notifyLeads(env: Env): Promise<void> {
     await hub(env).publishLeads();
   } catch (error) {
     console.error(JSON.stringify({ event: 'live.notify_failed', kind: 'leads', error: String(error) }));
+  }
+}
+
+export async function notifyOrders(env: Env): Promise<void> {
+  try {
+    await hub(env).publishOrders();
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'live.notify_failed', kind: 'orders', error: String(error) }));
   }
 }
 

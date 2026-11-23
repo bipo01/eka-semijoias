@@ -8,8 +8,6 @@ export const PUBLIC_ROUTES = [
   '/produto/anel-solitario-delicado',
   '/produto/argola-cravejada-rodio-negro',
   '/produto/pulseira-elos-rose',
-  '/colecao/rose',
-  '/colecao/presentes',
   '/sacola',
   '/favoritos',
   '/revendedoras',

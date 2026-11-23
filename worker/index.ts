@@ -5,6 +5,8 @@ import type { Env } from './env';
 import { assertSameOrigin, errorResponse, HttpError, json } from './http';
 import { handleCreateLead, handleDeleteLead, handleListLeads } from './leads';
 import { handleLive } from './live';
+import { handleAnonymizeOrder, handleCreateOrder, handleDeleteOrder, handleListOrders, handleOrderStatus } from './orders';
+import { handleGetStock, handlePutStock } from './stock';
 import { handleMedia, handleUpload } from './media';
 import { Router, type Context } from './router';
 
@@ -26,6 +28,7 @@ const router = new Router()
   .on('GET', '/api/catalog/v/:version', handleCatalog)
   .on('GET', '/api/live', handleLive)
   .on('POST', '/api/leads', handleCreateLead)
+  .on('POST', '/api/orders', handleCreateOrder)
   .on('GET', '/api/admin/session', handleSessionStatus)
   .on('POST', '/api/admin/login', handleLogin)
   .on('POST', '/api/admin/logout', handleLogout)
@@ -35,6 +38,12 @@ const router = new Router()
   .on('POST', '/api/admin/media', handleUpload)
   .on('GET', '/api/admin/leads', handleListLeads)
   .on('DELETE', '/api/admin/leads/:id', handleDeleteLead)
+  .on('GET', '/api/admin/orders', handleListOrders)
+  .on('POST', '/api/admin/orders/:id/status', handleOrderStatus)
+  .on('POST', '/api/admin/orders/:id/anonymize', handleAnonymizeOrder)
+  .on('DELETE', '/api/admin/orders/:id', handleDeleteOrder)
+  .on('GET', '/api/admin/stock', handleGetStock)
+  .on('PUT', '/api/admin/stock/:productId', handlePutStock)
   .on('GET', '/media/:file', handleMedia);
 
 /** Content Security Policy for the SPA document; the WebSocket host is listed explicitly (older Safari does not match wss: with 'self'). */

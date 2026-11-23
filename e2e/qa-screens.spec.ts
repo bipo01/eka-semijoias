@@ -10,7 +10,6 @@ const ROUTES: [string, string][] = [
   ['home', '/'],
   ['catalogo', '/catalogo'],
   ['produto', '/produto/brinco-gota-cristal'],
-  ['colecao', '/colecao/rose'],
   ['sacola', '/sacola'],
   ['favoritos', '/favoritos'],
   ['revendedoras', '/revendedoras'],

@@ -1,8 +1,10 @@
 # Pendências — ÉKA Semijoias
 
-Funcionalidades pedidas para depois da versão atual. Registrado em 19/11/2026. **O backend já existe** desde 23/11/2026 (Cloudflare Workers + D1 + Durable Objects, com tempo real por WebSocket; veja `docs/backend/PLAN.md` e `AGENTS.md`): pedidos, estoque e Pix entram como novas tabelas e rotas nele.
+Funcionalidades pedidas para depois da versão atual. Registrado em 19/11/2026.
 
-## 1. Pix com os dados certos (QR Code e copia e cola)
+> **Atualização 23/11/2026:** os itens 1 (Pix estático), 2 (controle de estoque) e 3 (registro de pedidos e relatório de vendas) estão prontos: plano em `docs/vendas/PLAN.md`. Na mesma data, Coleções saíram do site (menu, cabeçalho, banner da página inicial e `/colecao/*`, que agora leva ao catálogo) e o menu lateral deixou de mostrar preços, a pedido da Érika. Falta a Érika preencher a chave Pix em Painel → Configurações. O Pix dinâmico continua como próximo passo opcional. **O backend já existe** desde 23/11/2026 (Cloudflare Workers + D1 + Durable Objects, com tempo real por WebSocket; veja `docs/backend/PLAN.md` e `AGENTS.md`): pedidos, estoque e Pix entram como novas tabelas e rotas nele.
+
+## 1. Pix com os dados certos (QR Code e copia e cola) — feito (estático)
 
 **Objetivo:** na sacola, depois de montar o pedido, a cliente vê o valor exato com um QR Code Pix e o código "copia e cola", com os dados corretos da ÉKA.
 
@@ -19,7 +21,7 @@ Funcionalidades pedidas para depois da versão atual. Registrado em 19/11/2026. 
 
 **Perguntar à Érika:** a chave Pix (CPF, CNPJ, e-mail, telefone ou aleatória), o nome exato do recebedor como aparece no banco, a cidade, e se ela tem CNPJ.
 
-## 2. Controle de estoque
+## 2. Controle de estoque — feito
 
 **Objetivo:** cada peça tem a quantidade disponível por acabamento e tamanho (ex.: Anel Solitário, Dourado, aro 16: 3 unidades). Quando acaba, a peça aparece como "Esgotado" sozinha.
 
@@ -30,7 +32,7 @@ Funcionalidades pedidas para depois da versão atual. Registrado em 19/11/2026. 
 - Duas clientes pedindo a última unidade ao mesmo tempo: a confirmação no servidor tem de ser atômica (uma transação no D1), para o estoque nunca ficar negativo.
 - Histórico de entradas e saídas (quem, quando, quanto e por quê), para conferência.
 
-## 3. Relatório de vendas
+## 3. Relatório de vendas — feito
 
 **Objetivo:** a Érika vê no painel quanto vendeu, o que mais sai e o andamento de cada pedido.
 
@@ -102,9 +104,9 @@ Registrado em 23/11/2026. **Prioridade: depois dos itens 1 a 3.**
 ## Ordem sugerida
 
 1. ~~Backend (pré-requisito de tudo).~~ Feito em 23/11/2026.
-2. Registro de pedidos + relatório de vendas.
-3. Controle de estoque (usa a confirmação de pedidos).
-4. Pix estático; depois, se fizer sentido, Pix dinâmico.
+2. ~~Registro de pedidos + relatório de vendas.~~ Feito em 23/11/2026.
+3. ~~Controle de estoque (usa a confirmação de pedidos).~~ Feito em 23/11/2026.
+4. ~~Pix estático~~ (feito em 23/11/2026); depois, se fizer sentido, Pix dinâmico.
 5. Botão "Instalar o app" (item 4) e padronizador de fotos (item 5).
 
 ## Tempo real (atualização ao vivo)
@@ -115,4 +117,4 @@ Para o painel atualizar sozinho quando chega um pedido novo, ou o estoque mudar 
 - **WebSocket nativo com Durable Objects:** é a forma de tempo real da própria Cloudflare. **Implementado** (`worker/live.ts`): o catálogo já atualiza ao vivo nas telas abertas.
 - **Socket.IO:** o servidor do Socket.IO precisa de um processo Node.js rodando sem parar, e os Workers não funcionam assim. Na Cloudflare, o equivalente é o WebSocket com Durable Objects, citado acima.
 
-Recomendação: começar com a atualização periódica e usar WebSocket com Durable Objects só se o volume pedir.
+Situação atual: o WebSocket com Durable Objects já está no ar. O catálogo e o estoque atualizam ao vivo nas telas abertas, e o painel recebe pedidos novos na hora.
