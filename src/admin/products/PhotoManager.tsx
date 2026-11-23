@@ -1,5 +1,5 @@
-import { useState, type ChangeEvent } from 'react';
-import { ArrowLeft, ArrowRight, Camera, ImagePlus, Loader2, Star, Trash2, X } from 'lucide-react';
+import { useRef, useState, type ChangeEvent } from 'react';
+import { ArrowLeft, ArrowRight, Camera, ImagePlus, Loader2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/Field';
 import { Img } from '../../components/ui/Img';
@@ -10,6 +10,8 @@ import { processImage } from '../../lib/image';
 import { toast } from '../../store/ui';
 import { move } from '../lib/reorder';
 import { altFor, imageFinish, type DraftErrors, type ProductDraft } from './productDraft';
+import { photoBlob } from './standardize/photoSource';
+import StandardizeSheet, { type StandardizedPhoto } from './standardize/StandardizeSheet';
 
 const MAX_PHOTOS = 20;
 
@@ -39,6 +41,10 @@ function PickerLabel({ capture, onFiles, children, className }: { capture?: bool
 
 export function PhotoManager({ draft, update, selectedId, onSelect, errors }: PhotoManagerProps) {
   const [processing, setProcessing] = useState(0);
+  const [standardize, setStandardize] = useState<{ id: string; source: Blob } | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+  /** Files picked in this session, by photo id: the standardizer starts from full resolution, even after a first pass. */
+  const originals = useRef(new Map<string, File>());
   const selectedIndex = draft.images.findIndex((img) => img.id === selectedId);
   const selected = draft.images[selectedIndex];
 
@@ -58,6 +64,7 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
         continue;
       }
       const id = newId('img');
+      originals.current.set(id, file);
       update((d) => ({
         ...d,
         images: [...d.images, { id, src: result.src, thumb: result.thumb, alt: altFor(d.name, imageFinish(d, id)) }],
@@ -68,6 +75,7 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
   }
 
   function remove(id: string) {
+    originals.current.delete(id);
     update((d) => ({
       ...d,
       images: d.images.filter((img) => img.id !== id),
@@ -75,6 +83,26 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
       variants: d.variants.map((v) => ({ ...v, imageIds: v.imageIds.filter((x) => x !== id) })),
     }));
     if (selectedId === id) onSelect(null);
+  }
+
+  async function openStandardizer(id: string) {
+    const image = draft.images.find((img) => img.id === id);
+    if (!image || opening) return;
+    setOpening(id);
+    try {
+      const source = await photoBlob(image, originals.current.get(id));
+      setStandardize({ id, source });
+    } catch {
+      toast('Não deu para abrir esta foto para padronizar. Confira a internet e tente de novo.', { tone: 'error' });
+    } finally {
+      setOpening(null);
+    }
+  }
+
+  function applyStandardized(id: string, photo: StandardizedPhoto) {
+    update((d) => ({ ...d, images: d.images.map((img) => (img.id === id ? { ...img, src: photo.src, thumb: photo.thumb } : img)) }));
+    setStandardize(null);
+    toast('Foto padronizada. Ela vai ser enviada quando você salvar a peça.', { tone: 'success' });
   }
 
   function reorder(from: number, to: number) {
@@ -159,6 +187,14 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
             hint="Ex.: Brinco Gota em Rosé. Ajuda quem usa leitor de tela."
           />
           <div className="flex flex-wrap items-center gap-1">
+            <Button size="sm" variant="secondary" className="mr-1" onClick={() => openStandardizer(selected.id)} disabled={opening != null} aria-busy={opening === selected.id}>
+              {opening === selected.id ? (
+                <Loader2 size={16} strokeWidth={1.5} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Sparkles size={16} strokeWidth={1.5} aria-hidden="true" />
+              )}
+              Padronizar
+            </Button>
             {selectedIndex > 0 && (
               <Button size="sm" variant="ghost" onClick={() => reorder(selectedIndex, 0)}>
                 <Star size={16} strokeWidth={1.5} /> Tornar principal
@@ -184,6 +220,14 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
           </div>
           {selected.src.startsWith('data:') && <p className="text-sm text-ink-muted">Foto nova: vai ser enviada quando você salvar a peça.</p>}
         </div>
+      )}
+
+      {standardize && (
+        <StandardizeSheet
+          source={standardize.source}
+          onApply={(photo) => applyStandardized(standardize.id, photo)}
+          onClose={() => setStandardize(null)}
+        />
       )}
     </div>
   );
