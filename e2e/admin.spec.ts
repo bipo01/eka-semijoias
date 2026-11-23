@@ -69,6 +69,7 @@ test('admin: usable at 360px without horizontal overflow', async ({ browser }) =
 });
 
 test('admin: no serious accessibility violations', async ({ page }) => {
+  test.setTimeout(120_000); // 11 axe scans; under the full parallel suite WebKit needs more than the default 45 s
   await page.goto('/admin');
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   expect(await axe(page)).toEqual([]);
