@@ -51,18 +51,29 @@ const router = new Router()
   .on('PUT', '/api/admin/stock/:productId', handlePutStock)
   .on('GET', '/media/:file', handleMedia);
 
-/** Content Security Policy for the SPA document; the WebSocket host is listed explicitly (older Safari does not match wss: with 'self'). */
+/**
+ * Hosts the photo standardizer downloads its background-removal model from (admin only, first use;
+ * then the browser cache). The ONNX Runtime WASM files are served by this site.
+ */
+export const MODEL_HOSTS = ['https://huggingface.co', 'https://*.huggingface.co', 'https://*.hf.co'];
+
+/**
+ * Content Security Policy for the SPA document; the WebSocket host is listed explicitly (older Safari
+ * does not match wss: with 'self'). Every page may register the root service worker (install + push);
+ * only /admin may run WebAssembly and fetch the model (the photo standardizer).
+ */
 export function documentCsp(url: URL): string {
   const ws = `${url.protocol === 'https:' ? 'wss' : 'ws'}://${url.host}`;
+  const admin = url.pathname === '/admin' || url.pathname.startsWith('/admin/');
   return [
     "default-src 'self'",
-    "script-src 'self'",
+    admin ? "script-src 'self' 'wasm-unsafe-eval'" : "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
-    `connect-src 'self' ${ws}`,
+    `connect-src 'self' ${ws}${admin ? ` ${MODEL_HOSTS.join(' ')}` : ''}`,
     "manifest-src 'self'",
-    "worker-src 'none'",
+    admin ? "worker-src 'self' blob:" : "worker-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
