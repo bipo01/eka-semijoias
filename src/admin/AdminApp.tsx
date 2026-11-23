@@ -5,6 +5,7 @@ import { Sheet } from '../components/ui/Sheet';
 import { Toaster } from '../components/ui/Toaster';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { errorMessage } from '../lib/api';
+import { applyAppHead } from '../lib/install';
 import { reconnectLive } from '../store/catalog';
 import { toast } from '../store/ui';
 import { AdminSessionContext, type AdminSession } from './AdminContext';
@@ -29,6 +30,8 @@ type Gate = { state: 'checking' } | { state: 'locked'; pinLength: number } | { s
 /** Catalog admin, mounted at /admin/* outside the public layout (lazy-loaded). */
 export default function AdminApp() {
   useDocumentTitle('Painel');
+  // The panel installs as its own app ("Painel ÉKA", opens at /admin); the store's tags come back on leaving.
+  useEffect(() => applyAppHead('admin'), []);
   const [gate, setGate] = useState<Gate>({ state: 'checking' });
 
   const [attempt, setAttempt] = useState(0);

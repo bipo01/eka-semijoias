@@ -3,6 +3,7 @@ import { useBusiness } from '../../hooks/useBusiness';
 import { asset } from '../../lib/assets';
 import { useMessages } from '../../hooks/useMessages';
 import { whatsappUrl } from '../../lib/whatsapp';
+import { InstallAppButton } from '../install/InstallAppButton';
 import { InstagramIcon, WhatsAppIcon } from '../ui/Icons';
 
 const COLUMNS = [
@@ -68,8 +69,9 @@ export function Footer() {
           </ul>
         </div>
       </div>
-      <div className="container-x mt-10 border-t border-white/10 pt-6 text-sm text-on-dark/70">
-        <p>© {new Date().getFullYear()} ÉKA Semijoias</p>
+      <div className="container-x mt-10 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-white/10 pt-4 text-sm text-on-dark/70">
+        <p className="py-2">© {new Date().getFullYear()} ÉKA Semijoias</p>
+        <InstallAppButton variant="footer" />
       </div>
     </footer>
   );

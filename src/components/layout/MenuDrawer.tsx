@@ -6,6 +6,7 @@ import { useMessages } from '../../hooks/useMessages';
 import { whatsappUrl } from '../../lib/whatsapp';
 import { useCatalog } from '../../store/catalog';
 import { useUi } from '../../store/ui';
+import { InstallAppButton } from '../install/InstallAppButton';
 import { InstagramIcon, WhatsAppIcon } from '../ui/Icons';
 import { Sheet } from '../ui/Sheet';
 
@@ -76,6 +77,7 @@ export function MenuDrawer() {
             </a>
           )}
         </div>
+        <InstallAppButton variant="menu" className="self-start" />
       </nav>
     </Sheet>
   );
