@@ -28,6 +28,13 @@
       "!/apple-touch-icon.png",
       "!/icon-maskable-512.png",
       "!/manifest.webmanifest",
+      "!/admin.webmanifest",
+      "!/admin-icon-192.png",
+      "!/admin-icon-512.png",
+      "!/admin-icon-maskable-512.png",
+      "!/admin-apple-touch-icon.png",
+      "!/admin-badge-96.png",
+      "!/sw.js",
       "!/og-image.jpg",
       "!/robots.txt"
     ]
