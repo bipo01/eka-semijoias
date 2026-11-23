@@ -55,15 +55,16 @@ export function useChargeMessage(order: Order) {
 }
 
 /** `quiet`: secondary styling, when another action (accepting a receipt) is the main one. */
-function MessageActions({ order, compact, quiet }: { order: Order; compact?: boolean; quiet?: boolean }) {
+function MessageActions({ order, compact, quiet, text }: { order: Order; compact?: boolean; quiet?: boolean; text?: string }) {
   const ready = useChargeMessage(order);
   if (!ready) return null;
+  const message = text ?? ready.message;
   return (
     <div className={cx('flex flex-col gap-2', compact && 'sm:flex-row')}>
-      <Button block variant={quiet ? 'secondary' : 'primary'} onClick={() => void copy(ready.message, 'Mensagem copiada. É só colar na conversa da cliente.')}>
+      <Button block variant={quiet ? 'secondary' : 'primary'} onClick={() => void copy(message, 'Mensagem copiada. É só colar na conversa da cliente.')}>
         <Copy size={18} strokeWidth={1.5} /> Copiar mensagem
       </Button>
-      <ButtonAnchor href={whatsappUrl(null, ready.message)} variant={quiet ? 'ghost' : 'secondary'} block>
+      <ButtonAnchor href={whatsappUrl(null, message)} variant={quiet ? 'ghost' : 'secondary'} block>
         <WhatsAppIcon size={19} /> Abrir WhatsApp
       </ButtonAnchor>
     </div>
@@ -93,6 +94,8 @@ function ChargeBody({ order, onClose, onDone }: { order: Order; onClose: () => v
     onDone(value);
   };
   const ready = useChargeMessage(order);
+  /** The owner's edits to the ready message (null: the generated text). */
+  const [draft, setDraft] = useState<string | null>(null);
   useEffect(() => () => onDone(false), [onDone]);
 
   const shippingCents = shipping.trim() ? parseBRL(shipping) : 0;
@@ -145,9 +148,26 @@ function ChargeBody({ order, onClose, onDone }: { order: Order; onClose: () => v
               Pedido confirmado e cobrança de <span className="price font-medium whitespace-nowrap">{formatBRL(order.charge?.amountCents ?? 0)}</span> criada.
             </span>
           </div>
-          <p className="text-sm text-ink-muted">Copie a mensagem e cole na conversa com a cliente. Ela traz o link para pagar e enviar o comprovante.</p>
-          <pre className="max-h-72 overflow-auto rounded-[12px] border border-line bg-white p-4 font-sans text-sm leading-relaxed break-words whitespace-pre-wrap text-ink">{ready.message}</pre>
-          <MessageActions order={order} />
+          <p className="text-sm text-ink-muted">Confira a mensagem, ajuste o que quiser e copie para a conversa com a cliente. Ela traz o link para pagar e enviar o comprovante.</p>
+          <label htmlFor={`charge-msg-${order.id}`} className="sr-only">
+            Mensagem para a cliente
+          </label>
+          <textarea
+            id={`charge-msg-${order.id}`}
+            value={draft ?? ready.message}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={12}
+            className="w-full resize-y rounded-[12px] border border-line bg-white p-4 text-sm leading-relaxed text-ink focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"
+          />
+          {draft !== null && draft !== ready.message && (
+            <div className="-mt-2 flex flex-col gap-1 text-sm">
+              {!draft.includes(ready.link) && <p className="text-danger">O link de pagamento saiu da mensagem: sem ele a cliente não consegue enviar o comprovante.</p>}
+              <button type="button" className="min-h-9 self-start text-copper underline underline-offset-4" onClick={() => setDraft(null)}>
+                Voltar à mensagem original
+              </button>
+            </div>
+          )}
+          <MessageActions order={order} text={draft ?? ready.message} />
           <button type="button" className="min-h-11 text-sm text-copper underline underline-offset-4" onClick={() => void copy(ready.link, 'Link copiado.')}>
             Copiar só o link
           </button>

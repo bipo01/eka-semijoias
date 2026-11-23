@@ -240,7 +240,7 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await sheet.getByRole('textbox', { name: /Frete/ }).fill('20,00');
   await sheet.getByRole('button', { name: 'Confirmar e gerar cobrança' }).click();
   const ready = page.getByRole('dialog', { name: 'Cobrança pronta' });
-  const message = await ready.locator('pre').innerText();
+  const message = await ready.getByRole('textbox', { name: 'Mensagem para a cliente' }).inputValue();
   expect(message).toContain(`Seu pedido nº ${number} está confirmado.`);
   expect(message).toContain('Frete: R$ 20,00');
   const link = message.match(/https?:\/\/\S+\/pagamento\/[A-Za-z0-9_-]+/)![0];
