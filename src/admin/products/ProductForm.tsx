@@ -7,7 +7,7 @@ import { SelectField, TextArea, TextField } from '../../components/ui/Field';
 import { Chip } from '../../components/ui/Misc';
 import { Sheet } from '../../components/ui/Sheet';
 import { sortedCategories } from '../../data/catalog';
-import { TAGS, type CatalogState, type Product, type Tag } from '../../data/schema';
+import { TAGS, type Catalog, type Product, type Tag } from '../../data/schema';
 import { centsToInput, parseBRL } from '../../lib/format';
 import { slugify, uniqueSlug } from '../../lib/slug';
 import { useCatalog } from '../../store/catalog';
@@ -43,7 +43,7 @@ function initialDraft(source: FormSource): ProductDraft {
 }
 
 /** Puts a deleted product back where it was (undo). */
-export function restoreProduct(data: CatalogState, product: Product, index: number): CatalogState {
+export function restoreProduct(data: Catalog, product: Product, index: number): Catalog {
   if (data.products.some((p) => p.id === product.id)) return data;
   const categoryId = data.categories.some((c) => c.id === product.categoryId) ? product.categoryId : sortedCategories(data)[0]?.id;
   const restored: Product = {
@@ -73,6 +73,8 @@ export function ProductForm({ source }: { source: FormSource }) {
   /** Version of the product when the form opened, to detect saves from another tab. */
   const openedAt = useRef(source.kind === 'edit' ? source.product.updatedAt : null);
   const [conflict, setConflict] = useState<{ product: Product; then: 'close' | 'new'; deleted: boolean } | null>(null);
+  /** Progress text while a save is in flight (photos uploading, saving); blocks double submits. */
+  const [saving, setSaving] = useState<string | null>(null);
 
   // Reloading or closing the tab with unsaved edits asks the browser to confirm.
   useEffect(() => {
@@ -88,7 +90,6 @@ export function ProductForm({ source }: { source: FormSource }) {
   const categories = sortedCategories(data);
   const taken = useMemo(() => takenSlugs(data, draft.id), [data, draft.id]);
   const slug = effectiveSlug(draft, taken);
-  const savedImageIds = useMemo(() => new Set(source.kind === 'edit' ? source.product.images.map((i) => i.id) : []), [source]);
 
   const update = (fn: (d: ProductDraft) => ProductDraft) => {
     setDraft((d) => withAutoAlts(fn(d)));
@@ -110,6 +111,7 @@ export function ProductForm({ source }: { source: FormSource }) {
   }
 
   function submit(then: 'close' | 'new') {
+    if (saving) return;
     const result = buildProduct(draft, useCatalog.getState().data, new Date().toISOString());
     if (!result.ok) {
       setErrors(result.errors);
@@ -124,27 +126,37 @@ export function ProductForm({ source }: { source: FormSource }) {
       const stored = useCatalog.getState().data.products.find((p) => p.id === result.product.id);
       if (!stored || stored.updatedAt !== openedAt.current) return setConflict({ product: result.product, then, deleted: !stored });
     }
-    write(result.product, then);
+    void write(result.product, then);
   }
 
-  function write(product: Product, then: 'close' | 'new') {
+  async function write(product: Product, then: 'close' | 'new') {
     setConflict(null);
-    // On a failed write (e.g. storage full) the form stays open with every edit.
-    if (!save((d) => upsertProduct(d, product), draft.isNew ? 'Peça cadastrada.' : 'Alterações salvas.')) return;
+    setSaving('Salvando…');
+    // On a failed write (offline, conflict) the form stays open with every edit.
+    // The form does not edit the list position: keep the one stored now (it may have been reordered elsewhere).
+    const ok = await save(
+      (d) => upsertProduct(d, { ...product, order: d.products.find((p) => p.id === product.id)?.order ?? product.order }),
+      draft.isNew ? 'Peça cadastrada.' : 'Alterações salvas.',
+      { onProgress: setSaving },
+    );
+    setSaving(null);
+    if (!ok) return;
     leave(then === 'new' ? adminPath('produtos', 'nova') : adminPath('produtos'));
   }
 
-  function remove() {
+  async function remove() {
     setConfirmDelete(false);
     const current = useCatalog.getState().data;
     const index = current.products.findIndex((p) => p.id === draft.id);
     const removed = current.products[index];
     if (!removed) return leave(adminPath('produtos'));
     leaving.current = true;
-    const ok = save((d) => ({ ...d, products: d.products.filter((p) => p.id !== removed.id) }), {
+    setSaving('Excluindo…');
+    const ok = await save((d) => ({ ...d, products: d.products.filter((p) => p.id !== removed.id) }), {
       message: `“${removed.name}” foi excluída.`,
-      action: { label: 'Desfazer', onClick: () => save((d) => restoreProduct(d, removed, index), 'Peça restaurada.') },
+      action: { label: 'Desfazer', onClick: () => void save((d) => restoreProduct(d, removed, index), 'Peça restaurada.') },
     });
+    setSaving(null);
     if (ok) navigate(adminPath('produtos'));
     else leaving.current = false;
   }
@@ -171,8 +183,8 @@ export function ProductForm({ source }: { source: FormSource }) {
               <span className="text-danger">Excluir</span>
             </Button>
           )}
-          <Button type="submit" form={formId} className="min-w-40 flex-1 sm:flex-none">
-            Salvar
+          <Button type="submit" form={formId} className="min-w-40 flex-1 sm:flex-none" disabled={saving != null} aria-busy={saving != null}>
+            {saving ?? 'Salvar'}
           </Button>
         </div>
       }
@@ -187,7 +199,7 @@ export function ProductForm({ source }: { source: FormSource }) {
           submit('close');
         }}
       >
-        <PhotoManager draft={draft} savedImageIds={savedImageIds} update={update} selectedId={selectedPhoto} onSelect={setSelectedPhoto} errors={errors} />
+        <PhotoManager draft={draft} update={update} selectedId={selectedPhoto} onSelect={setSelectedPhoto} errors={errors} />
 
         <TextField
           label="Nome da peça"
@@ -350,15 +362,15 @@ export function ProductForm({ source }: { source: FormSource }) {
       </ConfirmDialog>
       <ConfirmDialog
         open={!!conflict}
-        title={conflict?.deleted ? 'Esta peça foi excluída em outra aba' : 'Esta peça mudou em outra aba'}
+        title={conflict?.deleted ? 'Esta peça foi excluída em outro aparelho' : 'Esta peça mudou em outro aparelho'}
         confirmLabel={conflict?.deleted ? 'Salvar como peça' : 'Salvar minha versão'}
         cancelLabel="Voltar ao formulário"
-        onConfirm={() => conflict && write(conflict.product, conflict.then)}
+        onConfirm={() => void (conflict && write(conflict.product, conflict.then))}
         onCancel={() => setConflict(null)}
       >
         {conflict?.deleted
           ? 'Se você salvar, a peça volta para o catálogo com as informações deste formulário.'
-          : 'Ela foi salva em outra aba depois que você abriu este formulário. Se salvar, as alterações feitas lá serão substituídas pelas daqui.'}
+          : 'Ela foi salva em outro aparelho ou aba depois que você abriu este formulário. Se salvar, as alterações feitas lá serão substituídas pelas daqui.'}
       </ConfirmDialog>
       <ConfirmDialog
         open={blocker.state === 'blocked'}

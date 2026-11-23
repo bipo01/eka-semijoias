@@ -1,6 +1,7 @@
 import { Suspense, useEffect } from 'react';
 import { Outlet, ScrollRestoration, useLocation } from 'react-router-dom';
 import { BagSheet } from '../bag/BagSheet';
+import { CatalogGate } from './CatalogGate';
 import { Toaster } from '../ui/Toaster';
 import { Footer } from './Footer';
 import { Header } from './Header';
@@ -30,9 +31,11 @@ export function Layout() {
       </a>
       <Header />
       <main id="conteudo" tabIndex={-1} className="min-h-[70dvh] outline-none">
-        <Suspense fallback={<PageFallback />}>
-          <Outlet />
-        </Suspense>
+        <CatalogGate>
+          <Suspense fallback={<PageFallback />}>
+            <Outlet />
+          </Suspense>
+        </CatalogGate>
       </main>
       <Footer />
       {!isProduct && <WhatsAppFab />}

@@ -1,11 +1,11 @@
 import { render } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { beforeAll, beforeEach, afterEach } from 'vitest';
-import { createSeed } from '../data/seed';
+import { afterEach, beforeAll, beforeEach, vi } from 'vitest';
+import { createCatalogSeed } from '../data/seed';
 import { useCatalog } from '../store/catalog';
 import { useUi } from '../store/ui';
+import { installMockApi, mockServer, resetMockServer } from '../test/mockApi';
 import AdminApp from './AdminApp';
-import { SESSION_KEY } from './lib/session';
 
 /** jsdom has no HTMLDialogElement.showModal; the open attribute is enough for these tests. */
 export function polyfillDialog() {
@@ -19,18 +19,20 @@ export function polyfillDialog() {
   });
 }
 
-/** Fresh seed catalog, no toasts and no admin session before each test. */
+/** Fresh seed catalog (as loaded from the server), a fresh mock API, no toasts and no admin session. */
 export function resetStores() {
   beforeEach(() => {
-    useCatalog.setState({ data: createSeed(), issue: 'none', externalVersion: 0 });
+    resetMockServer();
+    installMockApi();
+    useCatalog.setState({ data: createCatalogSeed(), version: 1, status: 'ready', offline: false, externalVersion: 0, leadsVersion: 0 });
     useUi.setState({ toasts: [], openDialogs: 0 });
-    sessionStorage.clear();
   });
-  afterEach(() => sessionStorage.clear());
+  afterEach(() => vi.unstubAllGlobals());
 }
 
+/** Starts the test with an open admin session on the (mock) server. */
 export function unlockSession() {
-  sessionStorage.setItem(SESSION_KEY, useCatalog.getState().data.settings.pinHash);
+  mockServer.authenticated = true;
 }
 
 export function renderAdmin(path = '/admin/produtos') {

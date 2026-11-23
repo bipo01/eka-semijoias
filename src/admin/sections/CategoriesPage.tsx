@@ -6,7 +6,7 @@ import { SelectField, TextField } from '../../components/ui/Field';
 import { Img } from '../../components/ui/Img';
 import { Sheet } from '../../components/ui/Sheet';
 import { categoryImage, sortedCategories } from '../../data/catalog';
-import type { CatalogState, Category } from '../../data/schema';
+import type { Catalog, Category } from '../../data/schema';
 import { productImageSources } from '../../lib/assets';
 import { newId } from '../../lib/id';
 import { slugify, uniqueSlug } from '../../lib/slug';
@@ -19,7 +19,7 @@ import { PhotoPicker } from './PhotoPicker';
 const withDenseOrder = (list: Category[]): Category[] => list.map((c, i) => ({ ...c, order: i }));
 
 /** Removes a category, moving its products to `targetId`. */
-export function deleteCategory(data: CatalogState, id: string, targetId: string | null, now: string): CatalogState {
+export function deleteCategory(data: Catalog, id: string, targetId: string | null, now: string): Catalog {
   return {
     ...data,
     categories: withDenseOrder(sortedCategories(data).filter((c) => c.id !== id)),
@@ -39,12 +39,14 @@ function CategoryEditor({ editing, onClose }: { editing: Editing; onClose: () =>
   const [slugEdited, setSlugEdited] = useState(!editing.isNew);
   const [imageId, setImageId] = useState(editing.category.imageId);
   const [errors, setErrors] = useState<{ name?: string; slug?: string }>({});
+  const [busy, setBusy] = useState(false);
   const taken = data.categories.filter((c) => c.id !== editing.category.id).map((c) => c.slug);
   const effectiveSlug = slugEdited ? slugify(slug) : uniqueSlug(name, taken);
   const own = data.products.filter((p) => p.categoryId === editing.category.id).flatMap((p) => p.images);
   const images = own.length ? own : data.products.flatMap((p) => p.images.slice(0, 1));
 
-  function submit() {
+  async function submit() {
+    if (busy) return;
     const next: typeof errors = {};
     if (!name.trim()) next.name = 'Informe o nome da categoria.';
     if (!effectiveSlug) next.slug = 'Informe o endereço (letras, números e hífens).';
@@ -52,7 +54,8 @@ function CategoryEditor({ editing, onClose }: { editing: Editing; onClose: () =>
     setErrors(next);
     if (Object.keys(next).length) return;
     const category: Category = { id: editing.category.id, slug: effectiveSlug, name: name.trim(), order: editing.category.order, ...(imageId ? { imageId } : {}) };
-    const ok = save(
+    setBusy(true);
+    const ok = await save(
       (d) => ({
         ...d,
         // Upsert: if another tab deleted it meanwhile, saving brings it back instead of silently doing nothing.
@@ -62,6 +65,7 @@ function CategoryEditor({ editing, onClose }: { editing: Editing; onClose: () =>
       }),
       editing.isNew ? 'Categoria criada.' : 'Categoria salva.',
     );
+    setBusy(false);
     if (ok) onClose();
   }
 
@@ -76,7 +80,9 @@ function CategoryEditor({ editing, onClose }: { editing: Editing; onClose: () =>
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={submit}>Salvar</Button>
+          <Button onClick={() => void submit()} disabled={busy} aria-busy={busy}>
+            {busy ? 'Salvando…' : 'Salvar'}
+          </Button>
         </div>
       }
     >
@@ -121,7 +127,7 @@ export function CategoriesPage() {
   const count = (id: string) => data.products.filter((p) => p.categoryId === id).length;
 
   function reorder(from: number, to: number) {
-    save((d) => ({ ...d, categories: withDenseOrder(move(sortedCategories(d), from, to)) }));
+    void save((d) => ({ ...d, categories: withDenseOrder(move(sortedCategories(d), from, to)) }));
   }
 
   function askDelete(c: Category) {
@@ -133,11 +139,11 @@ export function CategoriesPage() {
   const others = deleting ? categories.filter((c) => c.id !== deleting.id) : [];
   const blocked = deletingCount > 0 && others.length === 0;
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!deleting || blocked) return setDeleting(null);
     const moveTo = deletingCount ? target : null;
     const targetName = others.find((c) => c.id === moveTo)?.name;
-    const ok = save(
+    const ok = await save(
       (d) => deleteCategory(d, deleting.id, moveTo, new Date().toISOString()),
       deletingCount && targetName ? `Categoria excluída. ${deletingCount === 1 ? 'A peça foi' : `As ${deletingCount} peças foram`} para ${targetName}.` : 'Categoria excluída.',
     );
@@ -192,7 +198,7 @@ export function CategoriesPage() {
         title={blocked ? 'Não dá para excluir ainda' : `Excluir ${deleting?.name ?? 'categoria'}?`}
         confirmLabel={blocked ? 'Entendi' : 'Excluir'}
         tone={blocked ? 'primary' : 'danger'}
-        onConfirm={confirmDelete}
+        onConfirm={() => void confirmDelete()}
         onCancel={() => setDeleting(null)}
       >
         {blocked ? (

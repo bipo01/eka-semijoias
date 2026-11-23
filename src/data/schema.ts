@@ -13,25 +13,30 @@ export const FINISH_LABEL: Record<Finish, string> = {
 export const TAGS = ['novo', 'mais-vendido'] as const;
 export type Tag = (typeof TAGS)[number];
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const id = z.string().min(1).max(64);
 const shortText = (max: number) => z.string().max(max);
 const isoDate = z.string().max(40).refine((v) => !Number.isNaN(Date.parse(v)), 'Data inválida');
 const cents = z.number().int().nonnegative().max(100_000_000);
 
+/** Uploaded photo stored by the backend, addressed by the SHA-256 of its bytes. */
+export const MEDIA_KEY_PATTERN = /^media\/[a-f0-9]{64}\.(webp|jpg|png)$/;
+const ASSET_STEM_PATTERN = /^images\/[a-z0-9/_-]+$/;
+const DATA_URL_PATTERN = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
+
+export const isDataUrl = (src: string) => src.startsWith('data:');
+
 /**
- * Image sources are either a public asset stem shipped with the site
- * ("images/products/p01-brinco-gota-cristal" → -480/-960.webp) or a data URL
- * produced by the admin upload pipeline. Anything else is rejected on import.
+ * Image sources are a public asset stem shipped with the site
+ * ("images/products/p01-brinco-gota-cristal" → -480/-960.webp), an uploaded
+ * photo ("media/<sha256>.webp"), or — only in the admin before saving — a data
+ * URL produced by the photo pipeline. The server refuses data URLs.
  */
 export const imageSrc = z
   .string()
   .max(1_500_000)
-  .refine(
-    (v) => /^images\/[a-z0-9/_-]+$/.test(v) || /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(v),
-    'Imagem inválida',
-  );
+  .refine((v) => ASSET_STEM_PATTERN.test(v) || MEDIA_KEY_PATTERN.test(v) || DATA_URL_PATTERN.test(v), 'Imagem inválida');
 
 export const productImageSchema = z.object({
   id,
@@ -120,22 +125,25 @@ export const settingsSchema = z.object({
   showroom: shortText(200).optional(),
   openingHours: shortText(120).optional(),
   warrantyMonths: z.number().int().min(0).max(60),
-  pinHash: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
-export const catalogStateSchema = z.object({
+export const MAX_PRODUCTS = 500;
+export const MAX_CATEGORIES = 50;
+export const MAX_COLLECTIONS = 50;
+export const MAX_LEADS = 20_000;
+
+/** The public catalog, as served by GET /api/catalog (no leads, no credentials). */
+export const catalogSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
-  /**
-   * True once the catalog was edited in the admin (or imported). A stored catalog
-   * that was never customized (e.g. only a reseller lead was saved) is refreshed
-   * from the deployed seed on load, so new deploys reach returning visitors.
-   */
-  customized: z.boolean().optional(),
-  products: z.array(productSchema).max(500),
-  categories: z.array(categorySchema).max(50),
-  collections: z.array(collectionSchema).max(50),
-  leads: z.array(resellerLeadSchema).max(2000),
+  products: z.array(productSchema).max(MAX_PRODUCTS),
+  categories: z.array(categorySchema).max(MAX_CATEGORIES),
+  collections: z.array(collectionSchema).max(MAX_COLLECTIONS),
   settings: settingsSchema,
+});
+
+/** Full backup: the catalog plus reseller leads. */
+export const catalogStateSchema = catalogSchema.extend({
+  leads: z.array(resellerLeadSchema).max(MAX_LEADS),
 });
 
 export type ProductImage = z.infer<typeof productImageSchema>;
@@ -145,6 +153,7 @@ export type Category = z.infer<typeof categorySchema>;
 export type Collection = z.infer<typeof collectionSchema>;
 export type ResellerLead = z.infer<typeof resellerLeadSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
+export type Catalog = z.infer<typeof catalogSchema>;
 export type CatalogState = z.infer<typeof catalogStateSchema>;
 
 export const cartItemSchema = z.object({

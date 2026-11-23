@@ -3,6 +3,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createSeed } from '../../data/seed';
 import { useCatalog } from '../../store/catalog';
+import { mockServer } from '../../test/mockApi';
 import { polyfillDialog, renderAdmin, resetStores, unlockSession } from '../testUtils';
 import { buildProduct, draftFromProduct, duplicateDraft, emptyDraft } from './productDraft';
 import { restoreProduct } from './ProductForm';
@@ -98,7 +99,7 @@ describe('product form', { timeout: 20_000 }, () => {
     expect(useCatalog.getState().data.products.find((p) => p.id === 'prod-p02')!.promoPrice).toBeUndefined();
   });
 
-  it('keeps the form open with the edits when storage is full', async () => {
+  it('keeps the form open with the edits when the server refuses the save', async () => {
     unlockSession();
     const user = userEvent.setup();
     const { router } = renderAdmin('/admin/produtos/prod-p02');
@@ -107,16 +108,27 @@ describe('product form', { timeout: 20_000 }, () => {
     await user.clear(name);
     await user.type(name, 'Argola Cravejada Grande');
 
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
-    });
+    mockServer.failNext = { status: 409, code: 'conflict', message: 'Outro aparelho alterou “Argola Cravejada” agora há pouco.' };
     await user.click(within(dialog).getByRole('button', { name: 'Salvar' }));
 
-    const toastAlert = await screen.findByText(/Espaço do navegador cheio/);
+    const toastAlert = await screen.findByText(/Outro aparelho alterou/);
     expect(toastAlert.closest('[role="alert"]')).not.toBeNull();
     expect(router.state.location.pathname).toBe('/admin/produtos/prod-p02');
     expect(within(dialog).getByLabelText(/Nome da peça/)).toHaveValue('Argola Cravejada Grande');
     expect(useCatalog.getState().data.products.find((p) => p.id === 'prod-p02')!.name).toBe('Argola Cravejada');
+  });
+
+  it('keeps a position changed on another device when saving the form', async () => {
+    unlockSession();
+    const user = userEvent.setup();
+    renderAdmin('/admin/produtos/prod-p02');
+    const dialog = await screen.findByRole('dialog', { name: 'Editar peça' });
+    // Another device moves this product to the end of the list while the form is open.
+    useCatalog.setState((s) => ({ data: { ...s.data, products: s.data.products.map((p) => (p.id === 'prod-p02' ? { ...p, order: 999 } : p)) } }));
+    await user.type(within(dialog).getByLabelText(/Nome da peça/), ' Nova');
+    await user.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+    await screen.findByText('Alterações salvas.');
+    expect(mockServer.catalog.products.find((p) => p.id === 'prod-p02')!.order).toBe(999);
   });
 
   it('saves edits and returns to the list', async () => {

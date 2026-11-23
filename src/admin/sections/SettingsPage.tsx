@@ -5,12 +5,14 @@ import { TextArea, TextField } from '../../components/ui/Field';
 import { cx } from '../../components/ui/cx';
 import { business, pendingChecklist } from '../../config/business';
 import type { Settings } from '../../data/schema';
-import { sha256Hex } from '../../lib/hash';
+import { ApiError, errorMessage } from '../../lib/api';
+import { PIN_MAX, PIN_MIN, pinProblem } from '../../lib/pin';
 import { useCatalog } from '../../store/catalog';
+import { toast } from '../../store/ui';
 import { useAdminSession } from '../AdminContext';
 import { maskPhone, parseInstagram, parsePhone } from '../lib/contact';
 import { save } from '../lib/persist';
-import { PIN_PATTERN } from '../lib/session';
+import { changePin, signalSessionLost } from '../lib/session';
 
 /** Checklist items completed by a settings field; the others stay open. */
 // Instagram and warranty start with unconfirmed values from business.ts, so they only
@@ -46,7 +48,7 @@ const toForm = (s: Settings): StoreForm => ({
 });
 
 /** Validates the store form; returns the settings patch or the errors. */
-export function parseStoreForm(form: StoreForm): { ok: true; patch: Omit<Settings, 'pinHash'> } | { ok: false; errors: StoreErrors } {
+export function parseStoreForm(form: StoreForm): { ok: true; patch: Settings } | { ok: false; errors: StoreErrors } {
   const errors: StoreErrors = {};
   const whatsapp = parsePhone(form.whatsapp);
   if (whatsapp == null) errors.whatsapp = 'Informe DDD + número, por exemplo (67) 99999-9999.';
@@ -75,20 +77,23 @@ function StoreSettings() {
   const settings = useCatalog((s) => s.data.settings);
   const [form, setForm] = useState(() => toForm(settings));
   const [errors, setErrors] = useState<StoreErrors>({});
+  const [busy, setBusy] = useState(false);
   const field = (key: keyof StoreForm) => ({
     value: form[key],
     error: errors[key],
     onChange: (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value })),
   });
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     const result = parseStoreForm(form);
     if (!result.ok) return setErrors(result.errors);
     setErrors({});
-    // The PIN comes from the latest saved settings; everything else from this form.
-    const ok = save((d) => ({ ...d, settings: { ...result.patch, pinHash: d.settings.pinHash } }), 'Informações da loja salvas.');
-    if (ok) setForm(toForm({ ...result.patch, pinHash: '' }));
+    setBusy(true);
+    const ok = await save((d) => ({ ...d, settings: result.patch }), 'Informações da loja salvas.');
+    setBusy(false);
+    if (ok) setForm(toForm(result.patch));
   }
 
   return (
@@ -117,44 +122,68 @@ function StoreSettings() {
       <TextArea label="Showroom ou loja física" optional rows={2} maxLength={200} placeholder="Endereço" {...field('showroom')} />
       <TextField label="Horário de atendimento" optional maxLength={120} placeholder="Ex.: seg. a sex., 9h às 18h" {...field('openingHours')} />
       <TextField label="Garantia (meses)" inputMode="numeric" maxLength={2} hint="Use 0 para não mostrar garantia no site." {...field('warrantyMonths')} />
-      <Button type="submit" className="self-start">
-        Salvar informações
+      <Button type="submit" className="self-start" disabled={busy} aria-busy={busy}>
+        {busy ? 'Salvando…' : 'Salvar informações'}
       </Button>
     </form>
   );
 }
 
 function PinSettings() {
-  const { renew } = useAdminSession();
+  const { pinChanged } = useAdminSession();
+  const [current, setCurrent] = useState('');
   const [pin, setPin] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [errors, setErrors] = useState<{ pin?: string; confirm?: string }>({});
+  const [errors, setErrors] = useState<{ current?: string; pin?: string; confirm?: string }>({});
+  const [busy, setBusy] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     const next: typeof errors = {};
-    if (!PIN_PATTERN.test(pin)) next.pin = 'O PIN precisa ter de 4 a 6 números.';
+    if (!/^\d+$/.test(current)) next.current = 'Digite o PIN que você usa hoje.';
+    const problem = pinProblem(pin);
+    if (problem) next.pin = problem;
     else if (pin !== confirm) next.confirm = 'Os PINs não são iguais.';
     setErrors(next);
     if (Object.keys(next).length) return;
-    const pinHash = await sha256Hex(pin);
-    if (save((d) => ({ ...d, settings: { ...d.settings, pinHash } }), 'PIN alterado. Use o novo PIN na próxima entrada.')) {
-      renew(pinHash);
+    setBusy(true);
+    try {
+      const result = await changePin(current, pin);
+      pinChanged(result.pinLength);
+      setCurrent('');
       setPin('');
       setConfirm('');
+      toast('PIN alterado. Os outros aparelhos conectados ao painel precisarão do novo PIN.', { tone: 'success' });
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'unauthenticated') signalSessionLost();
+      else if (error instanceof ApiError && error.code === 'invalid_pin') setErrors({ current: error.message });
+      else if (error instanceof ApiError && error.status === 400) setErrors({ pin: error.message });
+      else toast(errorMessage(error), { tone: 'error' });
+    } finally {
+      setBusy(false);
     }
   }
 
-  const digitsOnly = (v: string) => v.replace(/\D/g, '').slice(0, 6);
+  const digitsOnly = (v: string) => v.replace(/\D/g, '').slice(0, PIN_MAX);
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-[12px] border border-line bg-white p-4">
       <h2 className="font-display text-title">Alterar PIN</h2>
+      <TextField
+        label="PIN atual"
+        type="password"
+        inputMode="numeric"
+        autoComplete="current-password"
+        value={current}
+        onChange={(e) => setCurrent(digitsOnly(e.target.value))}
+        error={errors.current}
+      />
       <TextField
         label="Novo PIN"
         type="password"
         inputMode="numeric"
         autoComplete="new-password"
-        hint="De 4 a 6 números."
+        hint={`De ${PIN_MIN} a ${PIN_MAX} números, sem sequências como 123456.`}
         value={pin}
         onChange={(e) => setPin(digitsOnly(e.target.value))}
         error={errors.pin}
@@ -168,8 +197,8 @@ function PinSettings() {
         onChange={(e) => setConfirm(digitsOnly(e.target.value))}
         error={errors.confirm}
       />
-      <Button type="submit" variant="secondary" className="self-start">
-        Alterar PIN
+      <Button type="submit" variant="secondary" className="self-start" disabled={busy} aria-busy={busy}>
+        {busy ? 'Alterando…' : 'Alterar PIN'}
       </Button>
     </form>
   );

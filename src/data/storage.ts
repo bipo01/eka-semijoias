@@ -1,16 +1,19 @@
-import { catalogStateSchema, SCHEMA_VERSION, type CatalogState } from './schema';
-import { createSeed } from './seed';
-
+/*
+ * Browser storage helpers for per-visitor data (cart, favorites, customer
+ * details) and the offline copy of the catalog. The catalog itself lives on
+ * the server (see src/store/catalog.ts and worker/).
+ */
 export const KEYS = {
-  catalog: 'eka:catalog:v1',
+  /** Last catalog received from the server, rendered instantly on return visits. */
+  catalogCache: 'eka:catalog-cache:v2',
   cart: 'eka:cart:v1',
   favorites: 'eka:favorites:v1',
   customer: 'eka:customer:v1',
 } as const;
 
-export const CORRUPT_PREFIX = 'eka:catalog:corrupt:';
-/** Practical localStorage budget used for the meter (most browsers allow ~5 MB per origin). */
-export const STORAGE_BUDGET_BYTES = 5 * 1024 * 1024;
+/** Where the catalog lived before the backend (edits made on one device only). */
+export const LEGACY_CATALOG_KEY = 'eka:catalog:v1';
+export const LEGACY_CORRUPT_PREFIX = 'eka:catalog:corrupt:';
 
 export type StorageFailure = 'quota' | 'unavailable' | 'unknown' | 'invalid' | 'outdated' | 'blocked';
 export type StorageResult = { ok: true } | { ok: false; reason: StorageFailure; message: string };
@@ -132,146 +135,15 @@ export function storageUsage(): number {
   return total;
 }
 
-// ---------------------------------------------------------------------------
-// Catalog: versioned load, migrations, corrupt-data quarantine.
-// ---------------------------------------------------------------------------
-
-export type Migration = (old: Record<string, unknown>) => Record<string, unknown>;
-
-/**
- * migrations[n] upgrades a payload from schemaVersion n to n + 1.
- * Version 1 is the first released format, so there is nothing to migrate yet.
- */
-export const MIGRATIONS: Record<number, Migration> = {};
-
-export type MigrationResult =
-  | { ok: true; state: CatalogState; migratedFrom: number | null }
-  | { ok: false; error: string; newer?: boolean };
-
-export function migrateCatalog(input: unknown, migrations: Record<number, Migration> = MIGRATIONS): MigrationResult {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    return { ok: false, error: 'O arquivo não contém um catálogo.' };
-  }
-  let data = input as Record<string, unknown>;
-  const startVersion = typeof data.schemaVersion === 'number' ? data.schemaVersion : NaN;
-  if (!Number.isInteger(startVersion)) return { ok: false, error: 'O arquivo não informa a versão do catálogo.' };
-  if (startVersion > SCHEMA_VERSION) {
-    return { ok: false, error: 'Este backup foi feito por uma versão mais nova do site.', newer: true };
-  }
-  let version = startVersion;
-  while (version < SCHEMA_VERSION) {
-    const step = migrations[version];
-    if (!step) return { ok: false, error: `Não há como atualizar dados da versão ${version}.` };
-    try {
-      data = { ...step(data), schemaVersion: version + 1 };
-    } catch {
-      return { ok: false, error: `Falha ao atualizar dados da versão ${version}.` };
-    }
-    version++;
-  }
-  const parsed = catalogStateSchema.safeParse(data);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const where = issue?.path.join('.') || 'catálogo';
-    return { ok: false, error: `Dados inválidos em "${where}": ${issue?.message ?? 'formato inesperado'}.` };
-  }
-  const integrity = checkIntegrity(parsed.data);
-  if (integrity) return { ok: false, error: integrity };
-  return { ok: true, state: parsed.data, migratedFrom: startVersion === SCHEMA_VERSION ? null : startVersion };
-}
-
-/** Cross-reference checks zod cannot express (unique slugs, existing categories, image references). */
-export function checkIntegrity(state: CatalogState): string | null {
-  const duplicate = (values: string[]) => values.find((v, i) => values.indexOf(v) !== i);
-  const dupCategory = duplicate(state.categories.map((c) => c.id)) ?? duplicate(state.categories.map((c) => c.slug));
-  if (dupCategory) return `Categoria repetida: ${dupCategory}.`;
-  const dupCollection = duplicate(state.collections.map((c) => c.id)) ?? duplicate(state.collections.map((c) => c.slug));
-  if (dupCollection) return `Coleção repetida: ${dupCollection}.`;
-  if (duplicate(state.leads.map((l) => l.id))) return 'Cadastro de revendedora repetido.';
-  const categoryIds = new Set(state.categories.map((c) => c.id));
-  const slugs = new Set<string>();
-  const ids = new Set<string>();
-  for (const p of state.products) {
-    if (ids.has(p.id)) return `Produto repetido: ${p.name}.`;
-    ids.add(p.id);
-    if (slugs.has(p.slug)) return `Endereço de produto repetido: ${p.slug}.`;
-    slugs.add(p.slug);
-    if (!categoryIds.has(p.categoryId)) return `A peça "${p.name}" aponta para uma categoria que não existe.`;
-    const imageIds = new Set(p.images.map((i) => i.id));
-    if (imageIds.size !== p.images.length) return `A peça "${p.name}" tem fotos repetidas.`;
-    if (duplicate(p.variants.map((v) => v.id))) return `A peça "${p.name}" tem acabamentos repetidos.`;
-    for (const v of p.variants) {
-      if (v.imageIds.some((imgId) => !imageIds.has(imgId))) return `A peça "${p.name}" tem foto de acabamento inválida.`;
-    }
-  }
-  return null;
-}
-
-/**
- * - none / seeded: normal operation (seeded = nothing stored yet).
- * - corrupt-recovered: unreadable data was copied to `corruptKey` and the seed is in use.
- * - unavailable: storage cannot be written (private mode, blocked).
- * - outdated: stored data comes from a newer version of the site; this tab must not write.
- * - corrupt-unsaved: unreadable data could not be copied aside (no space); writes are
- *   blocked so the only copy is not overwritten until it is downloaded.
- */
-export type CatalogLoadIssue = 'none' | 'seeded' | 'corrupt-recovered' | 'unavailable' | 'outdated' | 'corrupt-unsaved';
-
-export interface CatalogLoad {
-  state: CatalogState;
-  issue: CatalogLoadIssue;
-  corruptKey?: string;
-}
-
-export function loadCatalog(now: () => number = Date.now): CatalogLoad {
-  if (!isStorageAvailable()) return { state: createSeed(), issue: 'unavailable' };
-  const raw = readRaw(KEYS.catalog);
-  // Nothing is written until the catalog is actually edited, so every deploy's seed reaches visitors.
-  if (raw == null) return { state: createSeed(), issue: 'seeded' };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    parsed = undefined;
-  }
-  const result = parsed === undefined ? null : migrateCatalog(parsed);
-  if (result?.ok) {
-    if (!result.state.customized) return { state: { ...createSeed(), leads: result.state.leads }, issue: 'none' };
-    if (result.migratedFrom != null) writeJSON(KEYS.catalog, result.state);
-    return { state: result.state, issue: 'none' };
-  }
-  if (result && !result.ok && result.newer) return { state: createSeed(), issue: 'outdated' };
-  // Quarantine the unreadable payload so it can be recovered, then start over from the seed.
-  const corruptKey = `${CORRUPT_PREFIX}${now()}`;
-  if (!writeRaw(corruptKey, raw).ok) return { state: createSeed(), issue: 'corrupt-unsaved' };
-  removeKey(KEYS.catalog);
-  return { state: createSeed(), issue: 'corrupt-recovered', corruptKey };
-}
-
-/** Validates a catalog before it is written, so nothing saved can fail to load later. */
-export function validateCatalog(state: CatalogState): string | null {
-  const parsed = catalogStateSchema.safeParse(state);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return `${issue?.message ?? 'formato inesperado'} (${issue?.path.join('.') || 'catálogo'})`;
-  }
-  return checkIntegrity(parsed.data);
-}
-
-export function saveCatalog(state: CatalogState): StorageResult {
-  const problem = validateCatalog(state);
-  if (problem) return failure('invalid', `Não foi possível salvar: ${problem}`);
-  return writeJSON(KEYS.catalog, state);
-}
-
-export function listCorruptKeys(): string[] {
+/** Raw payloads of the pre-backend localStorage catalog on this device, if any. */
+export function listLegacyCatalogKeys(): string[] {
   const store = getStore();
   if (!store) return [];
   const keys: string[] = [];
   try {
     for (let i = 0; i < store.length; i++) {
       const key = store.key(i);
-      if (key?.startsWith(CORRUPT_PREFIX)) keys.push(key);
+      if (key === LEGACY_CATALOG_KEY || key?.startsWith(LEGACY_CORRUPT_PREFIX)) keys.push(key);
     }
   } catch {
     return keys;

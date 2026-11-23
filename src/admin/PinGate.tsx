@@ -1,31 +1,38 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Delete } from 'lucide-react';
+import { ArrowLeft, Delete } from 'lucide-react';
 import { cx } from '../components/ui/cx';
+import { ApiError, errorMessage } from '../lib/api';
 import { asset } from '../lib/assets';
-import { DEFAULT_PIN_HASH } from '../lib/hash';
-import { verifyPin } from './lib/session';
+import { login } from './lib/session';
 
-const MIN = 4;
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const keyClass =
   'flex min-h-14 items-center justify-center rounded-[12px] bg-champagne/70 font-display text-[1.75rem] text-ink lining-nums transition-colors duration-[160ms] hover:bg-champagne active:bg-line disabled:opacity-50';
 
 interface PinGateProps {
-  pinHash: string;
-  onUnlock: () => void;
+  /** Digits of the current PIN (from the server), so the keypad submits as soon as it is complete. */
+  pinLength: number;
+  onUnlock: (pinLength: number) => void;
+  /** Shown inside a dialog over the panel (session expired mid-edit): no page landmark, a different hint. */
+  embedded?: boolean;
 }
 
-/**
- * PIN keypad. The default PIN has 4 digits and is checked as soon as it is
- * complete; a custom PIN can have 4–6 digits, so each length from 4 is tried
- * silently and a wrong PIN is reported at 6 digits or on "Entrar".
- */
-export function PinGate({ pinHash, onUnlock }: PinGateProps) {
-  const maxLength = pinHash === DEFAULT_PIN_HASH ? MIN : 6;
+function failureMessage(error: unknown): string {
+  if (error instanceof ApiError && error.code === 'invalid_pin') {
+    const left = (error.details as { attemptsLeft?: number } | undefined)?.attemptsLeft;
+    if (left === 0) return error.message;
+    return left != null && left <= 2 ? `PIN incorreto. ${left === 1 ? 'Resta 1 tentativa' : `Restam ${left} tentativas`} antes de uma pausa.` : 'PIN incorreto. Tente de novo.';
+  }
+  return errorMessage(error);
+}
+
+/** PIN keypad. The PIN is checked by the server once all its digits are typed. */
+export function PinGate({ pinLength, onUnlock, embedded = false }: PinGateProps) {
+  const maxLength = pinLength;
   const [pin, setPin] = useState('');
-  const [error, setError] = useState(false);
-  const attempt = useRef(0);
+  const [error, setError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
   const boxesRef = useRef<HTMLDivElement>(null);
 
   function shake() {
@@ -37,33 +44,34 @@ export function PinGate({ pinHash, onUnlock }: PinGateProps) {
     );
   }
 
-  async function check(candidate: string, explicit: boolean) {
-    const id = ++attempt.current;
-    const ok = await verifyPin(candidate, pinHash);
-    if (ok) return onUnlock();
-    if (id !== attempt.current) return; // a newer digit superseded this check
-    if (explicit || candidate.length >= maxLength) {
-      setError(true);
+  async function check(candidate: string) {
+    setChecking(true);
+    try {
+      const status = await login(candidate);
+      onUnlock(status.pinLength);
+    } catch (e) {
+      setChecking(false);
+      setError(failureMessage(e));
       setPin('');
       shake();
     }
   }
 
   function press(digit: string) {
-    if (pin.length >= maxLength) return;
+    if (checking || pin.length >= maxLength) return;
     const next = pin + digit;
     setPin(next);
-    setError(false);
-    if (next.length >= MIN) void check(next, false);
+    setError(null);
+    if (next.length === maxLength) void check(next);
   }
 
   function erase() {
-    attempt.current++;
+    if (checking) return;
     setPin((p) => p.slice(0, -1));
   }
 
   function submit() {
-    if (pin.length >= MIN) void check(pin, true);
+    if (!checking && pin.length === maxLength) void check(pin);
   }
 
   // Physical keyboard: digits, Backspace and Enter.
@@ -84,23 +92,24 @@ export function PinGate({ pinHash, onUnlock }: PinGateProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const boxes = maxLength === MIN ? MIN : Math.min(maxLength, Math.max(MIN, pin.length + 1));
+  const boxes = maxLength;
+  const Root = embedded ? 'div' : 'main';
 
   return (
-    <main className="flex min-h-dvh flex-col items-center px-5 pt-[max(32px,env(safe-area-inset-top))] pb-[calc(24px+var(--safe-bottom))]">
+    <Root className={cx('flex flex-col items-center px-5', embedded ? 'py-4' : 'min-h-dvh pt-[max(32px,env(safe-area-inset-top))] pb-[calc(24px+var(--safe-bottom))]')}>
       <div className="flex w-full max-w-[360px] flex-1 flex-col items-center">
         <img src={asset('brand/eka-emblem-rosegold-240.webp')} alt="" width={120} height={120} className="mt-4 size-[120px]" />
         <h1 className="mt-5 text-center font-display text-display-l">Painel ÉKA</h1>
         <span aria-hidden="true" className="mt-3 h-px w-12 bg-rose" />
-        <p className="mt-4 text-center text-ink-muted">Digite seu PIN para entrar</p>
+        <p className="mt-4 text-center text-ink-muted">{embedded ? 'Sua sessão terminou. Digite o PIN para continuar de onde parou.' : 'Digite seu PIN para entrar'}</p>
 
-        <div ref={boxesRef} aria-hidden="true" className="mt-6 flex gap-3">
+        <div ref={boxesRef} aria-hidden="true" className="mt-6 flex w-full justify-center gap-2">
           {Array.from({ length: boxes }, (_, i) => (
             <span
               key={i}
               className={cx(
-                'flex size-14 items-center justify-center rounded-[12px] border bg-white transition-colors duration-[160ms]',
-                error ? 'border-danger' : i === pin.length ? 'border-copper' : 'border-line',
+                'flex aspect-square max-w-14 min-w-0 flex-1 items-center justify-center rounded-[12px] border bg-white transition-colors duration-[160ms]',
+                error ? 'border-danger' : checking ? 'border-line opacity-60' : i === pin.length ? 'border-copper' : 'border-line',
               )}
             >
               {i < pin.length && <span className="size-3 rounded-full bg-ink" />}
@@ -111,34 +120,33 @@ export function PinGate({ pinHash, onUnlock }: PinGateProps) {
           {pin.length ? `${pin.length} ${pin.length === 1 ? 'dígito digitado' : 'dígitos digitados'}` : ''}
         </p>
         <p role="alert" className="mt-3 min-h-6 text-center text-sm text-danger">
-          {error ? 'PIN incorreto. Tente de novo.' : ''}
+          {error ?? ''}
+        </p>
+        <p className="sr-only" aria-live="polite">
+          {checking ? 'Verificando o PIN' : ''}
         </p>
 
         <div role="group" aria-label="Teclado do PIN" className="mt-4 grid w-full grid-cols-3 gap-2.5">
           {KEYS.map((k) => (
-            <button key={k} type="button" className={keyClass} onClick={() => press(k)}>
+            <button key={k} type="button" className={keyClass} disabled={checking} onClick={() => press(k)}>
               {k}
             </button>
           ))}
-          {maxLength > MIN ? (
-            <button type="button" className={keyClass} disabled={pin.length < MIN} onClick={submit} aria-label="Entrar">
-              <ArrowRight size={24} strokeWidth={1.5} />
-            </button>
-          ) : (
-            <span />
-          )}
-          <button type="button" className={keyClass} onClick={() => press('0')}>
+          <span />
+          <button type="button" className={keyClass} disabled={checking} onClick={() => press('0')}>
             0
           </button>
-          <button type="button" className={keyClass} onClick={erase} disabled={!pin.length} aria-label="Apagar dígito">
+          <button type="button" className={keyClass} onClick={erase} disabled={checking || !pin.length} aria-label="Apagar dígito">
             <Delete size={24} strokeWidth={1.5} />
           </button>
         </div>
 
-        <Link to="/" className="link-underline mt-auto inline-flex min-h-11 items-center gap-1.5 pt-8 text-sm text-ink-muted hover:text-copper">
+        {!embedded && (
+          <Link to="/" className="link-underline mt-auto inline-flex min-h-11 items-center gap-1.5 pt-8 text-sm text-ink-muted hover:text-copper">
           <ArrowLeft size={16} strokeWidth={1.5} /> Voltar ao site
         </Link>
+        )}
       </div>
-    </main>
+    </Root>
   );
 }

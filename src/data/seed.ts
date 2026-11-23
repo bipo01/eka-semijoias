@@ -1,8 +1,8 @@
 import { business } from '../config/business';
-import { DEFAULT_PIN_HASH } from '../lib/hash';
 import {
   FINISH_LABEL,
   SCHEMA_VERSION,
+  type Catalog,
   type CatalogState,
   type Category,
   type Collection,
@@ -460,6 +460,13 @@ function buildProduct(item: SeedProduct, index: number): Product {
   };
 }
 
+/** The initial public catalog (what the server stores on its first run). */
+export function createCatalogSeed(): Catalog {
+  const { leads: _leads, ...catalog } = createSeed();
+  return catalog;
+}
+
+/** The initial catalog as a backup-shaped state (no leads yet). */
 export function createSeed(): CatalogState {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -475,7 +482,6 @@ export function createSeed(): CatalogState {
       showroom: business.showroom ?? '',
       openingHours: business.openingHours ?? '',
       warrantyMonths: business.warrantyMonths ?? 0,
-      pinHash: DEFAULT_PIN_HASH,
     },
   };
 }

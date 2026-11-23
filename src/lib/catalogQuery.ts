@@ -1,4 +1,4 @@
-import { FINISHES, type CatalogState, type Finish, type Product } from '../data/schema';
+import { FINISHES, type Catalog, type Finish, type Product } from '../data/schema';
 import { byOrder, effectivePrice, isOnSale, isPurchasable } from '../data/catalog';
 import { matches } from './search';
 
@@ -68,7 +68,7 @@ export function filtersToParams(f: CatalogFilters): URLSearchParams {
   return p;
 }
 
-export function filterProducts(data: CatalogState, categoryId: string | null, f: CatalogFilters): Product[] {
+export function filterProducts(data: Catalog, categoryId: string | null, f: CatalogFilters): Product[] {
   const catName = new Map(data.categories.map((c) => [c.id, c.name]));
   const list = data.products.filter((p) => {
     if (categoryId && p.categoryId !== categoryId) return false;

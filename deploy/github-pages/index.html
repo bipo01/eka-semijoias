@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>ÉKA Semijoias</title>
+    <link rel="canonical" href="__SITE_URL__" />
+    <style>
+      :root { color-scheme: light; }
+      body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #fbf8f5; color: #2b211d; font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      main { max-width: 26rem; padding: 2rem 1.25rem; text-align: center; }
+      h1 { font: 500 1.75rem/1.2 Georgia, serif; margin: 0 0 0.75rem; }
+      p { margin: 0 0 1rem; color: #5e504a; }
+      a, button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 1.5rem; border-radius: 999px; font: inherit; font-weight: 500; cursor: pointer; text-decoration: none; }
+      .primary { background: #8a5a45; color: #fff; border: 0; }
+      .secondary { background: transparent; color: #8a5a45; border: 1px solid #8a5a45; margin-top: 0.75rem; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>A ÉKA mudou de endereço</h1>
+      <p id="moving">Levando você para o site…</p>
+      <div id="legacy" hidden>
+        <p>Este aparelho guarda alterações do catálogo feitas no endereço antigo. Baixe uma cópia antes de continuar, para enviá-la ao novo painel em Backup.</p>
+        <button id="download" class="primary" type="button">Baixar cópia do catálogo</button><br />
+        <a id="continue" class="secondary" href="__SITE_URL__">Continuar para o site</a>
+      </div>
+      <noscript><a class="primary" href="__SITE_URL__">Ir para o site da ÉKA</a></noscript>
+    </main>
+    <script>
+      (function () {
+        var target = '__SITE_URL__';
+        var destination = target.replace(/\/$/, '') + '/' + (location.hash || '');
+        var raw = null;
+        try {
+          raw = localStorage.getItem('eka:catalog:v1');
+        } catch (e) {
+          raw = null;
+        }
+        var customized = false;
+        try {
+          customized = !!(raw && JSON.parse(raw).customized);
+        } catch (e) {
+          customized = !!raw; // unreadable data: let the owner keep a copy anyway
+        }
+        if (!customized) {
+          location.replace(destination);
+          return;
+        }
+        document.getElementById('moving').hidden = true;
+        document.getElementById('legacy').hidden = false;
+        document.getElementById('continue').href = destination;
+        document.getElementById('download').addEventListener('click', function () {
+          var blob = new Blob([raw], { type: 'application/json' });
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'eka-catalogo-endereco-antigo.json';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(function () {
+            URL.revokeObjectURL(a.href);
+            a.remove();
+          }, 1000);
+        });
+      })();
+    </script>
+  </body>
+</html>

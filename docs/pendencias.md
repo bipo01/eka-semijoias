@@ -1,6 +1,6 @@
 # Pendências — ÉKA Semijoias
 
-Funcionalidades pedidas para depois da versão atual. As três dependem do backend (Cloudflare Workers + D1 + R2), que substitui o localStorage e faz o painel publicar para todas as clientes. Registrado em 19/11/2026.
+Funcionalidades pedidas para depois da versão atual. Registrado em 19/11/2026. **O backend já existe** desde 23/11/2026 (Cloudflare Workers + D1 + Durable Objects, com tempo real por WebSocket; veja `docs/backend/PLAN.md` e `AGENTS.md`): pedidos, estoque e Pix entram como novas tabelas e rotas nele.
 
 ## 1. Pix com os dados certos (QR Code e copia e cola)
 
@@ -49,7 +49,7 @@ Funcionalidades pedidas para depois da versão atual. As três dependem do backe
 
 ## Ordem sugerida
 
-1. Backend (pré-requisito de tudo).
+1. ~~Backend (pré-requisito de tudo).~~ Feito em 23/11/2026.
 2. Registro de pedidos + relatório de vendas.
 3. Controle de estoque (usa a confirmação de pedidos).
 4. Pix estático; depois, se fizer sentido, Pix dinâmico.
@@ -59,7 +59,7 @@ Funcionalidades pedidas para depois da versão atual. As três dependem do backe
 Para o painel atualizar sozinho quando chega um pedido novo, ou o estoque mudar na tela da cliente sem recarregar, há três caminhos na Cloudflare:
 
 - **Atualização periódica** (o painel consulta a cada 15–30 segundos): o mais simples e suficiente para o volume atual.
-- **WebSocket nativo com Durable Objects:** é a forma de tempo real da própria Cloudflare.
+- **WebSocket nativo com Durable Objects:** é a forma de tempo real da própria Cloudflare. **Implementado** (`worker/live.ts`): o catálogo já atualiza ao vivo nas telas abertas.
 - **Socket.IO:** o servidor do Socket.IO precisa de um processo Node.js rodando sem parar, e os Workers não funcionam assim. Na Cloudflare, o equivalente é o WebSocket com Durable Objects, citado acima.
 
 Recomendação: começar com a atualização periódica e usar WebSocket com Durable Objects só se o volume pedir.

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { catalogStateSchema } from './schema';
 import { createSeed } from './seed';
-import { checkIntegrity } from './storage';
+import { checkIntegrity } from './integrity';
 import { isOnSale, isPurchasable } from './catalog';
 
 describe('seed catalog', () => {

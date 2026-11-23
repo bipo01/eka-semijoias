@@ -6,11 +6,11 @@ import { WhatsAppIcon } from '../../components/ui/Icons';
 import type { ResellerLead } from '../../data/schema';
 import { toCSV } from '../../lib/csv';
 import { whatsappUrl } from '../../lib/whatsapp';
-import { useCatalog } from '../../store/catalog';
+import { toast } from '../../store/ui';
 import { EmptyState } from '../FormBits';
 import { formatDateTime, formatPhone, whatsappDigits } from '../lib/contact';
 import { downloadText, fileDate } from '../lib/download';
-import { save } from '../lib/persist';
+import { useLeads } from '../lib/leads';
 
 export const newestFirst = (leads: ResellerLead[]) => [...leads].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
@@ -36,13 +36,34 @@ const greeting = (lead: ResellerLead) =>
   `Olá, ${lead.name.trim().split(/\s+/)[0] || 'tudo bem'}! Aqui é da ÉKA Semijoias. Recebemos seu cadastro para revender nossas peças e queremos conversar com você.`;
 
 export function LeadsPage() {
-  const leads = useCatalog((s) => s.data.leads);
+  const { state, reload, remove } = useLeads();
   const [deleting, setDeleting] = useState<ResellerLead | null>(null);
+  const [busy, setBusy] = useState(false);
+  const leads = state.status === 'ready' ? state.leads : [];
   const sorted = newestFirst(leads);
 
-  function confirmDelete() {
-    if (!deleting) return;
-    if (save((d) => ({ ...d, leads: d.leads.filter((l) => l.id !== deleting.id) }), 'Cadastro excluído.')) setDeleting(null);
+  async function confirmDelete() {
+    if (!deleting || busy) return;
+    setBusy(true);
+    const problem = await remove(deleting.id);
+    setBusy(false);
+    if (problem) return toast(problem, { tone: 'error' });
+    toast('Cadastro excluído.', { tone: 'success' });
+    setDeleting(null);
+  }
+
+  if (state.status === 'loading') {
+    return <p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando cadastros…</p>;
+  }
+  if (state.status === 'error') {
+    return (
+      <div role="alert" className="flex flex-col items-center gap-3 py-10 text-center">
+        <p className="text-ink-muted">{state.message}</p>
+        <Button variant="secondary" onClick={reload}>
+          Tentar de novo
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -100,11 +121,11 @@ export function LeadsPage() {
         </ul>
       ) : (
         <EmptyState>
-          Nenhum pré-cadastro neste aparelho. Os pré-cadastros do site chegam pelo WhatsApp, já com todos os dados; aqui aparecem os feitos neste navegador.
+          Nenhum pré-cadastro ainda. Quando alguém preencher o formulário de revendedoras, o cadastro aparece aqui na hora.
         </EmptyState>
       )}
 
-      <ConfirmDialog open={!!deleting} title="Excluir este cadastro?" confirmLabel="Excluir" tone="danger" onConfirm={confirmDelete} onCancel={() => setDeleting(null)}>
+      <ConfirmDialog open={!!deleting} title="Excluir este cadastro?" confirmLabel="Excluir" tone="danger" onConfirm={() => void confirmDelete()} onCancel={() => setDeleting(null)}>
         O cadastro de {deleting?.name || 'revendedora'} sai da lista. Se precisar dele depois, exporte o CSV antes.
       </ConfirmDialog>
     </>

@@ -6,6 +6,10 @@ import '@fontsource/jost/latin-400.css';
 import '@fontsource/jost/latin-500.css';
 import './styles/base.css';
 import { App } from './App';
+import { startCatalog } from './store/catalog';
+
+// Start fetching the catalog (and the live connection) before the first render.
+startCatalog();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

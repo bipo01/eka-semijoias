@@ -4,28 +4,17 @@ import { Button } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/Field';
 import { Img } from '../../components/ui/Img';
 import { cx } from '../../components/ui/cx';
-import type { ProductImage } from '../../data/schema';
-import { STORAGE_BUDGET_BYTES } from '../../data/storage';
 import { productImageSources } from '../../lib/assets';
-import { formatBytes } from '../../lib/format';
 import { newId } from '../../lib/id';
 import { processImage } from '../../lib/image';
 import { toast } from '../../store/ui';
-import { stringCost, useStorageUsage } from '../lib/persist';
 import { move } from '../lib/reorder';
 import { altFor, imageFinish, type DraftErrors, type ProductDraft } from './productDraft';
 
 const MAX_PHOTOS = 20;
-/** Typical storage cost of one uploaded photo + thumbnail (base64, UTF-16), for the "about N photos" hint. */
-// A 180 KB photo plus its thumb measures ~560 KB in the meter (data URL as UTF-16).
-const TYPICAL_PHOTO_COST = 560 * 1024;
-
-export const photoCost = (img: ProductImage) => (img.src.startsWith('data:') ? stringCost(img.src) + stringCost(img.thumb) : 0);
 
 interface PhotoManagerProps {
   draft: ProductDraft;
-  /** Ids of photos already saved in the catalog (their cost is already counted). */
-  savedImageIds: Set<string>;
   update: (fn: (d: ProductDraft) => ProductDraft) => void;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
@@ -48,11 +37,8 @@ function PickerLabel({ capture, onFiles, children, className }: { capture?: bool
   );
 }
 
-export function PhotoManager({ draft, savedImageIds, update, selectedId, onSelect, errors }: PhotoManagerProps) {
+export function PhotoManager({ draft, update, selectedId, onSelect, errors }: PhotoManagerProps) {
   const [processing, setProcessing] = useState(0);
-  const used = useStorageUsage();
-  const pending = draft.images.filter((img) => !savedImageIds.has(img.id)).reduce((sum, img) => sum + photoCost(img), 0);
-  const free = Math.max(0, STORAGE_BUDGET_BYTES - used - pending);
   const selectedIndex = draft.images.findIndex((img) => img.id === selectedId);
   const selected = draft.images[selectedIndex];
 
@@ -156,12 +142,9 @@ export function PhotoManager({ draft, savedImageIds, update, selectedId, onSelec
         <PickerLabel capture onFiles={addFiles} className="inline-flex min-h-11 items-center gap-2 rounded-full px-1 text-sm font-medium text-copper">
           <Camera size={18} strokeWidth={1.5} aria-hidden="true" /> Tirar foto agora
         </PickerLabel>
-        <p className="text-sm text-ink-muted">
-          Espaço livre: {formatBytes(free)} (cerca de {Math.floor(free / TYPICAL_PHOTO_COST)} fotos)
-        </p>
       </div>
       {draft.images.length === 0 && !processing && (
-        <p className="text-sm text-ink-muted">Envie fotos em JPG ou PNG. A primeira foto é a principal. As fotos são reduzidas automaticamente para caber no espaço do navegador.</p>
+        <p className="text-sm text-ink-muted">Envie fotos em JPG ou PNG. A primeira foto é a principal. As fotos são otimizadas automaticamente e enviadas ao salvar.</p>
       )}
 
       {selected && (
@@ -199,7 +182,7 @@ export function PhotoManager({ draft, savedImageIds, update, selectedId, onSelec
               </span>
             </Button>
           </div>
-          <p className="text-sm text-ink-muted">{photoCost(selected) ? `Esta foto ocupa ${formatBytes(photoCost(selected))}.` : 'Foto incluída no site (não ocupa espaço do navegador).'}</p>
+          {selected.src.startsWith('data:') && <p className="text-sm text-ink-muted">Foto nova: vai ser enviada quando você salvar a peça.</p>}
         </div>
       )}
     </div>

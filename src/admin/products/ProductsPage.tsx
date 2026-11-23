@@ -8,7 +8,6 @@ import { matches } from '../../lib/search';
 import { useCatalog } from '../../store/catalog';
 import { save } from '../lib/persist';
 import { reorderSubset } from '../lib/reorder';
-import { StorageMeter } from '../StorageMeter';
 import { ProductList } from './ProductList';
 
 export function ProductsPage() {
@@ -28,7 +27,7 @@ export function ProductsPage() {
   );
 
   function reorder(idsInNewOrder: string[]) {
-    save((d) => {
+    void save((d) => {
       const orders = reorderSubset(d.products, idsInNewOrder);
       return { ...d, products: d.products.map((p) => ({ ...p, order: orders.get(p.id) ?? p.order })) };
     });
@@ -55,7 +54,6 @@ export function ProductsPage() {
             </Chip>
           ))}
         </div>
-        <StorageMeter />
       </div>
 
       <p className="mt-4 mb-2 text-sm text-ink-muted" aria-live="polite">

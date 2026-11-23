@@ -1,36 +1,50 @@
 # ÉKA Semijoias — project guide
 
-The real website of **ÉKA Semijoias** (frontend-only, pre-production: GitHub Pages + stand-in photos) (Brazilian semi-fine jewelry, owner Érika). Sales close over WhatsApp; the catalog is managed by Érika from her phone and persisted in localStorage. No backend.
+The real website of **ÉKA Semijoias** (Brazilian semi-fine jewelry, owner Érika; pre-production with stand-in photos). Sales close over WhatsApp; the catalog is managed by Érika from her phone in the admin at `/#/admin` and stored on the server, so every edit reaches every visitor (live, over WebSocket).
 
-Live: https://bipo01.github.io/eka-semijoias/ (deployed from `main` by `.github/workflows/deploy.yml`).
+Live: https://eka-semijoias.eka-semijoias.workers.dev/ (Cloudflare account subdomain `eka-semijoias`; D1 database `eka-semijoias`, region ENAM).
+
+Hosting: **one Cloudflare Worker** (`wrangler.jsonc`) serves the built SPA (Workers Static Assets), the JSON API (`/api/*`), uploaded photos (`/media/*`) and the live WebSocket (`/api/live`). Data in **D1**; live fan-out in a **Durable Object**; photos in **R2** when the `MEDIA` binding exists, otherwise in D1 (current state: R2 is not enabled on the account, so photos are in D1; to switch, enable R2 in the dashboard, `npx wrangler r2 bucket create eka-semijoias-media`, add `"r2_buckets": [{ "binding": "MEDIA", "bucket_name": "eka-semijoias-media" }]` to `wrangler.jsonc` and redeploy; new uploads go to R2 and existing ones keep being served from D1). The old GitHub Pages address (https://bipo01.github.io/eka-semijoias/) only forwards to the Cloudflare site. Backend design and decisions: `docs/backend/PLAN.md` (prompts: `docs/backend/PLANNING_PROMPT.md`, `docs/backend/IMPLEMENTATION_PROMPT.md`).
 
 ## Status
-- Built 2026-11-19 from `docs/PLAN.md` (the spec) and `docs/IMPLEMENTATION_PROMPT.md` (build brief). Mockups: `docs/mockups/`. Open business questions: `docs/PERGUNTAS_ERIKA.md`. Planned features (Pix, stock, sales report, real time): `docs/pendencias.md`. QA screenshots: `docs/qa/`.
+- Built 2026-11-19 from `docs/PLAN.md` (the spec) and `docs/IMPLEMENTATION_PROMPT.md` (build brief). Backend added 2026-11-23 (`docs/backend/`). Mockups: `docs/mockups/`. Open business questions: `docs/PERGUNTAS_ERIKA.md`. Planned features (Pix, stock, sales report, real time): `docs/pendencias.md`. QA screenshots: `docs/qa/`.
 
 ## Commands
 | Command | What it does |
 |---|---|
-| `npm run dev` | Vite dev server (`http://localhost:5173/eka-semijoias/`) |
-| `npm run build` / `npm run preview` | Production build to `dist/` / serve it |
+| `npx wrangler dev` | The real stack locally on `http://localhost:8787`: Worker + local D1 + Durable Object serving `dist/` (run `npm run build` and `npm run db:migrate:local` first). Local secrets come from `.dev.vars` (copy `.dev.vars.example`; local admin PIN 314159). |
+| `npm run dev` | Vite dev server with HMR (`http://localhost:5173/`); proxies `/api` and `/media` to `wrangler dev` on 8787 |
+| `npm run build` | Production build to `dist/` |
+| `npm run test:worker` | Worker unit tests (PIN policy, conflicts, sniffing, change sets) |
+| `npm run test:integration` | API + WebSocket tests against a real local Worker on a temporary D1 (starts `wrangler dev` itself) |
+| `npm run deploy` | Build, apply D1 migrations remotely, `wrangler deploy` (needs `wrangler login`) |
 | `npm run typecheck` | `tsc -b --noEmit` (strict) |
 | `npm run lint` | ESLint (bans `dangerouslySetInnerHTML` and `alert/confirm/prompt`) |
 | `npm test -- --run` | Vitest unit tests (jsdom) |
-| `npm run e2e` | Playwright on Chromium (Pixel 7, desktop) and WebKit/Safari (iPhone 13, desktop Safari); builds and serves `dist/`. `E2E_BASE_URL=<url>` targets a running server or the live site. `--project=mobile-webkit` for a quick Safari pass. |
+| `npm run e2e` | Playwright on Chromium (Pixel 7, desktop) and WebKit/Safari (iPhone 13, desktop Safari) against the real stack: builds, starts `wrangler dev` on a fresh local D1 (`.wrangler/e2e`). Includes a live-update test with two browsers. `E2E_BASE_URL=<url>` targets a running server. `--project=mobile-webkit` for a quick Safari pass. |
 | `QA_SCREENS=1 npx playwright test e2e/qa-screens.spec.ts --project=desktop-chromium` | Full-page screenshots of every route at 360/390/768/1280/1440 into `docs/qa/` |
 | `npm run images` | One-off: regenerate `public/images` and `public/brand` from `assets/` (outputs are committed; CI does not run it) |
 
-CI (`deploy.yml`): `npm ci` → typecheck → unit tests → build → deploy Pages. E2E is not in CI; run it locally before pushing UI changes.
+CI (`.github/workflows/deploy.yml`): `npm ci` → typecheck → lint → unit → worker unit → integration → build; on `main` it also publishes the GitHub Pages forwarding page (`deploy/github-pages/index.html`). Cloudflare deploys are manual (`npm run deploy`). E2E is not in CI; run it locally before pushing UI changes.
 
 ## Structure
 - `src/config/business.ts` — unconfirmed business facts (`null` hides the claim) + the admin checklist. Settings saved in the admin override contact fields and warranty (`src/hooks/useBusiness.ts`).
-- `src/data/` — `schema.ts` (zod schemas/types), `seed.ts` (24-product initial catalog), `storage.ts` (typed `StorageResult`, quota detection, versioned load + `MIGRATIONS`, corrupt payload quarantine to `eka:catalog:corrupt:<ts>`), `catalog.ts` (selectors: prices, badges, variant galleries).
-- Catalog persistence semantics (`storage.ts` `loadCatalog`): the seed is never written on first visit; a stored catalog with `customized !== true` (only leads were saved) is replaced by the current deployed seed on load (leads kept), so new deploys reach returning visitors. Admin commits and imports set `customized: true`. Every write is validated (`validateCatalog`) before it is stored. Data from a newer schema (`outdated`) or unreadable data that could not be quarantined (`corrupt-unsaved`) put the store in read-only mode.
-- **What visitors see is the deployed seed.** Admin edits live only in the browser where they were made (no backend). To publish them for everyone: export a backup in the admin and turn it into `src/data/seed.ts` (or move to a backend).
-- `src/store/` — Zustand stores: `catalog` (commit only mutates state after a successful, validated write; cross-tab `storage` sync), `cart`, `favorites`, `customer`, `ui` (toasts, panels, open-dialog count).
-- `src/lib/` — `format` (BRL), `whatsapp` (order message + `wa.me` links), `catalogQuery` (URL-driven filters), `lead` (reseller form schema/mask), `search`, `slug`, `assets` (public asset/srcset helpers), `image` (upload pipeline), `csv`.
+- `worker/` — the Cloudflare Worker: `index.ts` (routing, document CSP, request logs), `http.ts` (error shape `{error:{code,message,details}}`, body limits, same-Origin guard), `db.ts` (D1 retry + `guard()` compare-and-swap), `auth.ts` (PIN login, sessions, throttling), `catalog.ts` (snapshot reads, first-run seeding, change sets), `conflicts.ts`, `media.ts`, `leads.ts`, `live.ts` (`LiveHub` Durable Object), `migrations/` (D1 schema), `test/` (unit + integration).
+- `src/data/` — `schema.ts` (zod schemas/types, `SCHEMA_VERSION` 2, `Catalog` = public catalog, `CatalogState` = backup with leads), `seed.ts` (24-product initial catalog; the server seeds D1 from it on its first request), `integrity.ts` (backup migrations, `checkIntegrity`, `validateCatalog`; shared with the Worker), `changes.ts` (change sets: diff/apply/chunk; shared), `storage.ts` (localStorage helpers for per-visitor data + catalog cache + legacy-catalog detection), `catalog.ts` (selectors: prices, badges, variant galleries).
+- **Catalog data flow:** `GET /api/catalog` returns a materialized snapshot (ETag `"c<version>"`, 304 on revalidation; `/api/catalog/v/<n>` is immutable and edge-cached). The browser keeps the last snapshot in `eka:catalog-cache:v2` and renders it instantly on return visits; `CatalogGate` holds pages until the first catalog is known (never a flash of "não encontrado"). Admin edits: `save(update)` → `commit` diffs the catalog, uploads new photos (data URLs → `POST /api/admin/media`, content-addressed keys `media/<sha256>.<ext>`), sends one change set with `baseVersion` and an `Idempotency-Key`, and only updates state after the server confirms. The server checks per-entity conflicts (incl. tombstones for deleted items), integrity and photo existence, then commits rows + snapshot in one D1 batch guarded by the catalog version; then the `LiveHub` pushes `{type:"catalog",version}` to every open page.
+- `src/store/` — Zustand stores: `catalog` (server catalog, `status`, `version`, async `commit` queue, live connection via `startCatalog()`), `cart`, `favorites`, `customer`, `ui` (toasts, panels, open-dialog count).
+- `src/lib/` — `api` (fetch wrapper, `ApiError` with pt-BR messages), `live` (WebSocket client: heartbeat, backoff, reconnect on focus/online), `pin` (PIN policy shared with the Worker), `format` (BRL), `whatsapp` (order message + `wa.me` links), `catalogQuery` (URL-driven filters), `lead` (reseller form schema/mask, shared with the Worker), `search`, `slug`, `assets` (public asset/srcset helpers), `image` (photo pipeline), `csv`.
 - `src/components/{ui,layout,product,home,bag}`, `src/pages/*`.
-- `src/admin/` (lazy route chunk at `/#/admin`): `PinGate` (SHA-256 PIN, default 2580, session in sessionStorage), `AdminShell` (tabs, storage banners), `products/` (list, full-screen form with photo manager and variants editor, `productDraft.ts` validation), `sections/` (categories, collections, leads + CSV, settings + checklist, backup), `lib/` (persist/save helpers, session, contact formatting, downloads, reorder).
-- localStorage keys: `eka:catalog:v1`, `eka:cart:v1`, `eka:favorites:v1`, `eka:customer:v1`; admin session flag in sessionStorage.
+- `src/admin/` (lazy route chunk at `/#/admin`): `PinGate` (6–8 digit PIN checked by the server), `AdminApp` (session check, returns to the keypad when a request finds the session expired), `AdminShell` (tabs, connection banner), `products/` (list, full-screen form with photo manager and variants editor, `productDraft.ts` validation), `sections/` (categories, collections, leads from the API + CSV, settings + PIN change + checklist, backup: server export, import/restore as change sets, offer for a legacy localStorage catalog), `lib/` (async `save()`, session API, leads hook, contact formatting, downloads, reorder).
+- localStorage keys: `eka:catalog-cache:v2` (offline copy of the catalog), `eka:cart:v1`, `eka:favorites:v1`, `eka:customer:v1`. `eka:catalog:v1` is the pre-backend catalog; the admin Backup page offers to download it or send it to the site.
+
+## Backend operations
+- **Secrets** (Worker secrets, never in the repo): `PIN_PEPPER` (≥ 32 random chars; keys the PIN and IP hashes; rotating it invalidates the stored PIN) and `ADMIN_INITIAL_PIN` (accepted only until a PIN is stored; the first login stores it). Set with `npx wrangler secret put <NAME>`.
+- **Admin access**: PIN of 6–8 digits; 5 attempts per network per 15 min (then 15 min → … → 24 h locks), 50 per hour globally (devices that logged in before are exempt from the global cap). Sessions: `__Host-eka_admin` cookie (HttpOnly, Secure, SameSite=Strict), 14 days idle / 30 days max; changing the PIN ends the other sessions.
+- **Locked out or forgot the PIN**: `npx wrangler d1 execute eka-semijoias --remote --command "DELETE FROM throttle"` clears locks; `... --command "DELETE FROM admin_credentials"` makes `ADMIN_INITIAL_PIN` valid again (set a new one with `wrangler secret put` first).
+- **Schema changes**: add `worker/migrations/NNNN_name.sql`; `npm run deploy` applies pending migrations before deploying. Never edit an applied migration.
+- **Rollback**: `npx wrangler rollback` (code). D1 Time Travel restores the database to a point in time (`npx wrangler d1 time-travel restore`), 7 days on the Free plan, whole database (leads included).
+- **Free plan limits** that matter: 100k Worker requests/day (static assets are free and unmetered), 10 ms CPU per request, D1 5 GB / 5 M rows read per day. Upgrade (Workers Paid) before traffic nears the request cap or before adding orders/Pix.
 
 ## Ground rules
 - UI copy in Brazilian Portuguese; code, comments and commits in English.
@@ -39,11 +53,13 @@ CI (`deploy.yml`): `npm ci` → typecheck → unit tests → build → deploy Pa
 - Unconfirmed business facts live only in `src/config/business.ts`. Never hard-code them elsewhere, never present them as confirmed.
 - Design tokens: exact hex values and contrast results in `docs/PLAN.md` §1.1. Rose gold `#B48C78` is never text on light backgrounds; copper `#8A5A45` is the primary/action color. WhatsApp actions use copper, never WhatsApp green.
 - Sheets/drawers/modals use the native `<dialog>` wrapper `src/components/ui/Sheet.tsx` (focus trap, Esc, focus return). Toasts portal into the topmost open dialog because modal dialogs make the rest of the page inert.
-- Images: seed images are asset stems (`images/products/<name>` → `-480.webp`/`-960.webp`; wide lifestyle shots also `-1440`); uploads are data URLs with a 480 px `thumb`. Stand-ins are tracked with `placeholder: true` in data only.
+- Images: seed images are asset stems (`images/products/<name>` → `-480.webp`/`-960.webp`; wide lifestyle shots also `-1440`); uploads are content-addressed server photos (`media/<sha256>.<webp|jpg|png>`, main ≤ 1200 px + 480 px `thumb`), served immutable from `/media/`; data URLs exist only in the admin until the save uploads them. Stand-ins are tracked with `placeholder: true` in data only.
 - Never use the reference brand's (Áthama) name, photos or copy.
 - Money is integer centavos; format with `formatBRL` (`Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })`).
-- Storage writes must surface quota/unavailable errors; never fail silently.
-- Seed content to replace before go-live: testimonials (`src/content/home.ts`), the Sobre story (`src/pages/About.tsx`), stand-in photos.
+- Storage and API writes must surface errors; never fail silently, never show an unconfirmed save as saved.
+- Every server write is validated with the shared zod schemas and `checkIntegrity`; the browser runs the same checks first for instant feedback, but the server is the authority.
+- Personal data (leads) only through admin endpoints; never in the public snapshot, logs or WebSocket messages.
+- Seed content to replace before go-live (the seed only fills an empty database; after that, edit through the admin): testimonials (`src/content/home.ts`), the Sobre story (`src/pages/About.tsx`), stand-in photos.
 
 ## Tools
 - `scripts/prepare-images.mjs` (sharp): asset conversion (see Commands). `scripts/shots.mjs` + `scripts/tile.mjs`: ad-hoc screenshot/tiling helpers for visual review.

@@ -113,6 +113,7 @@ test('empty category shows the empty state', async ({ page }) => {
 });
 
 test('reseller pre-registration validates and saves the lead', async ({ page, context }) => {
+  await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': `10.200.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` });
   await open(page, '/revendedoras');
   await page.getByRole('button', { name: 'Enviar pré-cadastro' }).click();
   await expect(page.getByText('Digite seu nome completo')).toBeVisible();
@@ -126,13 +127,14 @@ test('reseller pre-registration validates and saves the lead', async ({ page, co
   await page.getByRole('radio', { name: 'Não' }).click();
   await page.getByRole('checkbox').check();
   const popup = context.waitForEvent('page');
+  const stored = page.waitForResponse((r) => r.url().endsWith('/api/leads') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Enviar pré-cadastro' }).click();
+  expect((await stored).status()).toBe(201);
   const wa = await popup;
   expect(decodeURIComponent(wa.url()).replace(/\+/g, ' ')).toContain('Quero ser revendedora');
   await wa.close();
   await expect(page.getByText('Pré-cadastro enviado!')).toBeVisible();
-  const leads = await page.evaluate(() => JSON.parse(localStorage.getItem('eka:catalog:v1')!).leads);
-  expect(leads[0]).toMatchObject({ name: 'Ana Souza', whatsapp: '67999991234', city: 'Campo Grande', uf: 'MS', alreadySells: false });
+  await expect(page.getByText(/Não conseguimos registrar/)).toHaveCount(0);
 });
 
 test('menu drawer is keyboard accessible and returns focus', async ({ page, isMobile }) => {

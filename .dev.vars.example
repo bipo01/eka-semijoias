@@ -1,0 +1,4 @@
+# Local development only (wrangler dev). Copy to .dev.vars. Never use these values in production.
+PIN_PEPPER=local-development-pepper-0123456789abcdef0123456789abcdef
+ADMIN_INITIAL_PIN=314159
+DEV_INSECURE_COOKIES=1

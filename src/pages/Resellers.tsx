@@ -8,10 +8,9 @@ import { cx } from '../components/ui/cx';
 import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { bannerSources } from '../lib/assets';
-import { newId } from '../lib/id';
+import { apiUrl } from '../lib/api';
 import { leadFormSchema, leadMessage, maskPhone, UFS, type LeadForm } from '../lib/lead';
 import { whatsappUrl } from '../lib/whatsapp';
-import { useCatalog } from '../store/catalog';
 
 const STEPS = [
   { title: 'Cadastro', text: 'Preencha o pré-cadastro aqui embaixo, de forma rápida e simples.' },
@@ -121,11 +120,30 @@ export function ResellersPage() {
   );
 }
 
+/**
+ * Registers the lead on the server. Started before the WhatsApp window opens
+ * (popups must open synchronously inside the click), with keepalive so it
+ * completes even if the visitor leaves; resolves to whether it was stored.
+ */
+function sendLead(form: Record<string, unknown>): Promise<boolean> {
+  return fetch(apiUrl('/api/leads'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(form),
+    keepalive: true,
+  }).then(
+    (res) => res.ok,
+    () => false,
+  );
+}
+
 function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
-  const commit = useCatalog((s) => s.commit);
   const [form, setForm] = useState({ name: '', whatsapp: '', city: '', uf: '', instagram: '', alreadySells: null as boolean | null, source: '', consent: false });
   const [errors, setErrors] = useState<Errors>({});
   const [sentUrl, setSentUrl] = useState<string | null>(null);
+  /** null while the registration is in flight; false when it could not be stored (the WhatsApp message still has everything). */
+  const [stored, setStored] = useState<boolean | null>(null);
+  const honeypot = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -148,26 +166,9 @@ function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
       return;
     }
     const lead = parsed.data;
-    // The WhatsApp message is what reaches the store. The local copy only feeds the admin list on
-    // this same device, so a failed write must not block the visitor from sending the message.
-    const saved = commit((data) => ({
-      ...data,
-      leads: [
-        {
-          id: newId('lead'),
-          name: lead.name,
-          whatsapp: lead.whatsapp,
-          city: lead.city,
-          uf: lead.uf,
-          ...(lead.instagram ? { instagram: lead.instagram } : {}),
-          alreadySells: lead.alreadySells,
-          ...(lead.source ? { source: lead.source } : {}),
-          createdAt: new Date().toISOString(),
-        },
-        ...data.leads,
-      ],
-    }), { customize: false });
-    if (!saved.ok && import.meta.env.DEV) console.warn('Lead not stored locally:', saved.message);
+    // Both channels: the admin list (server) and the WhatsApp message, which carries every field.
+    setStored(null);
+    void sendLead({ ...form, alreadySells: lead.alreadySells, website: honeypot.current?.value ?? '' }).then(setStored);
     const url = whatsappUrl(whatsapp, leadMessage(lead));
     window.open(url, '_blank', 'noopener,noreferrer');
     setSentUrl(url);
@@ -179,6 +180,9 @@ function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
         <CheckCircle2 size={44} strokeWidth={1.25} className="text-success" aria-hidden="true" />
         <h2 className="font-display text-display-m">Pré-cadastro enviado!</h2>
         <p className="max-w-sm text-ink-muted">Agora é só enviar a mensagem que abriu no WhatsApp. A gente responde por lá para continuar o seu cadastro.</p>
+        {stored === false && (
+          <p className="max-w-sm text-sm text-ink-muted">Não conseguimos registrar o cadastro pelo site agora, mas tudo bem: a mensagem do WhatsApp já leva todos os seus dados.</p>
+        )}
         <ButtonAnchor href={sentUrl} variant="secondary">
           <WhatsAppIcon size={20} /> Abrir o WhatsApp de novo
         </ButtonAnchor>
@@ -219,6 +223,13 @@ function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
             <span className="text-sm">Autorizo a ÉKA a entrar em contato comigo pelo WhatsApp sobre a revenda.<span aria-hidden="true" className="text-copper"> *</span></span>
           </label>
           {errors.consent && <p id="consent-error" role="alert" className="mt-1.5 text-sm text-danger">{errors.consent}</p>}
+        </div>
+        {/* Honeypot for bots: hidden from people and assistive tech. */}
+        <div aria-hidden="true" className="absolute -left-[9999px] size-px overflow-hidden">
+          <label>
+            Site
+            <input ref={honeypot} type="text" name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
+          </label>
         </div>
         <Button type="submit" size="lg" block className="mt-2">
           Enviar pré-cadastro <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" />

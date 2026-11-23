@@ -5,7 +5,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TextArea, TextField } from '../../components/ui/Field';
 import { Img } from '../../components/ui/Img';
 import { Sheet } from '../../components/ui/Sheet';
-import type { CatalogState, Collection } from '../../data/schema';
+import type { Catalog, Collection } from '../../data/schema';
 import { imageSources } from '../../lib/assets';
 import { newId } from '../../lib/id';
 import { slugify, uniqueSlug } from '../../lib/slug';
@@ -15,21 +15,21 @@ import { save } from '../lib/persist';
 import { move } from '../lib/reorder';
 import { PhotoPicker } from './PhotoPicker';
 
-export function sortedCollections(data: CatalogState): Collection[] {
+export function sortedCollections(data: Catalog): Collection[] {
   return data.collections.map((c, i) => ({ c, key: c.order ?? i })).sort((a, b) => a.key - b.key).map(({ c }) => c);
 }
 
 const withDenseOrder = (list: Collection[]): Collection[] => list.map((c, i) => ({ ...c, order: i }));
 
 /** Saves a collection; only one collection can be featured on the home page. */
-export function upsertCollection(data: CatalogState, collection: Collection): CatalogState {
+export function upsertCollection(data: Catalog, collection: Collection): Catalog {
   const exists = data.collections.some((c) => c.id === collection.id);
   const list = exists ? data.collections.map((c) => (c.id === collection.id ? collection : c)) : [...data.collections, collection];
   return { ...data, collections: collection.featuredOnHome ? list.map((c) => (c.id === collection.id ? c : { ...c, featuredOnHome: false })) : list };
 }
 
 /** Removes a collection and drops its id from every product. */
-export function deleteCollection(data: CatalogState, id: string, now: string): CatalogState {
+export function deleteCollection(data: Catalog, id: string, now: string): Catalog {
   return {
     ...data,
     collections: withDenseOrder(sortedCollections(data).filter((c) => c.id !== id)),
@@ -47,13 +47,15 @@ function CollectionEditor({ editing, onClose }: { editing: Editing; onClose: () 
   const [form, setForm] = useState(editing.collection);
   const [slugEdited, setSlugEdited] = useState(!editing.isNew);
   const [errors, setErrors] = useState<{ name?: string; slug?: string }>({});
+  const [busy, setBusy] = useState(false);
   const taken = data.collections.filter((c) => c.id !== form.id).map((c) => c.slug);
   const slug = slugEdited ? slugify(form.slug) : uniqueSlug(form.name, taken);
   const productPhotos = data.products.flatMap((p) => p.images.slice(0, 2));
   const heroIsUpload = !!form.heroImage && !productPhotos.some((img) => img.src === form.heroImage);
   const patch = (p: Partial<Collection>) => setForm((f) => ({ ...f, ...p }));
 
-  function submit() {
+  async function submit() {
+    if (busy) return;
     const next: typeof errors = {};
     if (!form.name.trim()) next.name = 'Informe o nome da coleção.';
     if (!slug) next.slug = 'Informe o endereço (letras, números e hífens).';
@@ -70,7 +72,10 @@ function CollectionEditor({ editing, onClose }: { editing: Editing; onClose: () 
       ...(form.heroImage ? { heroImage: form.heroImage } : {}),
       order: editing.isNew ? data.collections.length : form.order,
     };
-    if (save((d) => upsertCollection(d, collection), editing.isNew ? 'Coleção criada.' : 'Coleção salva.')) onClose();
+    setBusy(true);
+    const ok = await save((d) => upsertCollection(d, collection), editing.isNew ? 'Coleção criada.' : 'Coleção salva.');
+    setBusy(false);
+    if (ok) onClose();
   }
 
   return (
@@ -84,7 +89,9 @@ function CollectionEditor({ editing, onClose }: { editing: Editing; onClose: () 
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={submit}>Salvar</Button>
+          <Button onClick={() => void submit()} disabled={busy} aria-busy={busy}>
+            {busy ? 'Salvando…' : 'Salvar'}
+          </Button>
         </div>
       }
     >
@@ -142,12 +149,12 @@ export function CollectionsPage() {
   const count = (id: string) => data.products.filter((p) => p.collectionIds.includes(id)).length;
 
   function reorder(from: number, to: number) {
-    save((d) => ({ ...d, collections: withDenseOrder(move(sortedCollections(d), from, to)) }));
+    void save((d) => ({ ...d, collections: withDenseOrder(move(sortedCollections(d), from, to)) }));
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!deleting) return;
-    if (save((d) => deleteCollection(d, deleting.id, new Date().toISOString()), 'Coleção excluída.')) setDeleting(null);
+    if (await save((d) => deleteCollection(d, deleting.id, new Date().toISOString()), 'Coleção excluída.')) setDeleting(null);
   }
 
   const deletingCount = deleting ? count(deleting.id) : 0;
@@ -206,7 +213,7 @@ export function CollectionsPage() {
         title={`Excluir ${deleting?.name ?? 'coleção'}?`}
         confirmLabel="Excluir"
         tone="danger"
-        onConfirm={confirmDelete}
+        onConfirm={() => void confirmDelete()}
         onCancel={() => setDeleting(null)}
       >
         {deletingCount

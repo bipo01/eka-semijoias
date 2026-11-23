@@ -1,0 +1,37 @@
+// ÉKA Semijoias: one Worker serves the SPA (static assets), the API, uploaded
+// photos and the live WebSocket. See docs/backend/PLAN.md and AGENTS.md.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "eka-semijoias",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-19",
+  "workers_dev": true,
+  // Smaller script → faster cold starts.
+  "minify": true,
+  // Version preview URLs would run against the production database and secrets.
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // "/" runs the Worker so the document gets a CSP naming this host's WebSocket.
+    "run_worker_first": ["/", "/index.html", "/api/*", "/media/*"]
+  },
+  // Workers Caching: immutable responses (photos, versioned catalogs) are answered
+  // from the edge without running the Worker. Driven by each response's Cache-Control.
+  "cache": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "eka-semijoias",
+      "database_id": "b543ab66-fda4-41d7-b75b-6fcf6ff51d8a",
+      "migrations_dir": "worker/migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "LIVE", "class_name": "LiveHub" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveHub"] }],
+  // Our own structured logs (no IPs, cookies or bodies); automatic per-request logs are off for privacy.
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } }
+}

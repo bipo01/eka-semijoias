@@ -13,12 +13,20 @@ export interface ImageSources {
 }
 
 /**
- * Resolves an image source: data URLs are used as-is (uploaded photos, with an
- * optional smaller thumb for cards); asset stems expand to the WebP widths
- * produced by scripts/prepare-images.mjs.
+ * Resolves an image source:
+ * - uploaded photos ("media/<sha256>.webp", served by the Worker) and data URLs
+ *   (admin, before saving) are used as-is, with the smaller thumb for cards;
+ * - asset stems expand to the WebP widths produced by scripts/prepare-images.mjs.
  */
 export function imageSources(src: string, opts: { thumb?: string | undefined; small?: boolean; widths?: number[] } = {}): ImageSources {
-  if (src.startsWith('data:')) return { src: opts.small && opts.thumb ? opts.thumb : src };
+  const resolve = (s: string) => (s.startsWith('data:') ? s : asset(s));
+  if (src.startsWith('data:') || src.startsWith('media/')) {
+    const thumb = opts.thumb;
+    if (opts.small && thumb) return { src: resolve(thumb) };
+    // Uploaded photos come in two sizes: the 480 px thumb and the main photo (≤ 1200 px).
+    if (thumb && thumb !== src && thumb.startsWith('media/') && src.startsWith('media/')) return { src: resolve(src), srcSet: `${resolve(thumb)} 480w, ${resolve(src)} 1200w` };
+    return { src: resolve(src) };
+  }
   const widths = opts.widths ?? [480, 960];
   const stem = asset(src);
   return {

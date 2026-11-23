@@ -23,7 +23,7 @@ interface Drag {
 
 function patchProduct(id: string, patch: Partial<Product>) {
   const now = new Date().toISOString();
-  save((d) => ({ ...d, products: d.products.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: now } : p)) }));
+  void save((d) => ({ ...d, products: d.products.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: now } : p)) }));
 }
 
 interface ProductListProps {

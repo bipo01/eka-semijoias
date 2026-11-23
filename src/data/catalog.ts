@@ -1,4 +1,4 @@
-import { FINISH_LABEL, type CatalogState, type Category, type Product, type ProductImage, type Variant } from './schema';
+import { FINISH_LABEL, type Catalog, type Category, type Product, type ProductImage, type Variant } from './schema';
 
 export const effectivePrice = (p: Product): number => p.promoPrice ?? p.price;
 export const isOnSale = (p: Product): boolean => p.promoPrice != null && p.promoPrice < p.price;
@@ -60,23 +60,23 @@ export const BADGE_LABEL: Record<Exclude<ProductBadge, null>, string> = {
   'mais-vendido': 'Mais vendido',
 };
 
-export const sortedCategories = (data: CatalogState): Category[] =>
+export const sortedCategories = (data: Catalog): Category[] =>
   [...data.categories].sort((a, b) => a.order - b.order);
 
 export const byOrder = (a: Product, b: Product) => a.order - b.order;
 
-export function categoryProducts(data: CatalogState, categoryId: string): Product[] {
+export function categoryProducts(data: Catalog, categoryId: string): Product[] {
   return data.products.filter((p) => p.categoryId === categoryId);
 }
 
 /** Lowest current price among purchasable products of a category, or null when empty. */
-export function categoryFromPrice(data: CatalogState, categoryId: string): number | null {
+export function categoryFromPrice(data: Catalog, categoryId: string): number | null {
   const prices = categoryProducts(data, categoryId).filter(isPurchasable).map(effectivePrice);
   return prices.length ? Math.min(...prices) : null;
 }
 
 /** Image representing a category: its chosen image, else the first product's main photo. */
-export function categoryImage(data: CatalogState, category: Category): ProductImage | undefined {
+export function categoryImage(data: Catalog, category: Category): ProductImage | undefined {
   if (category.imageId) {
     for (const p of data.products) {
       const img = p.images.find((i) => i.id === category.imageId);

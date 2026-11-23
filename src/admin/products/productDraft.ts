@@ -1,4 +1,4 @@
-import { FINISH_LABEL, productSchema, type CatalogState, type Finish, type Product, type ProductImage, type Tag } from '../../data/schema';
+import { FINISH_LABEL, productSchema, type Catalog, type Finish, type Product, type ProductImage, type Tag } from '../../data/schema';
 import { sortedCategories } from '../../data/catalog';
 import { centsToInput, parseBRL } from '../../lib/format';
 import { newId } from '../../lib/id';
@@ -94,7 +94,7 @@ export function newVariant(finish: Finish): DraftVariant {
   return { id: newId('v'), finish, sku: '', sizes: '', imageIds: [], available: true };
 }
 
-export function emptyDraft(data: CatalogState, now: string): ProductDraft {
+export function emptyDraft(data: Catalog, now: string): ProductDraft {
   return {
     id: newId('p'),
     isNew: true,
@@ -158,7 +158,7 @@ export function parseSizes(text: string): string[] {
   return [...new Set(text.split(/[,;]/).map((s) => s.trim()).filter(Boolean))];
 }
 
-export function takenSlugs(data: CatalogState, exceptId: string): string[] {
+export function takenSlugs(data: Catalog, exceptId: string): string[] {
   return data.products.filter((p) => p.id !== exceptId).map((p) => p.slug);
 }
 
@@ -170,7 +170,7 @@ export function effectiveSlug(draft: ProductDraft, taken: string[]): string {
 export type BuildResult = { ok: true; product: Product } | { ok: false; errors: DraftErrors };
 
 /** Validates a draft and turns it into a Product (checked with productSchema). */
-export function buildProduct(draft: ProductDraft, data: CatalogState, now: string): BuildResult {
+export function buildProduct(draft: ProductDraft, data: Catalog, now: string): BuildResult {
   const errors: DraftErrors = {};
   const taken = takenSlugs(data, draft.id);
   const name = draft.name.trim();
@@ -249,7 +249,7 @@ export function buildProduct(draft: ProductDraft, data: CatalogState, now: strin
 }
 
 /** Inserts or replaces a product in the catalog. */
-export function upsertProduct(data: CatalogState, product: Product): CatalogState {
+export function upsertProduct(data: Catalog, product: Product): Catalog {
   const exists = data.products.some((p) => p.id === product.id);
   return { ...data, products: exists ? data.products.map((p) => (p.id === product.id ? product : p)) : [...data.products, product] };
 }

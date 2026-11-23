@@ -1,32 +1,27 @@
-import { sha256Hex } from '../../lib/hash';
-
-export const SESSION_KEY = 'eka:admin:session';
+import { api } from '../../lib/api';
 
 /*
- * The session flag holds the PIN hash it was opened with, so changing the PIN
- * (here or in another tab) ends sessions opened with the old one.
+ * Admin session, kept by the server in an HttpOnly cookie. The browser never
+ * sees the PIN hash or the session token.
  */
-export function readSession(): string | null {
-  try {
-    return window.sessionStorage.getItem(SESSION_KEY);
-  } catch {
-    return null;
-  }
+
+export interface SessionStatus {
+  authenticated: boolean;
+  /** Digits of the current PIN, so the keypad can submit as soon as it is complete. */
+  pinLength: number;
 }
 
-/** Returns false when sessionStorage is blocked; the caller keeps the session in memory. */
-export function writeSession(pinHash: string | null): boolean {
-  try {
-    if (pinHash) window.sessionStorage.setItem(SESSION_KEY, pinHash);
-    else window.sessionStorage.removeItem(SESSION_KEY);
-    return true;
-  } catch {
-    return false;
-  }
-}
+export const fetchSession = () => api<SessionStatus>('/api/admin/session', { retries: 2 });
 
-export async function verifyPin(pin: string, pinHash: string): Promise<boolean> {
-  return (await sha256Hex(pin)) === pinHash;
-}
+export const login = (pin: string) => api<SessionStatus>('/api/admin/login', { json: { pin } });
 
-export const PIN_PATTERN = /^\d{4,6}$/;
+export const logout = () => api<SessionStatus>('/api/admin/logout', { method: 'POST' });
+
+export const changePin = (currentPin: string, newPin: string) => api<{ ok: true; pinLength: number }>('/api/admin/pin', { json: { currentPin, newPin } });
+
+/** Fired when any admin request finds the session gone; AdminApp returns to the PIN gate. */
+export const SESSION_LOST_EVENT = 'eka:admin-session-lost';
+
+export function signalSessionLost(): void {
+  window.dispatchEvent(new Event(SESSION_LOST_EVENT));
+}

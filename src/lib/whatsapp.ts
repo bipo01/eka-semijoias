@@ -1,5 +1,5 @@
 import { formatBRL } from './format';
-import { FINISH_LABEL, type CartItem, type CatalogState } from '../data/schema';
+import { FINISH_LABEL, type CartItem, type Catalog } from '../data/schema';
 import { effectivePrice, findVariant, isPurchasable, sizeLabel } from '../data/catalog';
 
 /** Messages above this length switch to the compact format (wa.me links get unreliable when very long). */
@@ -57,7 +57,7 @@ function buildCompact(order: OrderDetails): string {
 }
 
 /** Resolves cart items against the catalog. Items whose product is gone or unavailable are reported separately. */
-export function resolveCart(items: CartItem[], data: CatalogState) {
+export function resolveCart(items: CartItem[], data: Catalog) {
   const lines: (OrderLine & { key: string; item: CartItem })[] = [];
   const unavailable: CartItem[] = [];
   for (const item of items) {
