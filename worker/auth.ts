@@ -73,7 +73,7 @@ interface ThrottleRow {
   strikes: number;
 }
 
-function hitStatement(db: D1Database, key: string, windowMs: number, now: number): D1PreparedStatement {
+export function hitStatement(db: D1Database, key: string, windowMs: number, now: number): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO throttle (key, count, window_start) VALUES (?1, 1, ?2)

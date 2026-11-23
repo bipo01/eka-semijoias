@@ -15,15 +15,15 @@ import {
   type OrderStatus,
   type StockMove,
 } from '../src/data/orders';
-import { hit, ipKey, pruneThrottle, requireSession, retryAfter } from './auth';
+import { hitStatement, ipKey, pruneThrottle, requireSession, retryAfter } from './auth';
 import { ensureSeeded, IDEMPOTENCY_TTL_MS, parseSnapshotBody, WRITE_ATTEMPTS } from './catalog';
 import { randomToken, sha256Hex } from './crypto';
 import { guard, isGuardMiss, toHttpError, withReadRetry } from './db';
 import { HttpError, json, readBody, readJson, zodDetails } from './http';
 import { notifyCatalog, notifyOrders } from './live';
 import type { Context } from './router';
-import { loadStockState, movementStatement, publishStatements, rowKey, type StockState } from './stock';
-import { combosOf } from '../src/data/stock';
+import { movementStatement, publishStatements, rowKey, type StockState } from './stock';
+import { combosOf, type StockRow } from '../src/data/stock';
 
 /*
  * Orders. Public: POST /api/orders registers what the bag holds, priced by
@@ -86,21 +86,34 @@ export async function handleCreateOrder(ctx: Context): Promise<Response> {
 
   const idemKey = `order:${key}`;
   const requestHash = await sha256Hex(bytes);
-  const replay = await withReadRetry(() => db.prepare('SELECT request_hash, response FROM idempotency WHERE key = ?1').bind(idemKey).first<{ request_hash: string; response: string }>());
+  const now = Date.now();
+  if (!ctx.env.PIN_PEPPER || ctx.env.PIN_PEPPER.length < 32) throw new HttpError('not_configured', 'Não foi possível registrar o pedido agora.');
+  const ip = await ipKey(ctx.env.PIN_PEPPER, ctx.request);
+
+  // One round trip to the database for everything the order needs to know (D1 may be far from
+  // the visitor: every sequential query costs a full trip). Writes only touch the throttle counters.
+  let first: D1Result<Record<string, unknown>>[];
+  try {
+    first = await db.batch<Record<string, unknown>>([
+      db.prepare('SELECT request_hash, response FROM idempotency WHERE key = ?1').bind(idemKey),
+      hitStatement(db, `order:ip:${ip}`, ORDER_WINDOW_MS, now),
+      hitStatement(db, 'order:global', ORDER_WINDOW_MS, now),
+      db.prepare('SELECT version, body FROM catalog_snapshot WHERE id = 1'),
+    ]);
+  } catch (error) {
+    throw toHttpError(error);
+  }
+  const replay = first[0]?.results[0] as { request_hash: string; response: string } | undefined;
   if (replay) {
     if (replay.request_hash !== requestHash) throw new HttpError('bad_request', 'Esta chave de envio já foi usada para outro pedido.');
     return json(JSON.parse(replay.response), { status: 201 });
   }
+  const counter = first[1]?.results[0] as { count: number; window_start: number } | undefined;
+  if (counter && counter.count > ORDERS_PER_WINDOW) throw retryAfter(counter.window_start + ORDER_WINDOW_MS, now, 'Recebemos vários pedidos deste aparelho.');
+  const global = first[2]?.results[0] as { count: number; window_start: number } | undefined;
+  if (global && global.count > ORDERS_GLOBAL_PER_WINDOW) throw retryAfter(global.window_start + ORDER_WINDOW_MS, now, 'Recebemos muitos pedidos agora.');
 
-  const now = Date.now();
-  if (!ctx.env.PIN_PEPPER || ctx.env.PIN_PEPPER.length < 32) throw new HttpError('not_configured', 'Não foi possível registrar o pedido agora.');
-  const ip = await ipKey(ctx.env.PIN_PEPPER, ctx.request);
-  const counter = await hit(db, `order:ip:${ip}`, ORDER_WINDOW_MS, now);
-  if (counter.count > ORDERS_PER_WINDOW) throw retryAfter(counter.window_start + ORDER_WINDOW_MS, now, 'Recebemos vários pedidos deste aparelho.');
-  const global = await hit(db, 'order:global', ORDER_WINDOW_MS, now);
-  if (global.count > ORDERS_GLOBAL_PER_WINDOW) throw retryAfter(global.window_start + ORDER_WINDOW_MS, now, 'Recebemos muitos pedidos agora.');
-
-  const snapshot = await ensureSeeded(db);
+  const snapshot = (first[3]?.results[0] as { version: number; body: string } | undefined) ?? (await ensureSeeded(db));
   const catalog = parseSnapshotBody(snapshot.body);
   const priced = priceOrder(catalog, parsed.data.items);
   if (!priced.ok) throw new HttpError('conflict', pricingMessage(priced.problems), { problems: priced.problems, version: snapshot.version });
@@ -121,9 +134,10 @@ export async function handleCreateOrder(ctx: Context): Promise<Response> {
   });
   const response = { order: { id: order.id, number: 0, createdAt: at, items: order.items, totalCents: order.totalCents, pix: order.pix } };
 
+  let number: number | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      await db.batch([
+      const results = await db.batch<{ number?: number }>([
         // A counter that only goes up (a deleted order's number is never reused). The batch is one
         // transaction and D1 runs writes one at a time; the UNIQUE index backs it up.
         db
@@ -135,7 +149,7 @@ export async function handleCreateOrder(ctx: Context): Promise<Response> {
         db
           .prepare(
             `INSERT INTO orders (id, number, status, created_at, updated_at, total_cents, data)
-             SELECT ?1, value, 'enviado', ?2, ?2, ?3, ?4 FROM counters WHERE name = 'order'`,
+             SELECT ?1, value, 'enviado', ?2, ?2, ?3, ?4 FROM counters WHERE name = 'order' RETURNING number`,
           )
           .bind(order.id, at, order.totalCents, toData(order)),
         db
@@ -147,6 +161,7 @@ export async function handleCreateOrder(ctx: Context): Promise<Response> {
         db.prepare('DELETE FROM idempotency WHERE created_at < ?1').bind(now - IDEMPOTENCY_TTL_MS),
         pruneThrottle(db, now),
       ]);
+      number = results[1]?.results[0]?.number;
       break;
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
@@ -160,10 +175,13 @@ export async function handleCreateOrder(ctx: Context): Promise<Response> {
       throw toHttpError(error);
     }
   }
-  const row = await withReadRetry(() => db.prepare('SELECT number FROM orders WHERE id = ?1').bind(order.id).first<{ number: number }>());
-  if (!row) throw new HttpError('internal');
+  if (number === undefined) {
+    const row = await withReadRetry(() => db.prepare('SELECT number FROM orders WHERE id = ?1').bind(order.id).first<{ number: number }>());
+    if (!row) throw new HttpError('internal');
+    number = row.number;
+  }
   ctx.waitUntil(notifyOrders(ctx.env));
-  return json({ order: { ...response.order, number: row.number } }, { status: 201 });
+  return json({ order: { ...response.order, number } }, { status: 201 });
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +215,40 @@ function nextStamp(previous: string): string {
   return new Date(Number.isNaN(prev) ? now : Math.max(now, prev + 1)).toISOString();
 }
 
+/**
+ * The order and, in the same round trip, the stock state a status change may need (the snapshot is
+ * parsed only when stock actually moves).
+ */
+async function readOrderAndStock(db: D1Database, id: string): Promise<{ order: Order; stamp: string; stock: () => StockState }> {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new HttpError('not_found', 'Pedido não encontrado.');
+  const results = await withReadRetry(() =>
+    db.batch<Record<string, unknown>>([
+      db.prepare('SELECT id, number, status, updated_at, data FROM orders WHERE id = ?1').bind(id),
+      db.prepare('SELECT version, body FROM catalog_snapshot WHERE id = 1'),
+      db.prepare('SELECT product_id, variant_id, size, qty FROM stock_levels'),
+      db.prepare('SELECT product_id FROM stock_tracked'),
+    ]),
+  );
+  const row = results[0]?.results[0] as OrderRow | undefined;
+  if (!row) throw new HttpError('not_found', 'Pedido não encontrado.');
+  const snapshot = results[1]?.results[0] as { version: number; body: string } | undefined;
+  let state: StockState | null = null;
+  return {
+    order: toOrder(row),
+    stamp: row.updated_at,
+    stock: () => {
+      if (!snapshot) throw new HttpError('internal');
+      state ??= {
+        catalog: parseSnapshotBody(snapshot.body),
+        version: snapshot.version,
+        rows: (results[2]?.results ?? []) as unknown as StockRow[],
+        tracked: new Set((results[3]?.results ?? []).map((r) => r.product_id as string)),
+      };
+      return state;
+    },
+  };
+}
+
 const unchanged = (db: D1Database, id: string, stamp: string) => guard(db, '(SELECT updated_at FROM orders WHERE id = ?1) = ?2', id, stamp);
 
 /** True when a stock move applies: the product is tracked and the finish/size still exists. */
@@ -225,7 +277,7 @@ export async function handleOrderStatus(ctx: Context): Promise<Response> {
 
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, Math.random() * 25 * Math.min(attempt, 4)));
-    const { order, stamp } = await readOrder(db, id);
+    const { order, stamp, stock } = await readOrderAndStock(db, id);
     if (order.status === to) return json({ order }); // already there (a retried request): nothing to do
     if (order.status !== from) throw new HttpError('conflict', `Este pedido já está como “${STATUS_LABEL[order.status]}”. A tela foi atualizada.`, { order });
     if (!canTransition(from, to)) throw new HttpError('bad_request', 'Essa mudança de status não é permitida.');
@@ -239,7 +291,7 @@ export async function handleOrderStatus(ctx: Context): Promise<Response> {
     let first: D1PreparedStatement | null = null;
 
     if (taking || giving) {
-      const state = await loadStockState(db);
+      const state = stock();
       const qtyOf = new Map(state.rows.map((r) => [rowKey(r.product_id, r.variant_id, r.size), r]));
       const rows = new Map(qtyOf);
       const moves: StockMove[] = [];
