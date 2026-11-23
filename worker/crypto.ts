@@ -51,3 +51,28 @@ export function safeEqual(a: string, b: string): boolean {
   for (let i = 0; i < n; i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
   return diff === 0;
 }
+
+/*
+ * Base64 for storing files in D1. The D1 binding ships BLOBs as JSON arrays of numbers, which costs
+ * ~45 ms of CPU for a 600 KB file (Free plan budget: 10 ms); a base64 string travels as one block.
+ * Uses the native Uint8Array base64 methods when the runtime has them.
+ */
+type NativeBase64 = { toBase64?: (this: Uint8Array) => string };
+type NativeFromBase64 = { fromBase64?: (s: string) => Uint8Array };
+
+export function bytesToBase64(bytes: Uint8Array): string {
+  const native = (Uint8Array.prototype as unknown as NativeBase64).toBase64;
+  if (native) return native.call(bytes);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+export function base64ToBytes(text: string): Uint8Array {
+  const native = (Uint8Array as unknown as NativeFromBase64).fromBase64;
+  if (native) return native(text);
+  const binary = atob(text);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}

@@ -12,7 +12,7 @@ import {
 import type { Catalog } from '../src/data/schema';
 import { hitStatement, ipKey, pruneThrottle, requireSession, retryAfter } from './auth';
 import { parseSnapshotBody, WRITE_ATTEMPTS } from './catalog';
-import { randomToken, sha256Hex } from './crypto';
+import { base64ToBytes, bytesToBase64, randomToken, sha256Hex } from './crypto';
 import { isGuardMiss, toHttpError, withReadRetry } from './db';
 import { BASE_HEADERS, HttpError, json, readBody, readJson } from './http';
 import { notifyOrders } from './live';
@@ -145,6 +145,7 @@ export async function handleUploadReceipt(ctx: Context): Promise<Response> {
   if (globalHit.count > RECEIPTS_GLOBAL_PER_WINDOW) throw retryAfter(globalHit.window_start + RECEIPT_WINDOW_MS, now, 'Recebemos muitos arquivos agora.');
 
   const sha = await sha256Hex(bytes);
+  const encoded = bytesToBase64(bytes);
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
     const { order, stamp } = await orderByToken(db, token);
     const state = payState(order);
@@ -160,7 +161,8 @@ export async function handleUploadReceipt(ctx: Context): Promise<Response> {
     try {
       await db.batch([
         unchanged(db, order.id, stamp),
-        db.prepare('INSERT INTO receipts (id, order_id, created_at, content_type, size, sha256, bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)').bind(id, order.id, at, actual, bytes.length, sha, bytes),
+        // Stored as base64 text (the column has BLOB affinity, so the text is kept as is): see bytesToBase64.
+        db.prepare('INSERT INTO receipts (id, order_id, created_at, content_type, size, sha256, bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)').bind(id, order.id, at, actual, bytes.length, sha, encoded),
         db.prepare('UPDATE orders SET data = ?2, updated_at = ?3 WHERE id = ?1').bind(order.id, toData(next), at),
         db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'order.receipt', `Comprovante recebido no pedido ${order.number}`),
         pruneThrottle(db, now),
@@ -176,6 +178,7 @@ export async function handleUploadReceipt(ctx: Context): Promise<Response> {
 }
 
 function toBytes(value: unknown): Uint8Array | null {
+  if (typeof value === 'string') return base64ToBytes(value);
   if (value instanceof Uint8Array) return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
   if (Array.isArray(value)) return Uint8Array.from(value as number[]);

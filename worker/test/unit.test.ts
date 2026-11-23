@@ -147,3 +147,15 @@ describe('sniffReceipt', () => {
     expect(sniffReceipt(new TextEncoder().encode('%PD'))).toBeNull();
   });
 });
+
+describe('base64 storage', () => {
+  it('round-trips arbitrary bytes exactly', async () => {
+    const { base64ToBytes, bytesToBase64 } = await import('../crypto');
+    const bytes = new Uint8Array(200_003);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 7919) % 256;
+    const back = base64ToBytes(bytesToBase64(bytes));
+    expect(back.length).toBe(bytes.length);
+    expect(back.every((b, i) => b === bytes[i])).toBe(true);
+    expect(bytesToBase64(new TextEncoder().encode('%PDF-'))).toBe('JVBERi0=');
+  });
+});
