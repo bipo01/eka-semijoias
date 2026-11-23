@@ -15,6 +15,8 @@ type OrdersState = { status: 'loading' } | { status: 'ready'; orders: Order[] } 
 
 interface OrdersStore {
   state: OrdersState;
+  /** The automatic Pix (Mercado Pago) is on: a charge works without the static key. */
+  autoPix: boolean;
   load: () => Promise<void>;
   replace: (order: Order) => void;
   drop: (id: string) => void;
@@ -33,11 +35,12 @@ const parseOrders = (raw: unknown): Order[] => {
 
 export const useOrders = create<OrdersStore>()((set, get) => ({
   state: { status: 'loading' },
+  autoPix: false,
   load: async () => {
     const mine = ++seq;
     try {
       const raw = await api<unknown>('/api/admin/orders', { retries: 2 });
-      if (mine === seq) set({ state: { status: 'ready', orders: parseOrders(raw) } });
+      if (mine === seq) set({ state: { status: 'ready', orders: parseOrders(raw) }, autoPix: (raw as { autoPix?: unknown } | null)?.autoPix === true });
     } catch (error) {
       if (mine !== seq) return;
       if (error instanceof ApiError && error.code === 'unauthenticated') signalSessionLost();
@@ -137,7 +140,7 @@ export async function createManualOrder(input: AdminOrderRequest, key: string): 
 }
 
 /** Changes the pieces of an order (compare-and-swap on its updatedAt). */
-export async function editOrderItems(order: Order, items: OrderLine[]): Promise<{ order: Order; chargeDropped: boolean } | { error: string }> {
+export async function editOrderItems(order: Order, items: OrderLine[], stamp: string): Promise<{ order: Order; chargeDropped: boolean } | { error: string }> {
   let result: { order?: Order; chargeDropped?: boolean } = {};
   const problem = await run(
     async () =>
@@ -145,7 +148,7 @@ export async function editOrderItems(order: Order, items: OrderLine[]): Promise<
         () =>
           api<{ order: Order; chargeDropped?: boolean; version?: number }>(`/api/admin/orders/${encodeURIComponent(order.id)}/items`, {
             method: 'PUT',
-            json: { items, stamp: order.updatedAt },
+            json: { items, stamp },
             retries: 2, // the stamp makes a repeated request harmless (it answers "unchanged" or conflicts)
             timeoutMs: 20_000,
           }),

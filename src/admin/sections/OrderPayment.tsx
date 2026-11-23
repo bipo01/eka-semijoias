@@ -10,7 +10,7 @@ import { centsToInput, formatBRL, parseBRL } from '../../lib/format';
 import { useCatalog } from '../../store/catalog';
 import { formatDateTime } from '../lib/contact';
 import { ADMIN_BASE } from '../lib/paths';
-import { changeOrderStatus, chargeOrder, receiptObjectUrl, receiptUrl } from '../lib/orders';
+import { changeOrderStatus, chargeOrder, receiptObjectUrl, receiptUrl, useOrders } from '../lib/orders';
 import { copyText, MessageActions, OrderMessageComposer, useOrderMessage } from './OrderMessages';
 
 /*
@@ -24,8 +24,9 @@ const copy = copyText;
 /** The charge message (active "Cobrança Pix" variation) for an order with a charge. */
 export function useChargeMessage(order: Order) {
   const pix = useCatalog((s) => s.data.settings.pix);
+  const autoPix = useOrders((s) => s.autoPix);
   const om = useOrderMessage(order);
-  return useMemo(() => (order.charge && pix && om.link ? { link: om.link, message: om.compose('cobranca') } : null), [order.charge, pix, om]);
+  return useMemo(() => (order.charge && (pix || autoPix) && om.link ? { link: om.link, message: om.compose('cobranca') } : null), [order.charge, pix, autoPix, om]);
 }
 
 /** "Cobrar por Pix": shipping/discount → charge → ready message. */
@@ -40,7 +41,9 @@ export function ChargeSheet({ order, open, onClose }: { order: Order; open: bool
 }
 
 function ChargeBody({ order, onClose, onDone }: { order: Order; onClose: () => void; onDone: (done: boolean) => void }) {
-  const pix = useCatalog((s) => s.data.settings.pix);
+  const staticPix = useCatalog((s) => s.data.settings.pix);
+  const autoPix = useOrders((s) => s.autoPix);
+  const pix = staticPix ?? (autoPix || null);
   const [shipping, setShipping] = useState(() => centsToInput(order.charge?.shippingCents || undefined));
   const [discount, setDiscount] = useState(() => centsToInput(order.charge?.discountCents || undefined));
   const [errors, setErrors] = useState<{ shipping?: string; discount?: string; form?: string }>({});
@@ -204,7 +207,8 @@ export function PaymentSection({ order, onCharge }: { order: Order; onCharge: ()
   const charge = order.charge;
   const receipts = order.receipts ?? [];
   const ready = useChargeMessage(order);
-  if (!charge && !receipts.length) return null;
+  const stray = order.strayPayments ?? [];
+  if (!charge && !receipts.length && !stray.length) return null;
   const open = order.status === 'confirmado' || order.status === 'enviado';
   return (
     <section aria-labelledby={`pay-${order.id}`} className="flex flex-col gap-4 rounded-[12px] border border-line bg-white p-4">
@@ -223,6 +227,19 @@ export function PaymentSection({ order, onCharge }: { order: Order; onCharge: ()
         </div>
         {charge && <span className="price shrink-0 font-display text-[1.5rem] leading-none">{formatBRL(charge.amountCents)}</span>}
       </div>
+
+      {charge?.paidBy === 'mercadopago' && <p className="text-sm text-success">Pago pelo Pix automático: o Mercado Pago confirmou o valor exato.</p>}
+      {stray.length > 0 && (
+        <div role="alert" className="flex flex-col gap-1 rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
+          <p className="font-medium">Pix recebido que não bate com a cobrança atual</p>
+          {stray.map((p) => (
+            <p key={p.id}>
+              {formatBRL(p.amountCents)} em {formatDateTime(p.at)} · pagamento {p.id} no Mercado Pago
+            </p>
+          ))}
+          <p className="text-ink">O dinheiro entrou. Confira no Mercado Pago e combine com a cliente: ajustar o pedido, marcar como pago ou devolver.</p>
+        </div>
+      )}
 
       {receipts.length > 0 ? (
         <div className="flex flex-col gap-3">

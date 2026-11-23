@@ -71,13 +71,16 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      // Prefer a window already on that page (or below it); otherwise any window of the same app area.
-      const exact = windows.find((w) => w.url.startsWith(target.origin + target.pathname));
+      // A window already showing exactly that URL is just focused. Otherwise a window on the same page
+      // (e.g. the panel on /admin/pedidos while the notice opens ?pedido=1049) or anywhere in the same
+      // app area is focused and taken to the URL.
+      const exact = windows.find((w) => w.url === target.href);
       if (exact) {
         await exact.focus();
         return;
       }
-      const panel = target.pathname.startsWith('/admin') ? windows.find((w) => new URL(w.url).pathname.startsWith('/admin')) : undefined;
+      const samePage = windows.find((w) => w.url.startsWith(target.origin + target.pathname));
+      const panel = samePage ?? (target.pathname.startsWith('/admin') ? windows.find((w) => new URL(w.url).pathname.startsWith('/admin')) : undefined);
       if (panel) {
         await panel.focus();
         if ('navigate' in panel) await panel.navigate(url).catch(() => undefined);

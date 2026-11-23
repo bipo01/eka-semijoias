@@ -6,6 +6,7 @@ import {
   EDITABLE_ITEMS,
   editItemsRequestSchema,
   FIRST_ORDER_NUMBER,
+  MAX_ORDER_LINE_QTY,
   HOLDS_STOCK,
   movesOf,
   ORDER_STATUSES,
@@ -27,6 +28,7 @@ import { guard, isGuardMiss, toHttpError, withReadRetry } from './db';
 import { HttpError, json, readBody, readJson, zodDetails } from './http';
 import { notifyCatalog, notifyOrders } from './live';
 import { notifyOwner, orderNotice } from './push';
+import { cancelMpPix, mpEnabled } from './mercadopago';
 import type { Context } from './router';
 import { publishStatements, rowKey, type StockState } from './stock';
 import { combosOf, type StockRow } from '../src/data/stock';
@@ -206,7 +208,7 @@ export async function handleListOrders(ctx: Context): Promise<Response> {
       .bind(since, LIST_LIMIT)
       .all<OrderRow>(),
   );
-  return json({ orders: results.map(toOrder), limit: LIST_LIMIT });
+  return json({ orders: results.map(toOrder), limit: LIST_LIMIT, autoPix: mpEnabled(ctx.env) });
 }
 
 /** The order plus the stored `updated_at`, which every write checks (compare-and-swap on the whole row). */
@@ -425,6 +427,8 @@ export async function handleOrderStatus(ctx: Context): Promise<Response> {
     }
     ctx.waitUntil(notifyOrders(ctx.env));
     if (publishVersion !== null) ctx.waitUntil(notifyCatalog(ctx.env, publishVersion));
+    // Back to negotiation or cancelled: a pending automatic Pix must not stay payable.
+    if ((to === 'enviado' || to === 'cancelado') && order.charge?.mp && !order.charge.paidBy) ctx.waitUntil(cancelMpPix(ctx.env, order.charge.mp.id));
     return json({ order: next, ...(publishVersion !== null ? { version: publishVersion } : {}) });
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
@@ -455,6 +459,7 @@ export async function handleAnonymizeOrder(ctx: Context): Promise<Response> {
       throw toHttpError(error);
     }
     ctx.waitUntil(notifyOrders(ctx.env));
+    if (order.charge?.mp && !order.charge.paidBy) ctx.waitUntil(cancelMpPix(ctx.env, order.charge.mp.id));
     return json({ order: next });
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
@@ -651,10 +656,27 @@ export async function handleEditOrderItems(ctx: Context): Promise<Response> {
       throw new HttpError('conflict', `Só dá para mudar as peças de pedidos em negociação ou confirmados. Este está como “${STATUS_LABEL[order.status]}”.`, { order });
     }
     const state = stock();
-    const priced = priceOrder(state.catalog, body.data.items, { owner: true });
-    if (!priced.ok) throw new HttpError('conflict', ownerPricingMessage(priced.problems), { problems: priced.problems });
+    // Lines already in the order whose piece, finish or size left the catalog keep their stored data
+    // (the sale was agreed); only new lines must exist in the catalog today.
+    const stored = new Map(order.items.map((i) => [lineKey(i), i]));
+    const wanted = body.data.items.map((l) => ({ ...l, size: l.size?.trim() || undefined }));
+    let priced = priceOrder(state.catalog, wanted, { owner: true });
+    let kept: OrderItem[] = [];
+    if (!priced.ok) {
+      const unpriceable = new Set(priced.problems.map((p) => lineKey(p)));
+      if (![...unpriceable].every((k) => stored.has(k))) {
+        const fresh = priced.problems.filter((p) => !stored.has(lineKey(p)));
+        throw new HttpError('conflict', ownerPricingMessage(fresh), { problems: fresh });
+      }
+      const qty = new Map<string, number>();
+      for (const l of wanted) if (unpriceable.has(lineKey(l))) qty.set(lineKey(l), (qty.get(lineKey(l)) ?? 0) + l.qty);
+      kept = [...qty].map(([k, q]) => ({ ...stored.get(k)!, qty: Math.min(q, MAX_ORDER_LINE_QTY) }));
+      priced = priceOrder(state.catalog, wanted.filter((l) => !unpriceable.has(lineKey(l))), { owner: true });
+      if (!priced.ok) throw new HttpError('conflict', ownerPricingMessage(priced.problems), { problems: priced.problems });
+    }
     const agreed = new Map(order.items.map((i) => [lineKey(i), i.unitCents]));
-    const items = priced.items.map((i) => ({ ...i, unitCents: agreed.get(lineKey(i)) ?? i.unitCents }));
+    const items = [...priced.items.map((i) => ({ ...i, unitCents: agreed.get(lineKey(i)) ?? i.unitCents })), ...kept];
+    if (!items.length) throw new HttpError('bad_request', 'O pedido precisa de pelo menos uma peça.');
     const totalCents = items.reduce((sum, i) => sum + i.unitCents * i.qty, 0);
     const same =
       items.length === order.items.length && items.every((i) => order.items.some((o) => lineKey(o) === lineKey(i) && o.qty === i.qty && o.unitCents === i.unitCents));
@@ -668,7 +690,17 @@ export async function handleEditOrderItems(ctx: Context): Promise<Response> {
     const statements: D1PreparedStatement[] = [];
     let publish: ReturnType<typeof publishStatements> | null = null;
     if (HOLDS_STOCK.has(order.status)) {
-      const plan = planStock(db, state, at, order.id, order.stockMoves ?? [], movesOf(items), items);
+      // A line that was not counted when the order was confirmed (no stock control then) holds no
+      // units: only its extra quantity is taken now. Lines that hold units are netted by planStock.
+      const held = new Set((order.stockMoves ?? []).map((m) => rowKey(m.productId, m.variantId, m.size)));
+      const before = new Map(order.items.map((i) => [rowKey(i.productId, i.variantId, i.size ?? ''), i.qty]));
+      const take = movesOf(items).flatMap((m) => {
+        const key = rowKey(m.productId, m.variantId, m.size);
+        if (held.has(key) || !before.has(key)) return [m];
+        const extra = m.qty - before.get(key)!;
+        return extra > 0 ? [{ ...m, qty: extra }] : [];
+      });
+      const plan = planStock(db, state, at, order.id, order.stockMoves ?? [], take, items);
       if (plan.problems.length) throw new HttpError('conflict', `Estoque insuficiente: ${plan.problems.join('; ')}. Ajuste o estoque ou o pedido.`, { stock: plan.problems });
       next.stockMoves = plan.taken;
       if (plan.statements.length) {
@@ -695,6 +727,7 @@ export async function handleEditOrderItems(ctx: Context): Promise<Response> {
     }
     ctx.waitUntil(notifyOrders(ctx.env));
     if (publish) ctx.waitUntil(notifyCatalog(ctx.env, publish.version));
+    if (dropCharge && order.charge?.mp && !order.charge.paidBy) ctx.waitUntil(cancelMpPix(ctx.env, order.charge.mp.id));
     return json({ order: next, chargeDropped: dropCharge, ...(publish ? { version: publish.version } : {}) });
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');

@@ -118,6 +118,9 @@ function EditItemsForm({ order, onDone }: { order: Order; onDone: () => void }) 
   const [lines, setLines] = useState<OrderLine[]>(() => order.items.map((i) => ({ productId: i.productId, variantId: i.variantId, ...(i.size ? { size: i.size } : {}), qty: i.qty })));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The version the editor started from: if the order changes meanwhile (another device, a receipt),
+  // the server refuses the save instead of overwriting.
+  const [stamp] = useState(order.updatedAt);
   const agreed = useMemo(() => new Map(order.items.map((i) => [lineKey(i), i.unitCents])), [order.items]);
   const total = lines.reduce((sum, l) => sum + (linePrice(catalog, l, agreed) ?? 0) * l.qty, 0);
   const amountChanges = total !== order.totalCents;
@@ -130,7 +133,7 @@ function EditItemsForm({ order, onDone }: { order: Order; onDone: () => void }) 
     }
     setError(null);
     setBusy(true);
-    const result = await editOrderItems(order, lines);
+    const result = await editOrderItems(order, lines, stamp);
     setBusy(false);
     if ('error' in result) {
       setError(result.error);

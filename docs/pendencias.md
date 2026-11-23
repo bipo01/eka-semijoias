@@ -2,7 +2,9 @@
 
 Funcionalidades pedidas para depois da versão atual. Registrado em 19/11/2026.
 
-> **Atualização 23/11/2026:** os itens 1 (Pix estático), 2 (controle de estoque) e 3 (registro de pedidos e relatório de vendas) estão prontos: plano em `docs/vendas/PLAN.md`. Na mesma data, Coleções saíram do site (menu, cabeçalho, banner da página inicial e `/colecao/*`, que agora leva ao catálogo) e o menu lateral deixou de mostrar preços, a pedido da Érika. Falta a Érika preencher a chave Pix em Painel → Configurações. O Pix dinâmico continua como próximo passo opcional. **O backend já existe** desde 23/11/2026 (Cloudflare Workers + D1 + Durable Objects, com tempo real por WebSocket; veja `docs/backend/PLAN.md` e `AGENTS.md`): pedidos, estoque e Pix entram como novas tabelas e rotas nele.
+> **Atualização 23/11/2026 (fase 3):** tudo desta lista está pronto. Botão "Instalar o app" e o app "Painel ÉKA" (item 4), padronizador de fotos (item 5), pedido manual, edição das peças de um pedido, avisos no celular (Web Push) e Pix automático pelo Mercado Pago. Plano: `docs/vendas/FASE3_PLAN.md`. O Pix automático fica desligado até a conta do Mercado Pago ser ligada (`docs/vendas/PIX_AUTOMATICO.md`).
+
+> **Atualização anterior, 23/11/2026:** os itens 1 (Pix estático), 2 (controle de estoque) e 3 (registro de pedidos e relatório de vendas) estão prontos: plano em `docs/vendas/PLAN.md`. Na mesma data, Coleções saíram do site (menu, cabeçalho, banner da página inicial e `/colecao/*`, que agora leva ao catálogo) e o menu lateral deixou de mostrar preços, a pedido da Érika. Falta a Érika preencher a chave Pix em Painel → Configurações. O Pix dinâmico continua como próximo passo opcional. **O backend já existe** desde 23/11/2026 (Cloudflare Workers + D1 + Durable Objects, com tempo real por WebSocket; veja `docs/backend/PLAN.md` e `AGENTS.md`): pedidos, estoque e Pix entram como novas tabelas e rotas nele.
 
 ## 1. Pix com os dados certos (QR Code e copia e cola) — feito (estático)
 
@@ -49,7 +51,7 @@ Funcionalidades pedidas para depois da versão atual. Registrado em 19/11/2026.
 - Exportar em CSV, como já é feito com as revendedoras.
 - Os dados de clientes (nome e cidade) entram na política de privacidade e podem ser apagados a pedido (LGPD).
 
-## 4. Botão "Instalar o app" (Android e iPhone)
+## 4. Botão "Instalar o app" (Android e iPhone) — feito
 
 Registrado em 23/11/2026. **Prioridade: depois dos itens 1 a 3.**
 
@@ -71,7 +73,7 @@ Registrado em 23/11/2026. **Prioridade: depois dos itens 1 a 3.**
 
 **Depois (opcional):** com o site instalado, notificação no celular da Érika quando chegar um novo pré-cadastro ou pedido (Web Push; o iPhone permite em apps instalados desde o iOS 16.4).
 
-## 5. Padronizador de fotos (remover o fundo e aplicar o fundo da marca)
+## 5. Padronizador de fotos (remover o fundo e aplicar o fundo da marca) — feito
 
 Registrado em 23/11/2026. **Prioridade: depois dos itens 1 a 3.**
 
@@ -106,8 +108,8 @@ Registrado em 23/11/2026. **Prioridade: depois dos itens 1 a 3.**
 1. ~~Backend (pré-requisito de tudo).~~ Feito em 23/11/2026.
 2. ~~Registro de pedidos + relatório de vendas.~~ Feito em 23/11/2026.
 3. ~~Controle de estoque (usa a confirmação de pedidos).~~ Feito em 23/11/2026.
-4. ~~Pix estático~~ (feito em 23/11/2026); depois, se fizer sentido, Pix dinâmico.
-5. Botão "Instalar o app" (item 4) e padronizador de fotos (item 5).
+4. ~~Pix estático~~ (feito em 23/11/2026). ~~Pix dinâmico~~: feito com o Mercado Pago, desligado até a conta ser ligada.
+5. ~~Botão "Instalar o app" (item 4) e padronizador de fotos (item 5).~~ Feitos em 23/11/2026, com pedido manual, edição de peças e avisos no celular.
 
 ## Tempo real (atualização ao vivo)
 

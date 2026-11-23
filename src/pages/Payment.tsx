@@ -493,13 +493,31 @@ export function PaymentPage() {
   const auto = !!view?.auto && view.state === 'aguardando' && !manual;
   const showUpload = view && ((view.state === 'aguardando' && !auto) || (view.state === 'analise' && sendAgain));
 
-  // While an automatic Pix waits, ask every 5 s (only with the page in front): the webhook marks it paid.
+  // While an automatic Pix waits (page in front): read the order every 5 s for 2 minutes, then every
+  // 15 s, then every minute, and stop after 30 minutes (the page refreshes again when it comes back
+  // to the front). The webhook marks it paid; from the first minute on, every 2 minutes the server
+  // also asks Mercado Pago directly, in case a notice is late.
   const waiting = !!view?.mp && view.state === 'aguardando';
   useEffect(() => {
     if (!waiting) return;
-    const timer = window.setInterval(() => document.visibilityState === 'visible' && void refresh(), 5000);
-    return () => window.clearInterval(timer);
-  }, [waiting, refresh]);
+    const started = Date.now();
+    let lastCheck = started;
+    let timer = 0;
+    const tick = async () => {
+      const elapsed = Date.now() - started;
+      if (elapsed > 30 * 60_000) return;
+      if (document.visibilityState === 'visible') {
+        if (elapsed > 60_000 && Date.now() - lastCheck > 120_000) {
+          lastCheck = Date.now();
+          await checkAutoPix(token).catch(() => undefined);
+        }
+        await refresh();
+      }
+      timer = window.setTimeout(() => void tick(), elapsed < 120_000 ? 5000 : elapsed < 600_000 ? 15_000 : 60_000);
+    };
+    timer = window.setTimeout(() => void tick(), 5000);
+    return () => window.clearTimeout(timer);
+  }, [waiting, refresh, token]);
 
   return (
     <div className="min-h-dvh bg-ivory">

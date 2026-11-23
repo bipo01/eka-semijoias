@@ -95,12 +95,22 @@ describe('service worker', () => {
     expect(scope.registration.showNotification.mock.calls[0]?.[1]).toMatchObject({ data: { url: `${ORIGIN}/admin/pedidos` } });
   });
 
-  it('on tap, focuses a window already on that page', async () => {
+  it('on tap, focuses a window already showing exactly that URL', async () => {
     const orders = windowAt('/admin/pedidos?pedido=42');
     const { scope, click } = loadWorker([windowAt('/'), orders]);
-    const notification = await click(`${ORIGIN}/admin/pedidos`);
+    const notification = await click(`${ORIGIN}/admin/pedidos?pedido=42`);
     expect(notification.close).toHaveBeenCalled();
     expect(orders.focus).toHaveBeenCalled();
+    expect(orders.navigate).not.toHaveBeenCalled();
+    expect(scope.clients.openWindow).not.toHaveBeenCalled();
+  });
+
+  it('on tap, takes the panel already on the orders page to the notified order', async () => {
+    const orders = windowAt('/admin/pedidos?pedido=42');
+    const { scope, click } = loadWorker([orders]);
+    await click(`${ORIGIN}/admin/pedidos?pedido=1049`);
+    expect(orders.focus).toHaveBeenCalled();
+    expect(orders.navigate).toHaveBeenCalledWith(`${ORIGIN}/admin/pedidos?pedido=1049`);
     expect(scope.clients.openWindow).not.toHaveBeenCalled();
   });
 

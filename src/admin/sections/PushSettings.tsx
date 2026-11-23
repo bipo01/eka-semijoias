@@ -77,7 +77,9 @@ function handleError(error: unknown): string {
 async function fetchStatus(): Promise<{ status: PushStatus; thisId: string | null }> {
   const status = await api<PushStatus>('/api/admin/push', { retries: 2 });
   let thisId: string | null = null;
-  if (supported()) {
+  // A subscription only exists with permission granted; asking otherwise is pointless (and crashes
+  // the WebKit test browser, which has no push service).
+  if (supported() && Notification.permission === 'granted') {
     const reg = await navigator.serviceWorker.getRegistration('/');
     const sub = await reg?.pushManager.getSubscription();
     if (sub) thisId = await sha24(sub.endpoint);

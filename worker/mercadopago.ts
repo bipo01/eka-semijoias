@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { STATUS_LABEL, type MpPix, type Order } from '../src/data/orders';
+import { type MpPix, type Order } from '../src/data/orders';
 import { hitStatement, ipKey, retryAfter } from './auth';
 import { WRITE_ATTEMPTS } from './catalog';
 import { hmacHex, safeEqual } from './crypto';
@@ -8,7 +8,7 @@ import type { Env } from './env';
 import { HttpError, json, readBody, readJson } from './http';
 import { notifyOrders } from './live';
 import { nextStamp, toData, toOrder, unchanged, type OrderRow } from './orders';
-import { notifyOwner, paidNotice } from './push';
+import { notifyOwner, paidNotice, strayNotice } from './push';
 import type { Context } from './router';
 
 /*
@@ -30,7 +30,12 @@ const PIX_HOURS = 24;
 const CREATE_WINDOW_MS = 60 * 60 * 1000;
 const CREATES_PER_WINDOW = 10;
 const CHECKS_PER_WINDOW = 120;
-const SIGNATURE_TOLERANCE_MS = 5 * 60 * 1000;
+/**
+ * Signed notices older than this are refused. Replays are harmless (the payment is always fetched
+ * from the API and the move to "pago" is a compare-and-swap), and Mercado Pago may retry a notice
+ * for days, so the window only rejects absurd timestamps.
+ */
+const SIGNATURE_TOLERANCE_MS = 7 * 24 * 3600_000;
 
 export const mpEnabled = (env: Env) => !!env.MP_ACCESS_TOKEN && !!env.MP_WEBHOOK_SECRET;
 const apiBase = (env: Env) => (env.MP_API_BASE || DEFAULT_API).replace(/\/$/, '');
@@ -120,14 +125,15 @@ export async function handleCreateMpPix(ctx: Context): Promise<Response> {
         payment_method_id: 'pix',
         payer: { email: input.data.email },
         external_reference: externalReference(order, charge.token),
-        notification_url: `${ctx.url.origin}/api/webhooks/mercadopago`,
+        // source_news=webhooks: only signed Webhooks notices (not the legacy unsigned IPN format).
+        notification_url: `${ctx.url.origin}/api/webhooks/mercadopago?source_news=webhooks`,
         date_of_expiration: mpDate(expiresMs),
       },
     });
     const qr = created.body?.point_of_interaction?.transaction_data?.qr_code;
     if (created.status >= 400 || !created.body?.id || !qr) {
       console.log(JSON.stringify({ event: 'mp_create_failed', status: created.status, order: order.number }));
-      if (created.status === 400) throw new HttpError('bad_request', 'O Mercado Pago recusou este e-mail. Confira e tente de novo.');
+      if (created.status === 400) throw new HttpError('bad_request', 'O Mercado Pago não aceitou gerar este Pix. Confira o e-mail ou use a chave Pix e envie o comprovante.');
       throw new HttpError('unavailable', 'Não foi possível gerar o Pix automático agora. Tente de novo ou use a chave Pix.');
     }
     const mp: MpPix = { id: String(created.body.id), qr, expiresAt: new Date(expiresMs).toISOString(), seq };
@@ -150,6 +156,21 @@ export async function handleCreateMpPix(ctx: Context): Promise<Response> {
 }
 
 /**
+ * Cancels a pending automatic Pix at Mercado Pago (best effort, in waitUntil): called when its charge
+ * is replaced or dropped, so the customer cannot pay a code that no longer settles the order. If
+ * it was paid meanwhile, settlePayment records it as a stray payment for the owner.
+ */
+export async function cancelMpPix(env: Env, paymentId: string | undefined): Promise<void> {
+  if (!paymentId || !mpEnabled(env)) return;
+  try {
+    const r = await mpFetch<MpPayment>(env, `/v1/payments/${encodeURIComponent(paymentId)}`, { method: 'PUT', body: { status: 'cancelled' } });
+    console.log(JSON.stringify({ event: 'mp_cancel', status: r.status }));
+  } catch {
+    console.log(JSON.stringify({ event: 'mp_cancel_failed' }));
+  }
+}
+
+/**
  * Fetches a payment from Mercado Pago and, when it proves this order's charge was paid in full,
  * moves the order from "confirmado" to "pago". Returns what happened (never trusts the caller).
  */
@@ -165,37 +186,48 @@ export async function settlePayment(ctx: Context, paymentId: string): Promise<'p
   const [, orderId, chargeToken] = ref;
   if (payment.status !== 'approved') return 'pending';
 
+  const paidCents = Math.round((payment.transaction_amount ?? 0) * 100);
+  const paymentKey = String(payment.id);
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
     const row = await withReadRetry(() => db.prepare('SELECT id, number, status, updated_at, data FROM orders WHERE id = ?1').bind(orderId).first<OrderRow>());
     if (!row) return 'ignored';
     const order = toOrder(row);
     const charge = order.charge;
-    if (order.status === 'pago' || order.status === 'entregue') return 'already';
-    // The payment must be for the current charge, for exactly its amount, in reais.
-    const paidCents = Math.round((payment.transaction_amount ?? 0) * 100);
-    if (!charge || charge.token !== chargeToken || paidCents !== charge.amountCents || (payment.currency_id && payment.currency_id !== 'BRL')) {
-      console.log(JSON.stringify({ event: 'mp_mismatch', order: order.number, paidCents, charged: charge?.amountCents ?? null, sameCharge: charge?.token === chargeToken }));
-      return 'ignored';
-    }
-    if (order.status !== 'confirmado') {
-      console.log(JSON.stringify({ event: 'mp_paid_not_confirmed', order: order.number, status: STATUS_LABEL[order.status] }));
-      return 'ignored';
-    }
+    const paid = order.status === 'pago' || order.status === 'entregue';
+    // The payment that settled the order (or one already recorded) comes back: nothing to do.
+    if ((paid && charge?.mp?.id === paymentKey && charge.paidBy === 'mercadopago') || order.strayPayments?.some((p) => p.id === paymentKey)) return 'already';
+    // It settles the order only when it is for the current charge, for exactly its amount, in reais,
+    // and the order is waiting for payment.
+    const matches = !!charge && charge.token === chargeToken && paidCents === charge.amountCents && (!payment.currency_id || payment.currency_id === 'BRL');
     const at = nextStamp(row.updated_at);
-    const next: Order = { ...order, status: 'pago', updatedAt: at, charge: { ...charge, paidBy: 'mercadopago' }, history: [...order.history, { at, status: 'pago' as const }].slice(-200) };
+    let next: Order;
+    let outcome: 'paid' | 'stray';
+    if (matches && order.status === 'confirmado' && !order.anonymized) {
+      next = { ...order, status: 'pago', updatedAt: at, charge: { ...charge!, paidBy: 'mercadopago' }, history: [...order.history, { at, status: 'pago' as const }].slice(-200) };
+      outcome = 'paid';
+    } else {
+      // Money arrived that cannot settle this order: keep it on the order for the owner to decide.
+      console.log(JSON.stringify({ event: 'mp_stray', order: order.number, paidCents, charged: charge?.amountCents ?? null, sameCharge: charge?.token === chargeToken, status: order.status }));
+      next = { ...order, updatedAt: at, strayPayments: [...(order.strayPayments ?? []), { id: paymentKey, amountCents: paidCents, at }].slice(-10) };
+      outcome = 'stray';
+    }
     try {
       await db.batch([
         unchanged(db, order.id, row.updated_at),
-        db.prepare(`UPDATE orders SET status = 'pago', updated_at = ?2, data = ?3 WHERE id = ?1 AND status = 'confirmado'`).bind(order.id, at, toData(next)),
-        db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'order.mp_paid', `Pedido ${order.number}: Pix ${payment.id} aprovado pelo Mercado Pago`),
+        outcome === 'paid'
+          ? db.prepare(`UPDATE orders SET status = 'pago', updated_at = ?2, data = ?3 WHERE id = ?1 AND status = 'confirmado'`).bind(order.id, at, toData(next))
+          : db.prepare('UPDATE orders SET updated_at = ?2, data = ?3 WHERE id = ?1').bind(order.id, at, toData(next)),
+        db
+          .prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)')
+          .bind(at, outcome === 'paid' ? 'order.mp_paid' : 'order.mp_stray', `Pedido ${order.number}: Pix ${paymentKey} ${outcome === 'paid' ? 'aprovado pelo Mercado Pago' : `de ${paidCents} centavos recebido fora da cobrança atual`}`),
       ]);
     } catch (error) {
       if (isGuardMiss(error)) continue;
       throw toHttpError(error);
     }
     ctx.waitUntil(notifyOrders(env));
-    ctx.waitUntil(notifyOwner(env, ctx.url.origin, paidNotice(order.number, charge.amountCents)));
-    return 'paid';
+    ctx.waitUntil(notifyOwner(env, ctx.url.origin, outcome === 'paid' ? paidNotice(order.number, charge!.amountCents) : strayNotice(order.number, paidCents)));
+    return outcome === 'paid' ? 'paid' : 'ignored';
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo.');
 }

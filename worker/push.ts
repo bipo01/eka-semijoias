@@ -50,9 +50,14 @@ async function authorizationFor(jwk: VapidJwk, endpoint: string, subject: string
 
 type Outcome = 'sent' | 'gone' | 'failed';
 
-async function deliver(jwk: VapidJwk, subject: string, sub: SubscriptionRow, payload: Uint8Array, notice: PushNotice): Promise<{ outcome: Outcome; status: number }> {
+async function deliver(jwk: VapidJwk, subject: string, sub: SubscriptionRow, payload: Uint8Array, notice: PushNotice): Promise<{ outcome: Outcome; status: number | string }> {
+  let body: Uint8Array;
   try {
-    const body = await encryptPayload(payload, b64urlToBytes(sub.p256dh), b64urlToBytes(sub.auth));
+    body = await encryptPayload(payload, b64urlToBytes(sub.p256dh), b64urlToBytes(sub.auth));
+  } catch {
+    return { outcome: 'failed', status: 'chave' }; // a broken subscription key, not the network
+  }
+  try {
     const headers: Record<string, string> = {
       TTL: String(24 * 3600),
       Urgency: 'high',
@@ -123,6 +128,13 @@ export const paidNotice = (number: number, amountCents: number): PushNotice => (
   tag: `pedido-${number}`,
 });
 
+export const strayNotice = (number: number, amountCents: number): PushNotice => ({
+  title: `Pix a conferir · pedido nº ${number}`,
+  body: `Chegou ${formatBRL(amountCents)} pelo Mercado Pago, mas não bate com a cobrança atual. Confira no painel.`,
+  url: `/admin/pedidos?pedido=${number}`,
+  tag: `pedido-${number}`,
+});
+
 // ---------------------------------------------------------------------------
 // Admin endpoints
 // ---------------------------------------------------------------------------
@@ -133,6 +145,7 @@ const deviceId = async (endpoint: string) => (await sha256Hex(endpoint)).slice(0
 export async function handlePushStatus(ctx: Context): Promise<Response> {
   await requireSession(ctx);
   const jwk = parseVapidJwk(ctx.env.VAPID_PRIVATE_KEY);
+  if (ctx.env.VAPID_PRIVATE_KEY && !jwk) console.log(JSON.stringify({ event: 'push_misconfigured', message: 'VAPID_PRIVATE_KEY is not a P-256 private JWK' }));
   const { results } = await withReadRetry(() =>
     ctx.env.DB.prepare('SELECT id, label, created_at, last_used_at, last_error FROM push_subscriptions ORDER BY created_at').all<{ id: string; label: string; created_at: string; last_used_at: string | null; last_error: string | null }>(),
   );

@@ -18,7 +18,7 @@ import { BASE_HEADERS, HttpError, json, readBody, readJson } from './http';
 import { notifyOrders } from './live';
 import { notifyOwner, receiptNotice } from './push';
 import { sniffReceipt } from './media';
-import { mpEnabled } from './mercadopago';
+import { cancelMpPix, mpEnabled } from './mercadopago';
 import { nextStamp, readOrder, toData, toOrder, unchanged, type OrderRow } from './orders';
 import type { Context } from './router';
 
@@ -83,6 +83,8 @@ export async function handleCharge(ctx: Context): Promise<Response> {
       throw toHttpError(error);
     }
     ctx.waitUntil(notifyOrders(ctx.env));
+    // A new amount replaces the charge: an automatic Pix made for the old one must not stay payable.
+    if (!sameAmount && order.charge?.mp && !order.charge.paidBy) ctx.waitUntil(cancelMpPix(ctx.env, order.charge.mp.id));
     return json({ order: next });
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');

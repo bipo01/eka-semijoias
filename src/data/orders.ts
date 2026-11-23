@@ -199,6 +199,11 @@ export const orderSchema = z.object({
   anonymized: z.boolean().optional(),
   charge: chargeSchema.optional(),
   receipts: z.array(receiptMetaSchema).max(MAX_RECEIPTS_PER_ORDER).optional(),
+  /**
+   * Approved Mercado Pago payments that could not settle this order (an old charge, a second payment,
+   * an order no longer awaiting payment): the money arrived, so the owner must see it and decide.
+   */
+  strayPayments: z.array(z.object({ id: z.string().max(24), amountCents: z.number().int().min(0), at: isoDate })).max(10).optional(),
 });
 export type Order = z.infer<typeof orderSchema>;
 
