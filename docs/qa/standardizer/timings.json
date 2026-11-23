@@ -1,0 +1,428 @@
+{
+  "at": "2026-11-23T23:00:57.180Z",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/159.0.8154.6 Safari/537.36",
+  "photosDir": "/Users/js_bispo1/Desktop/Programação/Side Projects/eka-semijoias/assets/test-photos",
+  "runs": [
+    {
+      "model": "birefnet-lite-512",
+      "requestedDevice": "webgpu",
+      "init": {
+        "ms": 2592,
+        "device": "webgpu",
+        "downloaded": 98484613
+      },
+      "photos": [
+        {
+          "name": "eka-test-1-corrente.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 28,
+            "segment": 1470,
+            "compose": 16
+          },
+          "bounds": {
+            "x": 256,
+            "y": 59,
+            "width": 620,
+            "height": 1253
+          }
+        },
+        {
+          "name": "eka-test-2-perola.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 14,
+            "segment": 944,
+            "compose": 6
+          },
+          "bounds": {
+            "x": 51,
+            "y": 27,
+            "width": 1016,
+            "height": 1260
+          }
+        },
+        {
+          "name": "eka-test-3-anel-zirconia.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 17,
+            "segment": 823,
+            "compose": 7
+          },
+          "bounds": {
+            "x": 348,
+            "y": 527,
+            "width": 386,
+            "height": 460
+          }
+        },
+        {
+          "name": "eka-test-4-brincos-prata.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 19,
+            "segment": 1261,
+            "compose": 10
+          },
+          "bounds": {
+            "x": 122,
+            "y": 258,
+            "width": 950,
+            "height": 983
+          }
+        }
+      ],
+      "peakRss": {
+        "rendererMb": 2648,
+        "gpuMb": 519
+      }
+    },
+    {
+      "model": "birefnet-lite-512",
+      "requestedDevice": "wasm",
+      "init": {
+        "ms": 2497.199999809265,
+        "device": "wasm",
+        "downloaded": 98484613
+      },
+      "photos": [
+        {
+          "name": "eka-test-1-corrente.png",
+          "device": "wasm",
+          "ms": {
+            "decode": 22,
+            "segment": 4490,
+            "compose": 18
+          },
+          "bounds": {
+            "x": 256,
+            "y": 59,
+            "width": 620,
+            "height": 1253
+          }
+        },
+        {
+          "name": "eka-test-2-perola.png",
+          "device": "wasm",
+          "ms": {
+            "decode": 14,
+            "segment": 4752,
+            "compose": 14
+          },
+          "bounds": {
+            "x": 51,
+            "y": 27,
+            "width": 1016,
+            "height": 1260
+          }
+        },
+        {
+          "name": "eka-test-3-anel-zirconia.png",
+          "device": "wasm",
+          "ms": {
+            "decode": 19,
+            "segment": 4248,
+            "compose": 15
+          },
+          "bounds": {
+            "x": 348,
+            "y": 527,
+            "width": 386,
+            "height": 460
+          }
+        },
+        {
+          "name": "eka-test-4-brincos-prata.png",
+          "device": "wasm",
+          "ms": {
+            "decode": 17,
+            "segment": 4431,
+            "compose": 15
+          },
+          "bounds": {
+            "x": 122,
+            "y": 258,
+            "width": 950,
+            "height": 983
+          }
+        }
+      ],
+      "peakRss": {
+        "rendererMb": 2484,
+        "gpuMb": 114
+      }
+    },
+    {
+      "model": "isnet",
+      "requestedDevice": "webgpu",
+      "init": {
+        "ms": 631.1000001430511,
+        "device": "webgpu",
+        "downloaded": 88141171
+      },
+      "photos": [
+        {
+          "name": "eka-test-1-corrente.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 34,
+            "segment": 362,
+            "compose": 10
+          },
+          "bounds": {
+            "x": 263,
+            "y": 72,
+            "width": 607,
+            "height": 1225
+          }
+        },
+        {
+          "name": "eka-test-2-perola.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 18,
+            "segment": 325,
+            "compose": 8
+          },
+          "bounds": {
+            "x": 50,
+            "y": 26,
+            "width": 1016,
+            "height": 1261
+          }
+        },
+        {
+          "name": "eka-test-3-anel-zirconia.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 20,
+            "segment": 318,
+            "compose": 7
+          },
+          "bounds": {
+            "x": 349,
+            "y": 526,
+            "width": 385,
+            "height": 461
+          }
+        },
+        {
+          "name": "eka-test-4-brincos-prata.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 17,
+            "segment": 322,
+            "compose": 10
+          },
+          "bounds": {
+            "x": 124,
+            "y": 257,
+            "width": 948,
+            "height": 983
+          }
+        }
+      ],
+      "peakRss": {
+        "rendererMb": 1025,
+        "gpuMb": 192
+      }
+    },
+    {
+      "model": "isnet",
+      "requestedDevice": "wasm",
+      "init": {
+        "ms": 398.10000014305115,
+        "device": "wasm",
+        "downloaded": 45903029
+      },
+      "photos": [
+        {
+          "name": "eka-test-1-corrente.png",
+          "device": "wasm",
+          "ms": {
+            "decode": 24,
+            "segment": 6958,
+            "compose": 17
+          },
+          "bounds": {
+            "x": 263,
+            "y": 72,
+            "width": 608,
+            "height": 1225
+          }
+        },
+        {
+          "name": "eka-test-2-perola.png",
+          "device": "wasm",
+          "ms": {
+            "decode": 14,
+            "segment": 6355,
+            "compose": 15
+          },
+          "bounds": {
+            "x": 50,
+            "y": 25,
+            "width": 1016,
+            "height": 1262
+          }
+        },
+        {
+          "name": "eka-test-3-anel-zirconia.png",
+          "device": "wasm",
+          "ms": {
+            "decode": 18,
+            "segment": 6663,
+            "compose": 16
+          },
+          "bounds": {
+            "x": 349,
+            "y": 526,
+            "width": 385,
+            "height": 461
+          }
+        },
+        {
+          "name": "eka-test-4-brincos-prata.png",
+          "device": "wasm",
+          "ms": {
+            "decode": 19,
+            "segment": 6339,
+            "compose": 15
+          },
+          "bounds": {
+            "x": 124,
+            "y": 257,
+            "width": 948,
+            "height": 983
+          }
+        }
+      ],
+      "peakRss": {
+        "rendererMb": 843,
+        "gpuMb": 144
+      }
+    },
+    {
+      "model": "birefnet-lite-webgpu",
+      "requestedDevice": "webgpu",
+      "init": {
+        "ms": 1156.2999999523163,
+        "device": "webgpu",
+        "downloaded": 123210471
+      },
+      "photos": [
+        {
+          "name": "eka-test-1-corrente.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 29,
+            "segment": 1912,
+            "compose": 18
+          },
+          "bounds": {
+            "x": 255,
+            "y": 53,
+            "width": 620,
+            "height": 1257
+          }
+        },
+        {
+          "name": "eka-test-2-perola.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 19,
+            "segment": 1704,
+            "compose": 11
+          },
+          "bounds": {
+            "x": 51,
+            "y": 26,
+            "width": 1015,
+            "height": 1260
+          }
+        },
+        {
+          "name": "eka-test-3-anel-zirconia.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 21,
+            "segment": 1683,
+            "compose": 15
+          },
+          "bounds": {
+            "x": 348,
+            "y": 524,
+            "width": 387,
+            "height": 463
+          }
+        },
+        {
+          "name": "eka-test-4-brincos-prata.png",
+          "device": "webgpu",
+          "ms": {
+            "decode": 21,
+            "segment": 1668,
+            "compose": 13
+          },
+          "bounds": {
+            "x": 123,
+            "y": 257,
+            "width": 949,
+            "height": 984
+          }
+        }
+      ],
+      "peakRss": {
+        "rendererMb": 1145,
+        "gpuMb": 178
+      }
+    },
+    {
+      "model": "birefnet-lite-webgpu",
+      "requestedDevice": "wasm",
+      "init": {
+        "ms": 1467.7000000476837,
+        "device": "wasm",
+        "downloaded": 123210471
+      },
+      "photos": [],
+      "error": "page.evaluate: StandardizeError: Faltou memória no aparelho para recortar esta foto. Feche outros apps ou abas e tente de novo.\n    at l.onmessage (http://127.0.0.1:4310/assets/harness-ChjV8zPL.js:1:5295)",
+      "peakRss": {
+        "rendererMb": 4097,
+        "gpuMb": 145
+      }
+    },
+    {
+      "model": "birefnet-lite",
+      "requestedDevice": "webgpu",
+      "init": {
+        "ms": 2278.4000000953674,
+        "device": "webgpu",
+        "downloaded": 114538302
+      },
+      "photos": [],
+      "error": "page.evaluate: StandardizeError: Não deu para recortar esta foto. Tente de novo ou mantenha a original.\n    at l.onmessage (http://127.0.0.1:4310/assets/harness-ChjV8zPL.js:1:5295)",
+      "peakRss": {
+        "rendererMb": 1228,
+        "gpuMb": 153
+      }
+    },
+    {
+      "model": "birefnet-lite",
+      "requestedDevice": "wasm",
+      "init": {
+        "ms": 1888.9000000953674,
+        "device": "wasm",
+        "downloaded": 114538302
+      },
+      "photos": [],
+      "error": "page.evaluate: StandardizeError: Faltou memória no aparelho para recortar esta foto. Feche outros apps ou abas e tente de novo.\n    at l.onmessage (http://127.0.0.1:4310/assets/harness-ChjV8zPL.js:1:5295)",
+      "peakRss": {
+        "rendererMb": 4115,
+        "gpuMb": 128
+      }
+    }
+  ],
+  "cspViolations": []
+}
