@@ -794,6 +794,8 @@ describe('Pix charges and receipts', () => {
     expect(file.status).toBe(200);
     expect(file.headers.get('Content-Type')).toBe('application/pdf');
     expect(file.headers.get('Cache-Control')).toContain('no-store');
+    expect(file.headers.get('Content-Disposition')).toMatch(/^attachment;/); // customer PDFs never render on this origin
+    expect(file.headers.get('Content-Security-Policy')).toContain('sandbox');
     expect(file.text.startsWith('%PDF-')).toBe(true);
     expect((await new Client().req(`/api/admin/receipts/${stored.receipts[1].id}`)).status).toBe(401);
     expect(JSON.stringify(await catalog())).not.toContain('rcp_');

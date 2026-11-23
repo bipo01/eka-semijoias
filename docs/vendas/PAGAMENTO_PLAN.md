@@ -14,7 +14,7 @@
    - Vê o resumo do pedido, o valor exato, o QR e o Copia e Cola.
    - Envia o comprovante (PNG, JPG, WebP, HEIC ou PDF), pelo celular ou arrastando o arquivo no computador.
    - Depois do envio, aparece "Comprovante recebido! A gente confere e confirma pelo WhatsApp".
-5. **No painel, o pedido ganha o selo "Comprovante"** e aparece um aviso ao vivo. A Érika abre o comprovante (imagem na tela, PDF em outra aba), confere o valor ao lado do valor cobrado e toca em **"Pagamento conferido"**, que marca o pedido como pago.
+5. **No painel, o pedido ganha o selo "Comprovante"** e aparece um aviso ao vivo. A Érika abre o comprovante (imagem na tela, PDF baixado e aberto no visualizador do aparelho), confere o valor ao lado do valor cobrado e toca em **"Pagamento conferido"**, que marca o pedido como pago.
 
 ## Decisões
 

@@ -201,9 +201,11 @@ export async function handleGetReceipt(ctx: Context): Promise<Response> {
       'Content-Type': row.content_type,
       'Content-Length': String(bytes.length),
       'Cache-Control': 'private, no-store',
-      'Content-Disposition': `inline; filename="comprovante-pedido-${row.number}.${EXTENSION[row.content_type]}"`,
-      // Images render in a locked-down document; PDFs need the browser's own viewer (a sandbox breaks it).
-      ...(pdf ? { 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'" } : { 'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox" }),
+      // Customer-supplied PDFs can carry scripts: never rendered on this origin (where the admin
+      // session lives); they download and open in the device's own viewer. Images render inline in a
+      // sandboxed, script-free document.
+      'Content-Disposition': `${pdf ? 'attachment' : 'inline'}; filename="comprovante-pedido-${row.number}.${EXTENSION[row.content_type]}"`,
+      'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'; sandbox",
     },
   });
 }

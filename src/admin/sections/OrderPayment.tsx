@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, ExternalLink, FileText, Link2, ReceiptText } from 'lucide-react';
+import { Check, Copy, Download, FileText, Link2, ReceiptText } from 'lucide-react';
 import { Button, ButtonAnchor } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/Field';
 import { WhatsAppIcon } from '../../components/ui/Icons';
@@ -212,7 +212,7 @@ function ReceiptThumb({ receipt, number, index }: { receipt: ReceiptMeta; number
   return (
     <li className="flex items-center gap-3">
       {pdf ? (
-        <a href={receiptUrl(receipt.id)} target="_blank" rel="noopener" aria-label={`${label} (PDF, abre em nova aba)`} className="inline-flex h-20 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-[8px] bg-champagne text-copper ring-1 ring-line hover:ring-copper">
+        <a href={receiptUrl(receipt.id)} download aria-label={`${label} (baixar PDF)`} className="inline-flex h-20 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-[8px] bg-champagne text-copper ring-1 ring-line hover:ring-copper">
           <FileText size={24} strokeWidth={1.4} aria-hidden="true" />
           <span className="text-[11px] font-medium">PDF</span>
         </a>
@@ -226,8 +226,8 @@ function ReceiptThumb({ receipt, number, index }: { receipt: ReceiptMeta; number
         <p className="text-ink-muted">{formatDateTime(receipt.at)}</p>
         {failed && <p className="text-danger">Não foi possível carregar.</p>}
         {pdf && (
-          <a href={receiptUrl(receipt.id)} target="_blank" rel="noopener" className="inline-flex min-h-9 items-center gap-1 text-copper underline underline-offset-4">
-            Abrir PDF <ExternalLink size={14} strokeWidth={1.5} aria-hidden="true" />
+          <a href={receiptUrl(receipt.id)} download className="inline-flex min-h-9 items-center gap-1 text-copper underline underline-offset-4">
+            Baixar PDF <Download size={14} strokeWidth={1.5} aria-hidden="true" />
           </a>
         )}
       </div>
