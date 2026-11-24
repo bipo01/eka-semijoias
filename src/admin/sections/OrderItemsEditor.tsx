@@ -48,8 +48,12 @@ export function linePrice(catalog: Catalog, line: OrderLine, agreed?: ReadonlyMa
   return product ? effectivePrice(product) : null;
 }
 
+const ALL = '__todas__';
+const OTHER = '__sem_categoria__';
+
 function Picker({ catalog, onAdd, onClose, addLabel }: { catalog: Catalog; onAdd: (line: OrderLine) => void; onClose: () => void; addLabel: string }) {
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<string>(ALL);
   const [product, setProduct] = useState<Product | null>(null);
   const [variant, setVariant] = useState<Variant | null>(null);
   const [size, setSize] = useState<string | undefined>(undefined);
@@ -57,11 +61,28 @@ function Picker({ catalog, onAdd, onClose, addLabel }: { catalog: Catalog; onAdd
   const searchRef = useRef<HTMLInputElement>(null);
   const categories = useMemo(() => new Map(catalog.categories.map((c) => [c.id, c.name])), [catalog.categories]);
   const q = normalize(query);
-  const results = useMemo(() => {
+  // Every piece (no cap: a piece past the first screenful must be reachable without typing), filtered by
+  // the search, then grouped by category in the owner's category order (pieces of a removed category last).
+  const matches = useMemo(() => {
     const all = [...catalog.products].sort(byOrder);
-    if (!q) return all.slice(0, 30);
-    return all.filter((p) => normalize(`${p.name} ${categories.get(p.categoryId) ?? ''} ${p.variants.map((v) => v.sku ?? '').join(' ')}`).includes(q)).slice(0, 30);
+    if (!q) return all;
+    return all.filter((p) => normalize(`${p.name} ${categories.get(p.categoryId) ?? ''} ${p.variants.map((v) => v.sku ?? '').join(' ')}`).includes(q));
   }, [catalog.products, categories, q]);
+  const groups = useMemo(() => {
+    const order = [...catalog.categories].sort((a, b) => a.order - b.order).map((c) => c.id);
+    const byCat = new Map<string, Product[]>();
+    for (const p of matches) byCat.set(p.categoryId, [...(byCat.get(p.categoryId) ?? []), p]);
+    const known = order.filter((id) => byCat.has(id)).map((id) => ({ id, name: categories.get(id)!, items: byCat.get(id)! }));
+    const orphans = [...byCat.entries()].filter(([id]) => !categories.has(id)).flatMap(([, items]) => items);
+    return orphans.length ? [...known, { id: OTHER, name: 'Sem categoria', items: orphans }] : known;
+  }, [matches, catalog.categories, categories]);
+  const shown = category === ALL ? groups : groups.filter((g) => g.id === category);
+  /** Chips: every category with pieces in the catalog (counts follow the search). */
+  const chips = useMemo(() => {
+    const order = [...catalog.categories].sort((a, b) => a.order - b.order);
+    return order.filter((c) => catalog.products.some((p) => p.categoryId === c.id));
+  }, [catalog.categories, catalog.products]);
+  const countIn = (id: string) => groups.find((g) => g.id === id)?.items.length ?? 0;
 
   const choose = (p: Product) => {
     setProduct(p);
@@ -142,48 +163,88 @@ function Picker({ catalog, onAdd, onClose, addLabel }: { catalog: Catalog; onAdd
     );
   }
 
+  const row = (p: Product) => {
+    const image = p.images[0];
+    return (
+      <li key={p.id}>
+        <button type="button" onClick={() => choose(p)} className="flex w-full items-center gap-3 rounded-[10px] p-2 text-left hover:bg-champagne focus-visible:outline-2 focus-visible:outline-copper">
+          {image ? <Img {...productImageSources(image, true)} alt="" ratio="4 / 5" frameClassName="w-12 shrink-0 rounded-[8px]" width={48} height={60} /> : <span className="w-12 shrink-0" />}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{p.name}</span>
+            {!p.available && <span className="block truncate text-xs text-ink-muted">Oculta no site</span>}
+          </span>
+          <span className="price shrink-0 text-sm">{formatBRL(effectivePrice(p))}</span>
+        </button>
+      </li>
+    );
+  };
+
   return (
-    <div className="flex flex-col gap-3 rounded-[12px] border border-copper bg-white p-3">
-      <div className="relative">
-        <label htmlFor="order-piece-search" className="sr-only">
-          Buscar peça
-        </label>
-        <Search size={18} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
-        <input
-          id="order-piece-search"
-          ref={searchRef}
-          type="search"
-          autoFocus
-          placeholder="Buscar peça ou referência"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="min-h-12 w-full rounded-[10px] border border-line bg-white pr-3 pl-10 text-base placeholder:text-ink-muted focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"
-        />
+    // No inner scroll box: the list uses the panel's height and the panel scrolls; the search, the
+    // categories and "Fechar" stay pinned at the top while she scrolls.
+    <div className="flex flex-col rounded-[12px] border border-copper bg-white">
+      <div className="sticky top-0 z-10 flex flex-col gap-3 rounded-t-[12px] border-b border-line bg-white p-3 pb-2">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-medium">Escolha a peça</p>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Fechar
+          </Button>
+        </div>
+        <div className="relative">
+          <label htmlFor="order-piece-search" className="sr-only">
+            Buscar peça
+          </label>
+          <Search size={18} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
+          <input
+            id="order-piece-search"
+            ref={searchRef}
+            type="search"
+            autoFocus
+            placeholder="Buscar peça ou referência"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="min-h-12 w-full rounded-[10px] border border-line bg-white pr-3 pl-10 text-base placeholder:text-ink-muted focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"
+          />
+        </div>
+        {chips.length > 1 && (
+          <div role="group" aria-label="Categorias" className="no-scrollbar -mx-3 flex gap-2 overflow-x-auto px-3 py-1">
+            <Chip selected={category === ALL} onClick={() => setCategory(ALL)}>
+              Todas <span className={cx('price text-xs', category === ALL ? 'text-white/80' : 'text-ink-muted')}>{matches.length}</span>
+            </Chip>
+            {chips.map((c) => (
+              <Chip key={c.id} selected={category === c.id} onClick={() => setCategory(c.id)}>
+                {c.name} <span className={cx('price text-xs', category === c.id ? 'text-white/80' : 'text-ink-muted')}>{countIn(c.id)}</span>
+              </Chip>
+            ))}
+          </div>
+        )}
       </div>
-      <ul className="flex max-h-72 flex-col overflow-y-auto" aria-label="Peças do catálogo">
-        {results.map((p) => {
-          const image = p.images[0];
-          return (
-            <li key={p.id}>
-              <button type="button" onClick={() => choose(p)} className="flex w-full items-center gap-3 rounded-[10px] p-2 text-left hover:bg-champagne focus-visible:outline-2 focus-visible:outline-copper">
-                {image ? <Img {...productImageSources(image, true)} alt="" ratio="4 / 5" frameClassName="w-10 shrink-0 rounded-[6px]" width={40} height={50} /> : <span className="w-10" />}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{p.name}</span>
-                  <span className="block truncate text-xs text-ink-muted">
-                    {categories.get(p.categoryId)}
-                    {!p.available && ' · oculta no site'}
-                  </span>
-                </span>
-                <span className="price shrink-0 text-sm">{formatBRL(effectivePrice(p))}</span>
+      <div className="p-2 pb-3">
+        {shown.length > 0 && (
+          <ul aria-label="Peças do catálogo">
+            {shown.map((g) => (
+              <li key={g.id} className={cx(category === ALL && 'pt-2 first:pt-1')}>
+                {category === ALL && (
+                  <h3 className="eyebrow flex items-baseline gap-2 px-2 pb-1 text-ink-muted">
+                    {g.name} <span className="h-px flex-1 self-center bg-line" aria-hidden="true" />
+                  </h3>
+                )}
+                <ul aria-label={`Peças de ${g.name}`}>{g.items.map(row)}</ul>
+              </li>
+            ))}
+          </ul>
+        )}
+        {!shown.length && (
+          <div className="flex flex-col items-center gap-2 p-4 text-center text-sm text-ink-muted">
+            <p>{q ? 'Nenhuma peça com esse nome' : 'Nenhuma peça'}{category !== ALL && ` em ${categories.get(category) ?? 'esta categoria'}`}.</p>
+            {category !== ALL && matches.length > 0 && (
+              <button type="button" className="min-h-11 text-copper underline underline-offset-4" onClick={() => setCategory(ALL)}>
+                Ver em todas as categorias ({matches.length})
               </button>
-            </li>
-          );
-        })}
-        {!results.length && <li className="p-3 text-center text-sm text-ink-muted">Nenhuma peça com esse nome.</li>}
-      </ul>
-      <Button variant="ghost" size="sm" onClick={onClose}>
-        Fechar
-      </Button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
