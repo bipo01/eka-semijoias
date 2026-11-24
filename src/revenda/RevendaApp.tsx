@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { CalendarClock, Copy, ExternalLink, LogOut, Minus, Plus, ShoppingBag, Undo2 } from 'lucide-react';
+import { CalendarClock, Copy, ExternalLink, Eye, LogOut, Minus, Plus, ShoppingBag, Undo2 } from 'lucide-react';
 import { Lockup } from '../components/layout/Logo';
 import { InstallAppButton } from '../components/install/InstallAppButton';
-import { Button, ButtonAnchor } from '../components/ui/Button';
+import { Button, ButtonAnchor, ButtonLink } from '../components/ui/Button';
+import { forgetPanelShowcase, rememberPanelShowcase } from '../lib/panelShowcase';
 import { TextField } from '../components/ui/Field';
 import { WhatsAppIcon } from '../components/ui/Icons';
 import { Img } from '../components/ui/Img';
@@ -674,9 +675,13 @@ function PanelPage() {
       (data) => {
         setMe(data);
         setError(null);
+        rememberPanelShowcase(data.reseller.slug);
       },
       (err: unknown) => {
-        if (err instanceof ApiError && err.code === 'unauthenticated') navigate('/revenda', { replace: true });
+        if (err instanceof ApiError && err.code === 'unauthenticated') {
+          forgetPanelShowcase();
+          navigate('/revenda', { replace: true });
+        }
         else setError(errorMessage(err));
       },
     );
@@ -691,6 +696,7 @@ function PanelPage() {
 
   async function exit() {
     await logout().catch(() => undefined);
+    forgetPanelShowcase();
     navigate('/revenda', { replace: true });
   }
 
@@ -744,9 +750,10 @@ function PanelPage() {
           >
             <Copy size={16} strokeWidth={1.5} /> Copiar link
           </Button>
-          <ButtonAnchor size="sm" variant="ghost" href={showcase} target="_blank" rel="noopener noreferrer">
-            <ExternalLink size={16} strokeWidth={1.5} /> Ver mostruário
-          </ButtonAnchor>
+          {/* Same tab: the showcase has "Voltar ao meu painel" (and the browser's back works too). */}
+          <ButtonLink size="sm" variant="ghost" to={`/r/${me.reseller.slug}`} state={{ fromPanel: true }}>
+            <Eye size={16} strokeWidth={1.5} /> Ver mostruário
+          </ButtonLink>
         </div>
       </div>
       <div role="group" aria-label="Seções" className="flex gap-2">

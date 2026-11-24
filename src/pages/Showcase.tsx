@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { Lockup } from '../components/layout/Logo';
 import { ButtonAnchor } from '../components/ui/Button';
 import { WhatsAppIcon } from '../components/ui/Icons';
@@ -12,6 +13,7 @@ import { useMessages } from '../hooks/useMessages';
 import { api, ApiError, errorMessage } from '../lib/api';
 import { productImageSources } from '../lib/assets';
 import { formatBRL } from '../lib/format';
+import { isOwnShowcase } from '../lib/panelShowcase';
 import { whatsappUrl } from '../lib/whatsapp';
 
 /*
@@ -45,6 +47,15 @@ export function ShowcasePage() {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const biz = useBusiness();
   const compose = useMessages();
+  const navigate = useNavigate();
+  const location = useLocation();
+  // Only on the reseller's own device (her panel remembers its showcase): customers never see it.
+  const own = isOwnShowcase(slug);
+  const backToPanel = () => {
+    // Opened from the panel in this tab: going back keeps the panel's place; otherwise open it.
+    if ((location.state as { fromPanel?: boolean } | null)?.fromPanel) navigate(-1);
+    else navigate('/revenda');
+  };
   const view = load.status === 'ready' ? load.view : null;
   useDocumentTitle(view ? `Mostruário de ${view.firstName}` : 'Mostruário');
 
@@ -75,6 +86,16 @@ export function ShowcasePage() {
 
   return (
     <div className="min-h-dvh bg-ivory">
+      {own && (
+        <div className="border-b border-line bg-white">
+          <div className="mx-auto flex max-w-[960px] flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2">
+            <button type="button" onClick={backToPanel} className="-ml-1 inline-flex min-h-11 items-center gap-1.5 px-1 text-sm font-medium text-copper hover:text-copper-dark">
+              <ArrowLeft size={17} strokeWidth={1.75} aria-hidden="true" /> Voltar ao meu painel
+            </button>
+            <p className="text-sm text-ink-muted">É assim que suas clientes veem o seu mostruário.</p>
+          </div>
+        </div>
+      )}
       <header className="mx-auto flex max-w-[960px] items-center gap-4 px-5 pt-7 pb-2">
         <span aria-hidden="true" className="h-px flex-1 bg-rose/60" />
         <Link to="/" aria-label="ÉKA Semijoias: ir para a loja">
