@@ -10,7 +10,7 @@ import { imageSrc } from './imageSrc';
  * with the schema of its id.
  */
 
-export const SECTION_IDS = ['inicio', 'depoimentos', 'perguntas', 'sobre', 'cuidados', 'garantia', 'revendedoras', 'contato', 'geral', 'privacidade', 'compartilhar', 'loja'] as const;
+export const SECTION_IDS = ['inicio', 'depoimentos', 'perguntas', 'sobre', 'cuidados', 'garantia', 'revendedoras', 'contato', 'geral', 'privacidade', 'compartilhar', 'loja', 'pagamento', 'revenda'] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 export const isSectionId = (v: string): v is SectionId => (SECTION_IDS as readonly string[]).includes(v);
 
@@ -28,6 +28,8 @@ export const SECTION_LABEL: Record<SectionId, string> = {
   privacidade: 'Política de privacidade',
   compartilhar: 'Google e compartilhamento',
   loja: 'O que a loja oferece',
+  pagamento: 'Página de pagamento',
+  revenda: 'Painel da revendedora',
 };
 
 const FILL = 'Preencha este campo.';
@@ -201,6 +203,110 @@ export const sectionSchemas = {
     plating: text(120),
     consignment: z.boolean().nullable(),
     noUpfrontInvestment: z.boolean().nullable(),
+  }),
+  /*
+   * Texts of the payment link page (/pagamento/<token>). Texts with a value in the middle take the
+   * message variables ({pedido}, {primeiro_nome}, {total}) and optional [ … ] parts, rendered with
+   * renderTemplate (src/data/messages.ts) like the WhatsApp templates.
+   */
+  pagamento: stamped({
+    header: z.object({
+      /** Followed by "nº <number>". */
+      title: req(60),
+      /** Line above the title per situation (after "Oi, <name>! "). */
+      waiting: req(40),
+      review: req(40),
+      paid: req(40),
+      cancelled: req(40),
+    }),
+    pix: z.object({
+      title: req(40),
+      step1: req(200),
+      /** {total} */
+      step2: req(200),
+      step3: req(200),
+      qrHint: text(120),
+      /** Shown instead of the Pix when the store has no Pix key. */
+      unavailable: req(300),
+    }),
+    autoPix: z.object({
+      intro: req(300),
+      /** {total} */
+      step2: req(200),
+      step3: req(200),
+      notYet: req(200),
+    }),
+    receipt: z.object({
+      title: req(60),
+      againTitle: req(60),
+    }),
+    status: z.object({
+      paidTitle: req(60),
+      /** {primeiro_nome}, {pedido} */
+      paidText: req(300),
+      reviewTitle: req(60),
+      /** {primeiro_nome} */
+      reviewText: req(300),
+      cancelledTitle: req(60),
+      cancelledText: req(300),
+    }),
+    problem: z.object({
+      goneTitle: req(80),
+      failedTitle: req(80),
+      /** WhatsApp message of the problem page. */
+      message: req(300),
+    }),
+    help: z.object({
+      question: text(80),
+      /** WhatsApp messages, {pedido}. */
+      message: req(300),
+      cancelledMessage: req(300),
+    }),
+  }),
+  /** Texts of the reseller panel (/revenda). Greetings take {primeiro_nome}. */
+  revenda: stamped({
+    login: z.object({
+      title: req(60),
+      text: text(200),
+      forgot: text(200),
+    }),
+    invite: z.object({
+      /** {primeiro_nome} */
+      greeting: text(60),
+      title: req(60),
+      text: text(200),
+      textNoContract: text(200),
+      goneTitle: req(60),
+      welcome: req(120),
+    }),
+    contract: z.object({
+      updateTitle: req(80),
+      updateText: text(200),
+      accepted: req(120),
+    }),
+    panel: z.object({
+      /** {primeiro_nome} */
+      greeting: text(60),
+      title: req(60),
+      topTier: req(120),
+      showcaseTitle: req(60),
+      showcaseText: text(200),
+      installText: text(200),
+    }),
+    kit: z.object({
+      empty: req(200),
+      soldOut: req(120),
+    }),
+    sale: z.object({
+      phoneHint: text(120),
+      done: text(200),
+      registered: req(120),
+      undone: req(120),
+    }),
+    history: z.object({
+      salesEmpty: req(120),
+      settlementsEmpty: req(120),
+    }),
   }),
 } satisfies Record<SectionId, z.ZodType>;
 

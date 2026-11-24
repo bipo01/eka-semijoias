@@ -20,12 +20,18 @@ import { buildPixPayload, pixText, pixTxid } from '../lib/pix';
 import { isPdf, prepareReceipt } from '../lib/receipt';
 import { whatsappUrl } from '../lib/whatsapp';
 import { useMessages } from '../hooks/useMessages';
+import { useSection, useSectionsReady } from '../hooks/useSection';
+import { fillString, fillText } from '../content/fillText';
 
 /*
  * /pagamento/:token — the payment link the owner sends on WhatsApp after
  * confirming an order: summary, exact amount, Pix (QR + copia e cola) and the
  * receipt upload. Standalone (no store navigation) so the customer can focus.
+ * The texts come from the "pagamento" section (Painel → Site).
  */
+
+/** "Pix Copia e Cola" stands out in the steps wherever the owner kept it. */
+const PIX_EMPHASIS = { phrase: 'Pix Copia e Cola', render: (phrase: string) => <strong className="font-medium text-ink">{phrase}</strong> };
 
 type Load = { status: 'loading' } | { status: 'ready'; view: PayView } | { status: 'error'; message: string; notFound: boolean };
 
@@ -104,41 +110,36 @@ function Summary({ view }: { view: PayView }) {
   );
 }
 
+const AmountText = ({ cents }: { cents: number }) => <span className="price text-ink">{formatBRL(cents)}</span>;
+
+const Step = ({ n, children }: { n: number; children: ReactNode }) => (
+  <li className="flex gap-2.5">
+    <span className="price inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-champagne text-xs text-copper">{n}</span>
+    <span>{children}</span>
+  </li>
+);
+
 function PixSection({ view }: { view: PayView }) {
+  const t = useSection('pagamento');
   const pix = view.pix;
   const code = useMemo(() => (pix ? buildPixPayload({ key: pix.key, name: pix.name, city: pix.city, amountCents: view.amountCents, txid: pixTxid(view.number) }) : ''), [pix, view.amountCents, view.number]);
   if (!pix) {
     return (
-      <p className="rounded-[12px] border border-line bg-white px-4 py-3 text-sm">
-        O Pix desta loja está sendo atualizado. Fale com a gente pelo WhatsApp para receber os dados de pagamento.
-      </p>
+      <p className="rounded-[12px] border border-line bg-white px-4 py-3 text-sm">{t.pix.unavailable}</p>
     );
   }
   return (
     <section aria-labelledby="pix-title" className="flex flex-col gap-5">
-      <RuledTitle id="pix-title">Pague com Pix</RuledTitle>
+      <RuledTitle id="pix-title">{t.pix.title}</RuledTitle>
       <div className="flex flex-col gap-5 rounded-[14px] bg-white p-5 shadow-[var(--shadow-1)]">
         <ol className="flex flex-col gap-2 text-sm text-ink-muted">
-          <li className="flex gap-2.5">
-            <span className="price inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-champagne text-xs text-copper">1</span>
-            <span>
-              Copie o código e cole em <strong className="font-medium text-ink">Pix Copia e Cola</strong> no app do seu banco.
-            </span>
-          </li>
-          <li className="flex gap-2.5">
-            <span className="price inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-champagne text-xs text-copper">2</span>
-            <span>
-              Confira o valor de <span className="price text-ink">{formatBRL(view.amountCents)}</span> e o recebedor, e pague.
-            </span>
-          </li>
-          <li className="flex gap-2.5">
-            <span className="price inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-champagne text-xs text-copper">3</span>
-            <span>Envie o comprovante logo abaixo.</span>
-          </li>
+          <Step n={1}>{fillText(t.pix.step1, {}, PIX_EMPHASIS)}</Step>
+          <Step n={2}>{fillText(t.pix.step2, { total: <AmountText cents={view.amountCents} /> }, PIX_EMPHASIS)}</Step>
+          <Step n={3}>{fillText(t.pix.step3, {}, PIX_EMPHASIS)}</Step>
         </ol>
         <PixCopyField code={code} id="pix-code" />
         <div className="flex flex-col items-center gap-2 border-t border-line pt-5">
-          <p className="text-center text-sm text-ink-muted">No computador? Leia o QR Code com o celular.</p>
+          {t.pix.qrHint && <p className="text-center text-sm text-ink-muted">{t.pix.qrHint}</p>}
           <QrCode value={code} label={`QR Code Pix de ${formatBRL(view.amountCents)}`} className="size-[188px] ring-1 ring-line" />
           <p className="text-center text-sm text-ink-muted">
             Recebedor: <span className="text-ink">{pixText(pix.name, 25)}</span>
@@ -149,13 +150,6 @@ function PixSection({ view }: { view: PayView }) {
   );
 }
 
-const Step = ({ n, children }: { n: number; children: ReactNode }) => (
-  <li className="flex gap-2.5">
-    <span className="price inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-champagne text-xs text-copper">{n}</span>
-    <span>{children}</span>
-  </li>
-);
-
 const untilLabel = (iso: string) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)).replace(',', ' às');
 
 /**
@@ -163,6 +157,7 @@ const untilLabel = (iso: string) => new Intl.DateTimeFormat('pt-BR', { day: '2-d
  * the page asks every few seconds and "Já paguei" checks right away.
  */
 function AutoPixSection({ view, token, onPaid, onRefresh }: { view: PayView; token: string; onPaid: () => void; onRefresh: () => void }) {
+  const t = useSection('pagamento');
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState<'create' | 'check' | null>(null);
@@ -204,7 +199,7 @@ function AutoPixSection({ view, token, onPaid, onRefresh }: { view: PayView; tok
 
   return (
     <section aria-labelledby="pix-title" className="flex flex-col gap-5">
-      <RuledTitle id="pix-title">Pague com Pix</RuledTitle>
+      <RuledTitle id="pix-title">{t.pix.title}</RuledTitle>
       <div className="flex flex-col gap-5 rounded-[14px] bg-white p-5 shadow-[var(--shadow-1)]">
         {!mp ? (
           <form
@@ -215,9 +210,7 @@ function AutoPixSection({ view, token, onPaid, onRefresh }: { view: PayView; tok
               void create();
             }}
           >
-            <p className="text-sm text-ink-muted">
-              Geramos um Pix só para este pedido, no valor exato. Quando você pagar, a confirmação chega aqui sozinha, sem precisar mandar comprovante.
-            </p>
+            <p className="text-sm text-ink-muted">{t.autoPix.intro}</p>
             <TextField
               label="Seu e-mail"
               type="email"
@@ -238,24 +231,20 @@ function AutoPixSection({ view, token, onPaid, onRefresh }: { view: PayView; tok
         ) : (
           <>
             <ol className="flex flex-col gap-2 text-sm text-ink-muted">
-              <Step n={1}>
-                Copie o código e cole em <strong className="font-medium text-ink">Pix Copia e Cola</strong> no app do seu banco.
-              </Step>
-              <Step n={2}>
-                Confira o valor de <span className="price text-ink">{formatBRL(view.amountCents)}</span> e pague.
-              </Step>
-              <Step n={3}>Pronto: a confirmação aparece aqui em instantes.</Step>
+              <Step n={1}>{fillText(t.pix.step1, {}, PIX_EMPHASIS)}</Step>
+              <Step n={2}>{fillText(t.autoPix.step2, { total: <AmountText cents={view.amountCents} /> }, PIX_EMPHASIS)}</Step>
+              <Step n={3}>{fillText(t.autoPix.step3, {}, PIX_EMPHASIS)}</Step>
             </ol>
             <PixCopyField code={mp.qr} id="pix-code" />
             <div className="flex flex-col items-center gap-2 border-t border-line pt-5">
-              <p className="text-sm text-ink-muted">No computador? Leia o QR Code com o celular.</p>
+              {t.pix.qrHint && <p className="text-sm text-ink-muted">{t.pix.qrHint}</p>}
               <QrCode value={mp.qr} label={`QR Code Pix de ${formatBRL(view.amountCents)}`} className="size-[188px] ring-1 ring-line" />
               <p className="text-center text-sm text-ink-muted">Válido até {untilLabel(mp.expiresAt)}</p>
             </div>
             <div className="flex flex-col items-center gap-2 border-t border-line pt-5 text-center">
               <p role="status" className="inline-flex items-center gap-2 text-sm text-ink-muted">
                 <LoaderCircle size={16} strokeWidth={1.75} aria-hidden="true" className="animate-spin text-copper motion-reduce:animate-none" />
-                {checked ? 'O pagamento ainda não apareceu. Alguns bancos levam um minutinho.' : 'Esperando o pagamento…'}
+                {checked ? t.autoPix.notYet : 'Esperando o pagamento…'}
               </p>
               <Button variant="secondary" disabled={!!busy} aria-busy={busy === 'check'} onClick={() => void check()}>
                 {busy === 'check' ? 'Conferindo…' : 'Já paguei'}
@@ -276,6 +265,7 @@ function AutoPixSection({ view, token, onPaid, onRefresh }: { view: PayView; tok
 const kb = (bytes: number) => (bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`);
 
 function ReceiptUpload({ token, number, onSent, again }: { token: string; number: number; onSent: () => void; again?: boolean }) {
+  const t = useSection('pagamento');
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -327,7 +317,7 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
 
   return (
     <section aria-labelledby="receipt-title" className="flex flex-col gap-5">
-      <RuledTitle id="receipt-title">{again ? 'Enviar outro comprovante' : 'Envie o comprovante'}</RuledTitle>
+      <RuledTitle id="receipt-title">{again ? t.receipt.againTitle : t.receipt.title}</RuledTitle>
       {!file ? (
         <label
           htmlFor={inputId}
@@ -417,23 +407,25 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
 function StatusCard({ view, onAgain }: { view: PayView; onAgain?: () => void }) {
   const biz = useBusiness();
   const message = useMessages();
+  const t = useSection('pagamento');
+  const vars = { pedido: String(view.number), primeiro_nome: view.firstName };
   if (view.state === 'pago') {
     return (
       <section className="flex flex-col items-center gap-3 rounded-[14px] bg-white px-5 py-8 text-center shadow-[var(--shadow-1)]">
         <span className="inline-flex size-14 items-center justify-center rounded-full bg-[#e4ece6] text-success">
           <CheckCircle2 size={28} strokeWidth={1.5} aria-hidden="true" />
         </span>
-        <h2 className="font-display text-display-m">Pagamento confirmado</h2>
-        <p className="max-w-xs text-ink-muted">Obrigada{view.firstName ? `, ${view.firstName}` : ''}! Seu pedido nº {view.number} está pago. A gente avisa pelo WhatsApp quando for enviado.</p>
+        <h2 className="font-display text-display-m">{t.status.paidTitle}</h2>
+        <p className="max-w-xs text-ink-muted">{fillString(t.status.paidText, vars)}</p>
       </section>
     );
   }
   if (view.state === 'cancelado') {
     return (
       <section className="flex flex-col items-center gap-3 rounded-[14px] bg-white px-5 py-8 text-center shadow-[var(--shadow-1)]">
-        <h2 className="font-display text-display-m">Pedido cancelado</h2>
-        <p className="max-w-xs text-ink-muted">Este pedido foi cancelado e não precisa ser pago. Se tiver alguma dúvida, fale com a gente.</p>
-        <ButtonAnchor href={whatsappUrl(biz.whatsapp, `Olá! Tenho uma dúvida sobre o pedido nº ${view.number}.`)} variant="secondary">
+        <h2 className="font-display text-display-m">{t.status.cancelledTitle}</h2>
+        <p className="max-w-xs text-ink-muted">{fillString(t.status.cancelledText, vars)}</p>
+        <ButtonAnchor href={whatsappUrl(biz.whatsapp, fillString(t.help.cancelledMessage, vars))} variant="secondary">
           <WhatsAppIcon size={20} /> Falar no WhatsApp
         </ButtonAnchor>
       </section>
@@ -444,9 +436,9 @@ function StatusCard({ view, onAgain }: { view: PayView; onAgain?: () => void }) 
   return (
     <section className="flex flex-col items-center gap-3 rounded-[14px] bg-white px-5 pt-6 pb-7 text-center shadow-[var(--shadow-1)]">
       <Illustration name="comprovante-recebido" size={150} />
-      <h2 className="font-display text-display-m">Comprovante recebido!</h2>
+      <h2 className="font-display text-display-m">{t.status.reviewTitle}</h2>
       <p className="max-w-xs text-ink-muted">
-        A gente confere o pagamento e confirma pelo WhatsApp{view.firstName ? `, ${view.firstName}` : ''}.
+        {fillString(t.status.reviewText, vars)}
         {last && (
           <span className="mt-1 block text-sm">
             Enviado em {new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(last.at))}.
@@ -472,8 +464,11 @@ export function PaymentPage() {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [sendAgain, setSendAgain] = useState(false);
   const biz = useBusiness();
-  const view = load.status === 'ready' ? load.view : null;
-  useDocumentTitle(view ? `Pagamento do pedido nº ${view.number}` : 'Pagamento');
+  const t = useSection('pagamento');
+  // The owner's texts are known before anything is shown (no built-in text swapped in front of the customer).
+  const textsReady = useSectionsReady();
+  const view = load.status === 'ready' && textsReady ? load.view : null;
+  useDocumentTitle(view ? `${t.header.title} nº ${view.number}` : 'Pagamento');
 
   const refresh = useCallback(async () => {
     try {
@@ -533,7 +528,7 @@ export function PaymentPage() {
       </header>
 
       <main className="mx-auto flex max-w-[520px] flex-col gap-8 px-5 pt-1 pb-[calc(40px+var(--safe-bottom))]">
-        {load.status === 'loading' && (
+        {(load.status === 'loading' || !textsReady) && (
           <div aria-busy="true" className="flex flex-col items-center gap-5 pt-6">
             <div className="size-40 animate-pulse rounded-full bg-champagne/70" />
             <div className="h-8 w-64 animate-pulse rounded-full bg-champagne/70" />
@@ -541,17 +536,17 @@ export function PaymentPage() {
           </div>
         )}
 
-        {load.status === 'error' && (
+        {load.status === 'error' && textsReady && (
           <section className="flex flex-col items-center gap-3 pt-6 text-center">
             <Illustration name="pagamento" size={150} />
-            <h1 className="font-display text-display-m">{load.notFound ? 'Link de pagamento indisponível' : 'Não conseguimos abrir o pagamento'}</h1>
+            <h1 className="font-display text-display-m">{load.notFound ? t.problem.goneTitle : t.problem.failedTitle}</h1>
             <p className="max-w-sm text-ink-muted">{load.message}</p>
             {!load.notFound && (
               <Button variant="secondary" onClick={() => void refresh()}>
                 <RefreshCw size={17} strokeWidth={1.5} /> Tentar de novo
               </Button>
             )}
-            <ButtonAnchor href={whatsappUrl(biz.whatsapp, 'Olá! Preciso de ajuda com o link de pagamento do meu pedido.')} variant={load.notFound ? 'primary' : 'ghost'}>
+            <ButtonAnchor href={whatsappUrl(biz.whatsapp, fillString(t.problem.message, {}))} variant={load.notFound ? 'primary' : 'ghost'}>
               <WhatsAppIcon size={20} /> Falar no WhatsApp
             </ButtonAnchor>
           </section>
@@ -563,10 +558,10 @@ export function PaymentPage() {
               <Illustration name="pagamento" size={168} className="-mb-1" />
               <p className="eyebrow text-ink-muted">
                 {view.firstName ? `Oi, ${view.firstName}! ` : ''}
-                {{ aguardando: 'Falta pouco', analise: 'Quase lá', pago: 'Tudo certo', cancelado: 'Pedido cancelado' }[view.state]}
+                {{ aguardando: t.header.waiting, analise: t.header.review, pago: t.header.paid, cancelado: t.header.cancelled }[view.state]}
               </p>
               <h1 className="font-display text-display-l leading-tight text-ink">
-                Pagamento do pedido <span className="whitespace-nowrap">nº {view.number}</span>
+                {t.header.title} <span className="whitespace-nowrap">nº {view.number}</span>
               </h1>
               <span aria-hidden="true" className="mt-1 h-px w-24 bg-rose/60" />
             </div>
@@ -601,8 +596,8 @@ export function PaymentPage() {
             )}
 
             <footer className="flex flex-col items-center gap-1 border-t border-line pt-6 text-center text-sm text-ink-muted">
-              <p>Alguma dúvida sobre o pagamento?</p>
-              <a href={whatsappUrl(biz.whatsapp, `Olá! Tenho uma dúvida sobre o pagamento do pedido nº ${view.number}.`)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1.5 text-copper underline underline-offset-4">
+              {t.help.question && <p>{t.help.question}</p>}
+              <a href={whatsappUrl(biz.whatsapp, fillString(t.help.message, { pedido: String(view.number), primeiro_nome: view.firstName }))} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1.5 text-copper underline underline-offset-4">
                 <WhatsAppIcon size={17} /> Fale com a gente
               </a>
             </footer>

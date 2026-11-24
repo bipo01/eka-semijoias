@@ -186,9 +186,11 @@ interface InstallGuideProps {
   onClose: () => void;
   /** "Agora não": close and hide the invitation for a while. */
   onDismiss: () => void;
+  /** Text at the top (the app's built-in text when not given; empty hides it). */
+  intro?: string;
 }
 
-export function InstallGuide({ open, app, guide, platform, link, onClose, onDismiss }: InstallGuideProps) {
+export function InstallGuide({ open, app, guide, platform, link, onClose, onDismiss, intro = INTRO[app] }: InstallGuideProps) {
   const { lead, steps, copy } = content(guide, platform);
 
   const copyLink = async () => {
@@ -219,7 +221,7 @@ export function InstallGuide({ open, app, guide, platform, link, onClose, onDism
       }
     >
       <div className="flex flex-col gap-5" data-install-guide={guide}>
-        <p className="text-ink-muted">{INTRO[app]}</p>
+        {intro && <p className="text-ink-muted">{intro}</p>}
         {lead && <p>{lead}</p>}
         <ol className="flex flex-col gap-4">
           {steps.map((step, i) => (

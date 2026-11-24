@@ -7,6 +7,7 @@ export const SITE_GROUPS: { title: string; intro: string; ids: SiteSectionId[] }
   { title: 'Páginas', intro: 'Os textos e as fotos de cada página do site.', ids: ['inicio', 'sobre', 'cuidados', 'garantia', 'revendedoras', 'contato', 'privacidade'] },
   { title: 'Listas', intro: 'Depoimentos e perguntas que aparecem na página inicial.', ids: ['depoimentos', 'perguntas'] },
   { title: 'Geral', intro: 'Textos que aparecem em várias partes do site e no Google.', ids: ['geral', 'compartilhar'] },
+  { title: 'Pagamento e revenda', intro: 'Telas que as clientes e as revendedoras abrem por link, fora da loja.', ids: ['pagamento', 'revenda'] },
 ];
 
 /** One line on where the section shows up. */
@@ -22,6 +23,9 @@ export const SITE_SECTION_INFO: Record<SiteSectionId, { description: string; hre
   perguntas: { description: 'Perguntas e respostas no fim da página inicial.', href: '/' },
   geral: { description: 'Rodapé, sacola vazia, mensagem depois do pedido e página não encontrada.', href: '/' },
   compartilhar: { description: 'Como o site aparece no Google e na prévia do link no WhatsApp e no Instagram.', href: null },
+  // No "Ver no site": the page only opens with the link of an order.
+  pagamento: { description: 'A página que a cliente abre pelo link de pagamento: Pix, comprovante e a situação do pedido.', href: null },
+  revenda: { description: 'O painel das revendedoras: entrada, primeiro acesso, contrato, resumo, maleta, vendas e acertos.', href: '/revenda' },
 };
 
 /** Sections whose built-in text follows the store facts (warranty, shipping, plating…) until she saves her own. */

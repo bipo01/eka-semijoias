@@ -28,6 +28,8 @@ interface InstallAppButtonProps {
   app?: InstallApp;
   variant?: InstallButtonVariant;
   className?: string;
+  /** Text at the top of the step-by-step guide (the app's built-in text when not given; empty hides it). */
+  intro?: string;
 }
 
 /**
@@ -36,7 +38,7 @@ interface InstallAppButtonProps {
  * Renders nothing when the app is installed, the browser cannot install it, or the visitor chose
  * "Agora não" in the last 30 days.
  */
-export function InstallAppButton({ app = 'store', variant = 'menu', className }: InstallAppButtonProps) {
+export function InstallAppButton({ app = 'store', variant = 'menu', className, intro }: InstallAppButtonProps) {
   const { platform, method, promptInstall, dismiss } = useInstallPrompt(app);
   const [guideOpen, setGuideOpen] = useState(false);
   // The guide stays mounted once opened, so it can play its closing transition.
@@ -70,6 +72,7 @@ export function InstallAppButton({ app = 'store', variant = 'menu', className }:
           <InstallGuide
             open={guideOpen}
             app={app}
+            {...(intro !== undefined ? { intro } : {})}
             guide={guide}
             platform={platform}
             link={link}

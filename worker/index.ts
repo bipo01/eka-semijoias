@@ -7,7 +7,7 @@ import { toHttpError } from './db';
 import type { Env } from './env';
 import { assertSameOrigin, errorResponse, HttpError, json } from './http';
 import { handleCreateLead, handleDeleteLead, handleListLeads, handlePatchLead } from './leads';
-import { handleContractCheck, handleCreateKit, handleCreateReseller, handleEditKit, handleGetProgram, handleGetReseller, handleKitPaid, handleListResellers, handleNewInvite, handlePatchReseller, handlePutProgram, handleSettleKit } from './resellers';
+import { handleContractCheck, handleCreateKit, handleCreateReseller, handleEditKit, handleEraseReseller, handleGetProgram, handleGetReseller, handleKitPaid, handleListResellers, handleNewInvite, handlePatchReseller, handlePutProgram, handleSettleKit } from './resellers';
 import { handleAcceptContract, handleAcceptInvite, handleCancelResellerSale, handleGetInvite, handleResellerLogin, handleResellerLogout, handleResellerMe, handleResellerSale, handleShowcase } from './revenda';
 import { handleLive } from './live';
 import { handleAnonymizeOrder, handleCreateManualOrder, handleCreateOrder, handleDeleteOrder, handleEditOrderItems, handleListOrders, handleOrderStatus } from './orders';
@@ -60,6 +60,7 @@ const router = new Router()
   .on('PATCH', '/api/admin/resellers/:id', handlePatchReseller)
   .on('POST', '/api/admin/resellers/:id/invite', handleNewInvite)
   .on('POST', '/api/admin/resellers/:id/contract-check', handleContractCheck)
+  .on('POST', '/api/admin/resellers/:id/erase', handleEraseReseller)
   .on('POST', '/api/admin/resellers/:id/kits', handleCreateKit)
   .on('PUT', '/api/admin/kits/:id/items', handleEditKit)
   .on('POST', '/api/admin/kits/:id/settle', handleSettleKit)

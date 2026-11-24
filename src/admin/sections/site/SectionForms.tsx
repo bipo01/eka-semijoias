@@ -371,6 +371,109 @@ function CompartilharForm() {
   );
 }
 
+const NAME_HINT = 'Escreva {primeiro_nome} onde entra o primeiro nome dela.';
+
+function PagamentoForm() {
+  return (
+    <>
+      <p className="text-sm text-ink-muted">
+        Textos da página que a cliente abre pelo link de pagamento. Onde aparece {'{pedido}'}, {'{primeiro_nome}'} ou {'{total}'}, entra o número do pedido, o primeiro nome da cliente ou o valor. Um trecho entre [ ] some quando o que está dentro dele fica vazio.
+      </p>
+      <Group title="Topo da página">
+        <TextInput path={['header', 'title']} label="Título" hint="O número do pedido aparece logo depois (nº 1024)." />
+        <TextInput path={['header', 'waiting']} label="Chamada enquanto falta pagar" hint="Aparece acima do título, depois de “Oi, Ana!”." />
+        <TextInput path={['header', 'review']} label="Chamada depois do comprovante" />
+        <TextInput path={['header', 'paid']} label="Chamada com o pagamento confirmado" />
+        <TextInput path={['header', 'cancelled']} label="Chamada com o pedido cancelado" />
+      </Group>
+      <Group title="Pix">
+        <TextInput path={['pix', 'title']} label="Título" />
+        <TextInput path={['pix', 'step1']} label="Passo 1" long rows={2} hint="“Pix Copia e Cola” fica em destaque." />
+        <TextInput path={['pix', 'step2']} label="Passo 2" long rows={2} hint="{total} é o valor do pedido." />
+        <TextInput path={['pix', 'step3']} label="Passo 3" long rows={2} />
+        <TextInput path={['pix', 'qrHint']} label="Frase acima do QR Code" />
+        <TextInput path={['pix', 'unavailable']} label="Aviso quando a chave Pix não está cadastrada" long rows={3} />
+      </Group>
+      <Group title="Pix automático" hint="Só aparece quando o Pix automático do Mercado Pago está ligado. O passo 1 é o mesmo do Pix.">
+        <TextInput path={['autoPix', 'intro']} label="Explicação antes de gerar o Pix" long rows={3} />
+        <TextInput path={['autoPix', 'step2']} label="Passo 2" long rows={2} hint="{total} é o valor do pedido." />
+        <TextInput path={['autoPix', 'step3']} label="Passo 3" long rows={2} />
+        <TextInput path={['autoPix', 'notYet']} label="Quando ela toca em “Já paguei” e o pagamento ainda não chegou" long rows={2} />
+      </Group>
+      <Group title="Comprovante">
+        <TextInput path={['receipt', 'title']} label="Título para enviar o comprovante" />
+        <TextInput path={['receipt', 'againTitle']} label="Título para enviar mais um comprovante" />
+      </Group>
+      <Group title="Situação do pedido">
+        <TextInput path={['status', 'reviewTitle']} label="Comprovante recebido: título" />
+        <TextInput path={['status', 'reviewText']} label="Comprovante recebido: texto" long rows={2} />
+        <TextInput path={['status', 'paidTitle']} label="Pagamento confirmado: título" />
+        <TextInput path={['status', 'paidText']} label="Pagamento confirmado: texto" long rows={3} />
+        <TextInput path={['status', 'cancelledTitle']} label="Pedido cancelado: título" />
+        <TextInput path={['status', 'cancelledText']} label="Pedido cancelado: texto" long rows={2} />
+      </Group>
+      <Group title="Link com problema" hint="Quando o link de pagamento mudou ou não abriu. A explicação do motivo aparece sozinha.">
+        <TextInput path={['problem', 'goneTitle']} label="Título quando o link não vale mais" />
+        <TextInput path={['problem', 'failedTitle']} label="Título quando a página não abriu" />
+        <TextInput path={['problem', 'message']} label="Mensagem do botão “Falar no WhatsApp”" long rows={2} />
+      </Group>
+      <Group title="Ajuda" hint="Mensagens que já vão escritas quando a cliente chama a gente no WhatsApp por esta página.">
+        <TextInput path={['help', 'question']} label="Pergunta no fim da página" />
+        <TextInput path={['help', 'message']} label="Mensagem de dúvida sobre o pagamento" long rows={2} hint="{pedido} é o número do pedido." />
+        <TextInput path={['help', 'cancelledMessage']} label="Mensagem de dúvida com o pedido cancelado" long rows={2} hint="{pedido} é o número do pedido." />
+      </Group>
+    </>
+  );
+}
+
+function RevendaForm() {
+  return (
+    <>
+      <p className="text-sm text-ink-muted">Textos do painel das revendedoras. Os valores, as datas, o contrato e os botões continuam como estão.</p>
+      <Group title="Entrar">
+        <TextInput path={['login', 'title']} label="Título" />
+        <TextInput path={['login', 'text']} label="Texto" long rows={2} />
+        <TextInput path={['login', 'forgot']} label="Ajuda para quem esqueceu o PIN" long rows={2} />
+      </Group>
+      <Group title="Primeiro acesso" hint="A página do link de primeiro acesso, onde ela aceita o contrato e cria o PIN.">
+        <TextInput path={['invite', 'greeting']} label="Saudação" hint={NAME_HINT} />
+        <TextInput path={['invite', 'title']} label="Título" />
+        <TextInput path={['invite', 'text']} label="Texto quando há contrato para aceitar" long rows={2} />
+        <TextInput path={['invite', 'textNoContract']} label="Texto quando não há contrato" long rows={2} />
+        <TextInput path={['invite', 'welcome']} label="Aviso depois de entrar pela primeira vez" />
+        <TextInput path={['invite', 'goneTitle']} label="Título quando o link não vale mais" />
+      </Group>
+      <Group title="Contrato novo" hint="Quando você publica uma versão nova do contrato, ela aparece no painel.">
+        <TextInput path={['contract', 'updateTitle']} label="Título" />
+        <TextInput path={['contract', 'updateText']} label="Texto" long rows={2} />
+        <TextInput path={['contract', 'accepted']} label="Aviso depois de aceitar" />
+      </Group>
+      <Group title="Resumo">
+        <TextInput path={['panel', 'greeting']} label="Saudação" hint={NAME_HINT} />
+        <TextInput path={['panel', 'title']} label="Título" />
+        <TextInput path={['panel', 'topTier']} label="Frase quando ela chega na maior comissão" />
+        <TextInput path={['panel', 'showcaseTitle']} label="Mostruário digital: título" />
+        <TextInput path={['panel', 'showcaseText']} label="Mostruário digital: texto" long rows={2} />
+        <TextInput path={['panel', 'installText']} label="Explicação para instalar o app da revenda" long rows={2} />
+      </Group>
+      <Group title="Maleta">
+        <TextInput path={['kit', 'empty']} label="Quando ela não tem maleta aberta" long rows={2} />
+        <TextInput path={['kit', 'soldOut']} label="Quando todas as peças foram vendidas" />
+      </Group>
+      <Group title="Registrar venda">
+        <TextInput path={['sale', 'phoneHint']} label="Explicação do WhatsApp da cliente" />
+        <TextInput path={['sale', 'registered']} label="Aviso de venda registrada" />
+        <TextInput path={['sale', 'done']} label="Texto acima da mensagem para a cliente" long rows={2} />
+        <TextInput path={['sale', 'undone']} label="Aviso de venda desfeita" />
+      </Group>
+      <Group title="Vendas e acertos">
+        <TextInput path={['history', 'salesEmpty']} label="Quando ainda não há vendas na maleta" />
+        <TextInput path={['history', 'settlementsEmpty']} label="Quando ainda não há acertos" />
+      </Group>
+    </>
+  );
+}
+
 export const SECTION_FORMS: Record<SiteSectionId, ComponentType> = {
   inicio: InicioForm,
   depoimentos: TestimonialsForm,
@@ -383,4 +486,6 @@ export const SECTION_FORMS: Record<SiteSectionId, ComponentType> = {
   geral: GeralForm,
   privacidade: PrivacidadeForm,
   compartilhar: CompartilharForm,
+  pagamento: PagamentoForm,
+  revenda: RevendaForm,
 };

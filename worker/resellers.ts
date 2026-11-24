@@ -13,6 +13,7 @@ import {
   type Reseller,
 } from '../src/data/revenda';
 import type { StockMove } from '../src/data/orders';
+import { formatBRL } from '../src/lib/format';
 import { requireSession } from './auth';
 import { IDEMPOTENCY_TTL_MS, parseSnapshotBody, WRITE_ATTEMPTS } from './catalog';
 import { randomToken, sha256Hex } from './crypto';
@@ -224,56 +225,67 @@ export async function handleCreateReseller(ctx: Context): Promise<Response> {
   }
   const taken = new Set((first[1]?.results ?? []).map((r) => String(r.slug)));
   if (data.slug && taken.has(data.slug)) throw new HttpError('conflict', 'Este endereço de mostruário já é de outra revendedora.');
-  const slug = data.slug ?? uniqueSlug(data.name, taken);
   const now = Date.now();
   const at = new Date(now).toISOString();
-  const reseller: Reseller = resellerSchema.parse({
-    id: `rsl_${randomToken().slice(0, 16)}`,
-    slug,
-    name: data.name,
-    whatsapp: data.whatsapp,
-    city: data.city,
-    uf: data.uf,
-    ...(data.instagram ? { instagram: data.instagram.replace(/^@/, '') } : {}),
-    status: 'ativa',
-    ...(data.leadId ? { leadId: data.leadId } : {}),
-    showWhatsapp: true,
-    hasPin: false,
-    createdAt: at,
-    updatedAt: at,
-  });
-  const invite = await inviteStatements(db, reseller.id, now);
-  const response = { reseller, invite: { token: invite.token, expiresAt: invite.expiresAt } };
-  try {
-    await db.batch([
-      db
-        .prepare('INSERT INTO resellers (id, slug, whatsapp, status, lead_id, created_at, updated_at, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7)')
-        .bind(reseller.id, slug, reseller.whatsapp, 'ativa', data.leadId ?? null, at, JSON.stringify(reseller)),
-      ...invite.statements,
-      ...(data.leadId
-        ? [
-            guard(db, `(SELECT status FROM leads WHERE id = ?1) <> 'efetivada'`, data.leadId),
-            db.prepare(`UPDATE leads SET status = 'efetivada', data = json_set(data, '$.resellerId', ?2) WHERE id = ?1`).bind(data.leadId, reseller.id),
-          ]
-        : []),
-      // The stored replay never holds the access token (only its hash exists): a replay asks for a new link.
-      db.prepare('INSERT INTO idempotency (key, request_hash, created_at, response) VALUES (?1, ?2, ?3, ?4)').bind(idemKey, requestHash, now, JSON.stringify({ reseller, invite: null })),
-      db.prepare('DELETE FROM idempotency WHERE created_at < ?1').bind(now - IDEMPOTENCY_TTL_MS),
-      db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'reseller.create', `Revendedora ${reseller.id} efetivada`),
-    ]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '';
-    if (/UNIQUE constraint failed: resellers\.whatsapp/i.test(message)) throw new HttpError('conflict', 'Já existe uma revendedora com este WhatsApp.');
-    if (/UNIQUE constraint failed: resellers\.slug/i.test(message)) throw new HttpError('conflict', 'Este endereço de mostruário já é de outra revendedora. Tente de novo.');
-    if (/UNIQUE constraint failed: idempotency/i.test(message)) {
-      const stored = await db.prepare('SELECT request_hash, response FROM idempotency WHERE key = ?1').bind(idemKey).first<{ request_hash: string; response: string }>();
-      if (stored?.request_hash === requestHash) return json(JSON.parse(stored.response), { status: 201 });
+  const id = `rsl_${randomToken().slice(0, 16)}`;
+  const invite = await inviteStatements(db, id, now);
+  // An address picked here (not typed by the owner) can be taken by another creation at the same
+  // moment (same first name): then the next free one is picked instead of asking her to retry.
+  for (let attempt = 0; ; attempt++) {
+    const slug = data.slug ?? uniqueSlug(data.name, taken);
+    const reseller: Reseller = resellerSchema.parse({
+      id,
+      slug,
+      name: data.name,
+      whatsapp: data.whatsapp,
+      city: data.city,
+      uf: data.uf,
+      ...(data.instagram ? { instagram: data.instagram.replace(/^@/, '') } : {}),
+      status: 'ativa',
+      ...(data.leadId ? { leadId: data.leadId } : {}),
+      showWhatsapp: true,
+      hasPin: false,
+      createdAt: at,
+      updatedAt: at,
+    });
+    const response = { reseller, invite: { token: invite.token, expiresAt: invite.expiresAt } };
+    try {
+      await db.batch([
+        db
+          .prepare('INSERT INTO resellers (id, slug, whatsapp, status, lead_id, created_at, updated_at, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7)')
+          .bind(reseller.id, slug, reseller.whatsapp, 'ativa', data.leadId ?? null, at, JSON.stringify(reseller)),
+        ...invite.statements,
+        ...(data.leadId
+          ? [
+              guard(db, `(SELECT status FROM leads WHERE id = ?1) <> 'efetivada'`, data.leadId),
+              db.prepare(`UPDATE leads SET status = 'efetivada', data = json_set(data, '$.resellerId', ?2) WHERE id = ?1`).bind(data.leadId, reseller.id),
+            ]
+          : []),
+        // The stored replay never holds the access token (only its hash exists): a replay asks for a new link.
+        db.prepare('INSERT INTO idempotency (key, request_hash, created_at, response) VALUES (?1, ?2, ?3, ?4)').bind(idemKey, requestHash, now, JSON.stringify({ reseller, invite: null })),
+        db.prepare('DELETE FROM idempotency WHERE created_at < ?1').bind(now - IDEMPOTENCY_TTL_MS),
+        db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'reseller.create', `Revendedora ${reseller.id} efetivada`),
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (/UNIQUE constraint failed: resellers\.whatsapp/i.test(message)) throw new HttpError('conflict', 'Já existe uma revendedora com este WhatsApp.');
+      if (/UNIQUE constraint failed: resellers\.slug/i.test(message)) {
+        if (!data.slug && attempt < WRITE_ATTEMPTS) {
+          taken.add(slug);
+          continue;
+        }
+        throw new HttpError('conflict', 'Este endereço de mostruário já é de outra revendedora.');
+      }
+      if (/UNIQUE constraint failed: idempotency/i.test(message)) {
+        const stored = await db.prepare('SELECT request_hash, response FROM idempotency WHERE key = ?1').bind(idemKey).first<{ request_hash: string; response: string }>();
+        if (stored?.request_hash === requestHash) return json(JSON.parse(stored.response), { status: 201 });
+      }
+      if (isGuardMiss(error)) throw new HttpError('conflict', 'Este cadastro já virou revendedora.');
+      throw toHttpError(error);
     }
-    if (isGuardMiss(error)) throw new HttpError('conflict', 'Este cadastro já virou revendedora.');
-    throw toHttpError(error);
+    ctx.waitUntil(notifyLeads(ctx.env));
+    return json(response, { status: 201 });
   }
-  ctx.waitUntil(notifyLeads(ctx.env));
-  return json(response, { status: 201 });
 }
 
 const patchSchema = z.object({
@@ -619,4 +631,72 @@ export async function handleKitPaid(ctx: Context): Promise<Response> {
     return json({ kit: next });
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
+}
+
+// ---------------------------------------------------------------------------
+// Erasure (LGPD)
+// ---------------------------------------------------------------------------
+
+/** A kit that still blocks erasure: open, or settled with an amount the store has not received. */
+const KIT_BLOCKS_ERASURE = `status = 'aberta' OR (json_extract(data, '$.settlement.paidAt') IS NULL AND COALESCE(json_extract(data, '$.settlement.dueCents'), 0) > 0)`;
+
+/**
+ * POST /api/admin/resellers/:id/erase `{ updatedAt }` — erases a reseller who left, for good (LGPD):
+ * her record and public showcase, her application(s) (by id or WhatsApp), PIN, access links and
+ * sessions, contract acceptances, kits and settlements, her sales with the names and phones of the
+ * customers she registered, the login counters keyed by her WhatsApp and stored replies that carry
+ * her id. Only after the partnership ended, with no open kit and every settlement received; one
+ * batch guarded by her stamp and by those conditions (a kit opened or a payment unmarked on another
+ * device aborts it). Stock movements stay: they only point to a kit id and read "Maleta".
+ */
+export async function handleEraseReseller(ctx: Context): Promise<Response> {
+  await requireSession(ctx);
+  const db = ctx.env.DB;
+  const input = z.object({ updatedAt: z.string().min(1).max(40) }).safeParse(await readJson(ctx.request, 512));
+  if (!input.success) throw new HttpError('bad_request');
+  const { reseller, stamp } = await readReseller(db, ctx.params.id ?? '');
+  const changed = 'Os dados desta revendedora mudaram em outro aparelho. Confira e tente de novo.';
+  if (input.data.updatedAt !== stamp) throw new HttpError('conflict', changed);
+  if (reseller.status !== 'encerrada') throw new HttpError('conflict', 'Encerre a parceria antes de apagar os dados.');
+
+  const [kitRows, saleCount, leadRows] = await withReadRetry(() =>
+    db.batch<Record<string, unknown>>([
+      db.prepare(`SELECT ${KIT_COLUMNS} FROM kits WHERE reseller_id = ?1`).bind(reseller.id),
+      db.prepare('SELECT COUNT(*) AS n FROM reseller_sales WHERE reseller_id = ?1').bind(reseller.id),
+      db.prepare(`SELECT id FROM leads WHERE id = ?1 OR json_extract(data, '$.whatsapp') = ?2`).bind(reseller.leadId ?? '', reseller.whatsapp),
+    ]),
+  );
+  const kits = ((kitRows?.results ?? []) as unknown as KitRow[]).map(toKit);
+  if (kits.some((k) => k.status === 'aberta')) throw new HttpError('conflict', 'Faça o acerto da maleta antes de apagar os dados.');
+  const unpaid = kits.reduce((sum, k) => sum + (k.settlement && !k.settlement.paidAt && k.settlement.dueCents > 0 ? k.settlement.dueCents : 0), 0);
+  if (unpaid > 0) throw new HttpError('conflict', `Ainda falta receber ${formatBRL(unpaid)} de acertos dela. Marque o repasse como recebido antes de apagar os dados.`);
+  const leadIds = ((leadRows?.results ?? []) as { id: string }[]).map((r) => r.id);
+  const sales = Number((saleCount?.results[0] as { n?: number } | undefined)?.n ?? 0);
+
+  const at = new Date().toISOString();
+  try {
+    await db.batch([
+      resellerUnchanged(db, reseller.id, stamp),
+      guard(db, `NOT EXISTS (SELECT 1 FROM kits WHERE reseller_id = ?1 AND (${KIT_BLOCKS_ERASURE}))`, reseller.id),
+      db.prepare('DELETE FROM reseller_sales WHERE reseller_id = ?1').bind(reseller.id),
+      db.prepare('DELETE FROM kits WHERE reseller_id = ?1').bind(reseller.id),
+      db.prepare('DELETE FROM contract_acceptances WHERE reseller_id = ?1').bind(reseller.id),
+      db.prepare('DELETE FROM reseller_credentials WHERE reseller_id = ?1').bind(reseller.id),
+      db.prepare('DELETE FROM reseller_invites WHERE reseller_id = ?1').bind(reseller.id),
+      db.prepare('DELETE FROM reseller_sessions WHERE reseller_id = ?1').bind(reseller.id),
+      ...leadIds.map((id) => db.prepare('DELETE FROM leads WHERE id = ?1').bind(id)),
+      db.prepare('DELETE FROM throttle WHERE key IN (?1, ?2)').bind(`rlogin:n:${reseller.whatsapp}`, `rlogin:nd:${reseller.whatsapp}`),
+      // Replayable replies (24 h) of writes about her: her creation, invites, kits, sales.
+      db.prepare('DELETE FROM idempotency WHERE instr(response, ?1) > 0').bind(`"${reseller.id}"`),
+      db.prepare('DELETE FROM resellers WHERE id = ?1').bind(reseller.id),
+      db
+        .prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)')
+        .bind(at, 'reseller.erase', `Dados de uma revendedora apagados (${kits.length} ${kits.length === 1 ? 'maleta' : 'maletas'}, ${sales} ${sales === 1 ? 'venda' : 'vendas'}, ${leadIds.length} ${leadIds.length === 1 ? 'ficha' : 'fichas'})`),
+    ]);
+  } catch (error) {
+    if (isGuardMiss(error)) throw new HttpError('conflict', `${changed} (Uma maleta pode ter sido aberta ou um repasse desmarcado.)`);
+    throw toHttpError(error);
+  }
+  ctx.waitUntil(notifyLeads(ctx.env));
+  return json({ erased: { kits: kits.length, sales, leads: leadIds.length } });
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, ChevronRight, Copy, ExternalLink, KeyRound, Plus } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Copy, Download, ExternalLink, KeyRound, Plus, Trash2 } from 'lucide-react';
 import { Button, ButtonAnchor } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TextArea, TextField } from '../../components/ui/Field';
@@ -29,7 +29,8 @@ import { whatsappUrl } from '../../lib/whatsapp';
 import { toast } from '../../store/ui';
 import { EmptyState, SwitchRow } from '../FormBits';
 import { formatDateTime, formatPhone } from '../lib/contact';
-import { checkContract, isError, markKitPaid, newInvite, patchReseller, saveProgram, showcaseLink, useProgram, useResellerDetail, useResellers, type ResellerSummary } from '../lib/resellers';
+import { downloadText, fileDate } from '../lib/download';
+import { checkContract, eraseReseller, erasureBlocker, isError, markKitPaid, newInvite, patchReseller, saveProgram, settlementsCsv, showcaseLink, useProgram, useResellerDetail, useResellers, type ResellerSummary } from '../lib/resellers';
 import { LeadsPage } from './LeadsPage';
 import { copyText } from './OrderMessages';
 import { InviteMessage, KitEditor, NewResellerForm, SettleForm } from './ResellerForms';
@@ -128,6 +129,7 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
   const { state, reload } = useResellerDetail(id);
   const [sheet, setSheet] = useState<'kit' | 'settle' | 'edit' | null>(null);
   const [ending, setEnding] = useState(false);
+  const [erasing, setErasing] = useState(false);
   const [invite, setInvite] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   if (state.status === 'loading') return <p className="py-8 text-center text-ink-muted" aria-busy="true">Carregando…</p>;
@@ -137,6 +139,7 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
   const openSales = open ? sales.filter((s) => s.kitId === open.id) : [];
   const closed = kits.filter((k) => k.status === 'fechada');
   const contractDue = !reseller.contract || reseller.contract.version < program.contract.version || reseller.contract.mode !== program.contract.mode;
+  const eraseBlocked = erasureBlocker(reseller, kits);
 
   async function regenerate() {
     if (busy) return;
@@ -322,6 +325,19 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
           </button>
         )}
       </div>
+      {reseller.status === 'encerrada' && (
+        <section aria-labelledby="erase-title" className="flex flex-col gap-2 rounded-[12px] border border-line bg-white p-4">
+          <h3 id="erase-title" className="font-display text-title">
+            Dados pessoais
+          </h3>
+          <p className="text-sm text-ink-muted">A parceria terminou. Se ela pedir, ou quando você não precisar mais do histórico dela, dá para apagar os dados dela do sistema.</p>
+          {eraseBlocked && <p className="text-sm text-danger">{eraseBlocked}</p>}
+          <Button variant="secondary" className="self-start" disabled={!!eraseBlocked} onClick={() => setErasing(true)}>
+            <Trash2 size={18} strokeWidth={1.5} aria-hidden="true" /> Apagar os dados de {firstNameOf(reseller.name)}
+          </Button>
+        </section>
+      )}
+      {erasing && <EraseResellerDialog reseller={reseller} kits={kits} onCancel={() => setErasing(false)} onErased={onClose} />}
       <ConfirmDialog
         open={ending}
         title="Encerrar a parceria?"
@@ -333,7 +349,7 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
           void setStatus('encerrada');
         }}
       >
-        O acesso de {firstNameOf(reseller.name)} ao painel termina e o mostruário digital dela passa a mostrar só o contato da ÉKA. O histórico de maletas e vendas continua guardado, e dá para reativar depois.
+        O acesso de {firstNameOf(reseller.name)} ao painel termina e o mostruário digital dela passa a mostrar só o contato da ÉKA. O histórico de maletas e vendas continua guardado e dá para reativar depois. Se ela pedir, depois dá para apagar os dados dela.
       </ConfirmDialog>
 
       <Sheet open={sheet === 'kit'} onClose={() => setSheet(null)} title={open ? 'Ajustar maleta' : `Maleta de ${firstNameOf(reseller.name)}`} side="right">
@@ -378,6 +394,79 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
         </button>
       </span>
     </div>
+  );
+}
+
+/**
+ * Confirms the erasure of a reseller who left (LGPD): says what disappears and what stays, offers her
+ * settlements as a spreadsheet first, and asks for an explicit "it cannot be undone".
+ */
+function EraseResellerDialog({ reseller, kits, onCancel, onErased }: { reseller: Reseller; kits: Kit[]; onCancel: () => void; onErased: () => void }) {
+  const [understood, setUnderstood] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const first = firstNameOf(reseller.name);
+
+  function download() {
+    downloadText(`eka-acertos-${reseller.slug}-${fileDate()}.csv`, settlementsCsv(reseller, kits), 'text/csv;charset=utf-8');
+    setDownloaded(true);
+  }
+
+  async function erase() {
+    if (busy || !understood) return;
+    setBusy(true);
+    setError('');
+    const r = await eraseReseller(reseller);
+    setBusy(false);
+    if (isError(r)) return setError(r.error);
+    toast(`Dados de ${first} apagados.`, { tone: 'success' });
+    onErased();
+  }
+
+  return (
+    <Sheet open onClose={() => !busy && onCancel()} title={`Apagar os dados de ${first}?`} side="center">
+      <div className="flex flex-col gap-4 text-sm">
+        <div>
+          <p className="font-medium">Saem do sistema, para sempre:</p>
+          <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-5 text-ink-muted">
+            <li>nome, WhatsApp, cidade, Instagram e a ficha de cadastro dela;</li>
+            <li>o PIN e o acesso ao painel de revendedora;</li>
+            <li>o registro do aceite do contrato;</li>
+            <li>as maletas, os acertos e as vendas dela, com os nomes e telefones das clientes que ela registrou;</li>
+            <li>
+              o mostruário <span className="break-all">/r/{reseller.slug}</span>, que sai do ar.
+            </li>
+          </ul>
+        </div>
+        <p className="text-ink-muted">No histórico do estoque, as entradas e saídas das maletas continuam, só como “Maleta”, sem o nome dela.</p>
+        {kits.length > 0 && (
+          <div className="flex flex-col gap-1.5 rounded-[10px] bg-champagne/50 p-3">
+            <p>Quer guardar os valores dos acertos para as suas contas? Baixe antes de apagar.</p>
+            <Button variant="secondary" size="sm" className="self-start" onClick={download}>
+              <Download size={16} strokeWidth={1.5} aria-hidden="true" /> {downloaded ? 'Baixar de novo' : 'Baixar os acertos (planilha)'}
+            </Button>
+          </div>
+        )}
+        <label className="flex min-h-11 cursor-pointer items-start gap-3">
+          <input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} className="mt-0.5 size-5 shrink-0 accent-copper" />
+          <span>Entendo que não dá para desfazer.</span>
+        </label>
+        {error && (
+          <p role="alert" className="text-danger">
+            {error}
+          </p>
+        )}
+      </div>
+      <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button variant="ghost" onClick={onCancel} disabled={busy}>
+          Cancelar
+        </Button>
+        <Button variant="danger" onClick={() => void erase()} disabled={!understood || busy} aria-busy={busy}>
+          {busy ? 'Apagando…' : 'Apagar para sempre'}
+        </Button>
+      </div>
+    </Sheet>
   );
 }
 

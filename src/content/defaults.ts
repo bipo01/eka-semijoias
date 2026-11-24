@@ -121,7 +121,7 @@ function privacyBlocks(f: ContentFacts): Sections['privacidade']['blocks'] {
     {
       id: 'tempo',
       title: 'Por quanto tempo guardamos',
-      text: 'Guardamos os dados enquanto forem necessários para as finalidades acima: atender o pedido, cumprir a garantia e as obrigações legais e manter a parceria com as revendedoras. Depois disso, ou quando você pedir, a gente apaga ou anonimiza os dados (o pedido continua contado nas vendas, mas sem o seu nome).',
+      text: 'Guardamos os dados enquanto forem necessários para as finalidades acima: atender o pedido, cumprir a garantia e as obrigações legais e manter a parceria com as revendedoras. Depois disso, ou quando você pedir, a gente apaga ou anonimiza os dados (o pedido continua contado nas vendas, mas sem o seu nome). Quando a parceria com uma revendedora termina e os acertos estão quitados, a gente pode apagar de vez os dados dela: cadastro, acesso ao painel, aceite do contrato, maletas, acertos e as vendas que ela registrou, com os nomes e telefones das clientes dela.',
     },
     {
       id: 'direitos',
@@ -323,6 +323,84 @@ export function defaultSections(f: ContentFacts): Sections {
       image: null,
     },
     loja: defaultLoja(),
+    pagamento: {
+      header: { title: 'Pagamento do pedido', waiting: 'Falta pouco', review: 'Quase lá', paid: 'Tudo certo', cancelled: 'Pedido cancelado' },
+      pix: {
+        title: 'Pague com Pix',
+        step1: 'Copie o código e cole em Pix Copia e Cola no app do seu banco.',
+        step2: 'Confira o valor de {total} e o recebedor, e pague.',
+        step3: 'Envie o comprovante logo abaixo.',
+        qrHint: 'No computador? Leia o QR Code com o celular.',
+        unavailable: 'O Pix desta loja está sendo atualizado. Fale com a gente pelo WhatsApp para receber os dados de pagamento.',
+      },
+      autoPix: {
+        intro: 'Geramos um Pix só para este pedido, no valor exato. Quando você pagar, a confirmação chega aqui sozinha, sem precisar mandar comprovante.',
+        step2: 'Confira o valor de {total} e pague.',
+        step3: 'Pronto: a confirmação aparece aqui em instantes.',
+        notYet: 'O pagamento ainda não apareceu. Alguns bancos levam um minutinho.',
+      },
+      receipt: { title: 'Envie o comprovante', againTitle: 'Enviar outro comprovante' },
+      status: {
+        paidTitle: 'Pagamento confirmado',
+        paidText: 'Obrigada[, {primeiro_nome}]! Seu pedido nº {pedido} está pago. A gente avisa pelo WhatsApp quando for enviado.',
+        reviewTitle: 'Comprovante recebido!',
+        reviewText: 'A gente confere o pagamento e confirma pelo WhatsApp[, {primeiro_nome}].',
+        cancelledTitle: 'Pedido cancelado',
+        cancelledText: 'Este pedido foi cancelado e não precisa ser pago. Se tiver alguma dúvida, fale com a gente.',
+      },
+      problem: {
+        goneTitle: 'Link de pagamento indisponível',
+        failedTitle: 'Não conseguimos abrir o pagamento',
+        message: 'Olá! Preciso de ajuda com o link de pagamento do meu pedido.',
+      },
+      help: {
+        question: 'Alguma dúvida sobre o pagamento?',
+        message: 'Olá! Tenho uma dúvida sobre o pagamento do pedido nº {pedido}.',
+        cancelledMessage: 'Olá! Tenho uma dúvida sobre o pedido nº {pedido}.',
+      },
+    },
+    revenda: {
+      login: {
+        title: 'Painel da revendedora',
+        text: 'Entre com o seu WhatsApp e o PIN que você criou.',
+        forgot: 'Esqueceu o PIN? Peça um novo link de acesso para a ÉKA.',
+      },
+      invite: {
+        greeting: 'Bem-vinda, {primeiro_nome}!',
+        title: 'Seu acesso de revendedora',
+        text: 'Leia e aceite o contrato e crie o PIN que você vai usar para entrar.',
+        textNoContract: 'Crie o PIN que você vai usar para entrar.',
+        goneTitle: 'Link indisponível',
+        welcome: 'Tudo pronto! Bem-vinda ao seu painel.',
+      },
+      contract: {
+        updateTitle: 'A ÉKA atualizou o contrato',
+        updateText: 'Leia e aceite a versão nova para continuar registrando vendas.',
+        accepted: 'Contrato aceito. Obrigada!',
+      },
+      panel: {
+        greeting: 'Olá, {primeiro_nome}!',
+        title: 'Seu painel',
+        topTier: 'Você está na faixa mais alta. 🎉',
+        showcaseTitle: 'Seu mostruário digital',
+        showcaseText: 'Envie para as suas clientes: elas veem as peças da sua maleta e falam com você.',
+        installText: 'Seu painel de revendedora fica na tela de início: um toque e você vê a maleta e registra as vendas.',
+      },
+      kit: {
+        empty: 'Você não tem uma maleta aberta agora. Quando a ÉKA montar a próxima, ela aparece aqui.',
+        soldOut: 'Todas as peças da maleta já foram vendidas. 🎉',
+      },
+      sale: {
+        phoneHint: 'Para enviar o resumo da compra com a garantia.',
+        done: 'Venda registrada. Envie o resumo com a garantia: no WhatsApp, é só tocar em enviar.',
+        registered: 'Venda registrada.',
+        undone: 'Venda desfeita. As peças voltaram para a maleta.',
+      },
+      history: {
+        salesEmpty: 'Nenhuma venda nesta maleta ainda.',
+        settlementsEmpty: 'Os acertos das maletas anteriores aparecem aqui.',
+      },
+    },
   };
 }
 

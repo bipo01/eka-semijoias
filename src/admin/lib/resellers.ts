@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Kit, Program, Reseller, ResellerSale } from '../../data/revenda';
 import type { ResellerLead } from '../../data/schema';
 import { api, ApiError, errorMessage, idempotencyKey } from '../../lib/api';
+import { toCSV } from '../../lib/csv';
+import { formatBRL } from '../../lib/format';
+import { formatDateTime } from './contact';
 import { ownWrite, useCatalog } from '../../store/catalog';
 import { signalSessionLost } from './session';
 
@@ -114,3 +117,42 @@ export { idempotencyKey };
 /** Public links of a reseller (absolute, for messages). */
 export const inviteLink = (token: string) => `${window.location.origin}/revenda/convite/${token}`;
 export const showcaseLink = (slug: string) => `${window.location.origin}/r/${slug}`;
+
+/** Erases a reseller who left (LGPD): everything about her and the customers she registered. See handleEraseReseller. */
+export const eraseReseller = (reseller: Reseller) =>
+  attempt(() => api<{ erased: { kits: number; sales: number; leads: number } }>(`/api/admin/resellers/${encodeURIComponent(reseller.id)}/erase`, { json: { updatedAt: reseller.updatedAt }, retries: 0 }));
+
+const money = (cents: number | undefined) => (cents === undefined ? '' : (cents / 100).toFixed(2).replace('.', ','));
+
+/**
+ * Her settlements as a spreadsheet (pt-BR Excel: semicolons), for the owner's records before the data
+ * is erased: one row per kit. Her customers are left out on purpose (they are erased too).
+ */
+export function settlementsCsv(reseller: Reseller, kits: Kit[]): string {
+  return toCSV(
+    ['Revendedora', 'Maleta aberta em', 'Acerto em', 'Vendido', 'Comissão (%)', 'Comissão', 'Peças que faltaram', 'Valor do acerto', 'Repasse recebido em'],
+    [...kits]
+      .sort((a, b) => a.openedAt.localeCompare(b.openedAt))
+      .map((k) => [
+        reseller.name,
+        formatDateTime(k.openedAt),
+        k.closedAt ? formatDateTime(k.closedAt) : 'em aberto',
+        money(k.settlement?.soldCents),
+        k.settlement ? String(k.settlement.percent).replace('.', ',') : '',
+        money(k.settlement?.commissionCents),
+        money(k.settlement?.missingCents),
+        money(k.settlement?.dueCents),
+        k.settlement?.paidAt ? formatDateTime(k.settlement.paidAt) : '',
+      ]),
+    { delimiter: ';' },
+  );
+}
+
+/** What still blocks erasing her data, in the owner's words (null when she can be erased). */
+export function erasureBlocker(reseller: Reseller, kits: Kit[]): string | null {
+  if (reseller.status !== 'encerrada') return 'Encerre a parceria antes de apagar os dados.';
+  if (kits.some((k) => k.status === 'aberta')) return 'Faça o acerto da maleta antes de apagar os dados.';
+  const unpaid = kits.reduce((sum, k) => sum + (k.settlement && !k.settlement.paidAt && k.settlement.dueCents > 0 ? k.settlement.dueCents : 0), 0);
+  if (unpaid > 0) return `Ainda falta receber ${formatBRL(unpaid)} de acertos dela. Marque o repasse como recebido em "Acertos" antes de apagar.`;
+  return null;
+}

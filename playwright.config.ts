@@ -7,6 +7,8 @@ const E2E_PEPPER = 'e2e-local-pepper-0123456789abcdef0123456789abcdef';
 
 export default defineConfig({
   testDir: './e2e',
+  // One admin login per run (see e2e/admin-session.setup.ts).
+  globalSetup: './e2e/admin-session.setup.ts',
   timeout: 45_000,
   fullyParallel: true,
   reporter: [['list']],

@@ -17,6 +17,8 @@ import { firstNameOf } from '../data/messages';
 import { daysLeft, PAYMENT_LABEL, PAYMENT_METHODS, type KitLineState, type PaymentMethod, type ResellerSale } from '../data/revenda';
 import { FINISH_LABEL } from '../data/schema';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useSection, useSectionsReady } from '../hooks/useSection';
+import { fillString } from '../content/fillText';
 import { messageItems, useMessages } from '../hooks/useMessages';
 import { ApiError, errorMessage, idempotencyKey } from '../lib/api';
 import { productImageSources } from '../lib/assets';
@@ -33,6 +35,8 @@ import { acceptContract, acceptInvite, cancelSale, fetchInvite, fetchMe, login, 
  * WhatsApp + PIN, first access (contract + PIN) from the invite link, and the
  * panel: summary with commission progress, kit, sales (with the message to
  * her customer) and past cycles. Mobile first; installable as "ÉKA Revenda".
+ * The texts come from the "revenda" section (Painel → Site); every page waits
+ * for them (useSectionsReady) together with its own data.
  */
 
 const lineKey = (l: { productId: string; variantId: string; size: string }) => `${l.productId}|${l.variantId}|${l.size}`;
@@ -69,6 +73,7 @@ function ErrorText({ children }: { children: ReactNode }) {
 
 function LoginPage() {
   useDocumentTitle('Revenda · Entrar');
+  const t = useSection('revenda').login;
   const navigate = useNavigate();
   const [whatsapp, setWhatsapp] = useState('');
   const [pin, setPin] = useState('');
@@ -96,8 +101,8 @@ function LoginPage() {
   return (
     <Shell>
       <div className="flex flex-col gap-1 pt-4 text-center">
-        <h1 className="font-display text-display-m">Painel da revendedora</h1>
-        <p className="text-ink-muted">Entre com o seu WhatsApp e o PIN que você criou.</p>
+        <h1 className="font-display text-display-m">{t.title}</h1>
+        {t.text && <p className="text-ink-muted">{t.text}</p>}
       </div>
       <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4 rounded-[14px] bg-white p-5 shadow-[var(--shadow-1)]">
         <TextField label="WhatsApp" inputMode="tel" autoComplete="username" value={whatsapp} onChange={(e) => setWhatsapp(maskPhone(e.target.value.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')))} />
@@ -107,7 +112,7 @@ function LoginPage() {
           {busy ? 'Entrando…' : 'Entrar'}
         </Button>
       </form>
-      <p className="text-center text-sm text-ink-muted">Esqueceu o PIN? Peça um novo link de acesso para a ÉKA.</p>
+      {t.forgot && <p className="text-center text-sm text-ink-muted">{t.forgot}</p>}
     </Shell>
   );
 }
@@ -120,6 +125,8 @@ function InvitePage() {
   useDocumentTitle('Revenda · Primeiro acesso');
   const { token = '' } = useParams();
   const navigate = useNavigate();
+  const t = useSection('revenda').invite;
+  const textsReady = useSectionsReady();
   const [view, setView] = useState<InviteView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [typedName, setTypedName] = useState('');
@@ -153,7 +160,7 @@ function InvitePage() {
     setBusy(true);
     try {
       await acceptInvite(token, { pin, ...(c ? { contract: { version: c.version, ...(c.mode === 'aceite' ? { typedName } : { signedExternal: true as const }) } } : {}) });
-      toast('Tudo pronto! Bem-vinda ao seu painel.', { tone: 'success' });
+      toast(t.welcome, { tone: 'success' });
       navigate('/revenda/painel', { replace: true });
     } catch (err) {
       setError(errorMessage(err));
@@ -162,11 +169,12 @@ function InvitePage() {
     }
   }
 
+  if (!textsReady) return <Shell><p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando…</p></Shell>;
   if (loadError) {
     return (
       <Shell>
         <div className="flex flex-col items-center gap-3 pt-8 text-center">
-          <h1 className="font-display text-display-m">Link indisponível</h1>
+          <h1 className="font-display text-display-m">{t.goneTitle}</h1>
           <p className="max-w-sm text-ink-muted">{loadError}</p>
           <Button variant="secondary" onClick={() => navigate('/revenda')}>
             Já tenho PIN: entrar
@@ -177,13 +185,15 @@ function InvitePage() {
   }
   if (!view) return <Shell><p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando…</p></Shell>;
   const c = view.contract;
+  const greeting = fillString(t.greeting, { primeiro_nome: view.firstName });
+  const intro = c ? t.text : t.textNoContract;
 
   return (
     <Shell>
       <div className="flex flex-col gap-1 pt-2 text-center">
-        <p className="eyebrow text-ink-muted">Bem-vinda, {view.firstName}!</p>
-        <h1 className="font-display text-display-m">Seu acesso de revendedora</h1>
-        <p className="text-ink-muted">{c ? 'Leia e aceite o contrato e crie o PIN que você vai usar para entrar.' : 'Crie o PIN que você vai usar para entrar.'}</p>
+        {greeting && <p className="eyebrow text-ink-muted">{greeting}</p>}
+        <h1 className="font-display text-display-m">{t.title}</h1>
+        {intro && <p className="text-ink-muted">{intro}</p>}
       </div>
       <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-5">
         {c && (
@@ -282,6 +292,7 @@ function ContractFields({
 
 /** An updated contract from the panel: sales wait until she accepts it. */
 function ContractUpdate({ me, onAccepted }: { me: Me; onAccepted: () => void }) {
+  const t = useSection('revenda').contract;
   const c = me.contractDue;
   const [typedName, setTypedName] = useState('');
   const [agree, setAgree] = useState(false);
@@ -299,7 +310,7 @@ function ContractUpdate({ me, onAccepted }: { me: Me; onAccepted: () => void }) 
     setBusy(true);
     try {
       await acceptContract({ version: c.version, ...(c.mode === 'aceite' ? { typedName } : { signedExternal: true as const }) });
-      toast('Contrato aceito. Obrigada!', { tone: 'success' });
+      toast(t.accepted, { tone: 'success' });
       onAccepted();
     } catch (err) {
       setError(errorMessage(err));
@@ -313,8 +324,8 @@ function ContractUpdate({ me, onAccepted }: { me: Me; onAccepted: () => void }) 
   return (
     <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-3 rounded-[14px] border border-copper bg-champagne/40 p-4">
       <div>
-        <p className="font-medium">A ÉKA atualizou o contrato</p>
-        <p className="text-sm text-ink-muted">Leia e aceite a versão nova para continuar registrando vendas.</p>
+        <p className="font-medium">{t.updateTitle}</p>
+        {t.updateText && <p className="text-sm text-ink-muted">{t.updateText}</p>}
       </div>
       <ContractFields
         contract={c}
@@ -345,6 +356,7 @@ function Thumb({ me, line }: { me: Me; line: { productId: string; variantId: str
 }
 
 function Summary({ me }: { me: Me }) {
+  const t = useSection('revenda').panel;
   const kit = me.kit;
   const c = me.commission;
   const days = kit ? daysLeft(kit.dueAt) : null;
@@ -365,7 +377,7 @@ function Summary({ me }: { me: Me }) {
           <div className="h-2.5 overflow-hidden rounded-full bg-white" role="progressbar" aria-label="Progresso até a próxima faixa de comissão" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(c.progress * 100)}>
             <div className="h-full rounded-full bg-copper transition-[width] duration-500" style={{ width: `${Math.round(c.progress * 100)}%` }} />
           </div>
-          <p className="text-sm text-ink-muted">{c.next ? `Faltam ${formatBRL(c.next.missingCents)} para subir para ${c.next.percent}%.` : 'Você está na faixa mais alta. 🎉'}</p>
+          <p className="text-sm text-ink-muted">{c.next ? `Faltam ${formatBRL(c.next.missingCents)} para subir para ${c.next.percent}%.` : t.topTier}</p>
         </div>
       )}
       <dl className="mt-4 grid grid-cols-2 gap-px bg-rose/30">
@@ -392,7 +404,8 @@ function Summary({ me }: { me: Me }) {
 }
 
 function KitList({ me }: { me: Me }) {
-  if (!me.kit) return <p className="rounded-[12px] border border-dashed border-line px-4 py-8 text-center text-ink-muted">Você não tem uma maleta aberta agora. Quando a ÉKA montar a próxima, ela aparece aqui.</p>;
+  const t = useSection('revenda').kit;
+  if (!me.kit) return <p className="rounded-[12px] border border-dashed border-line px-4 py-8 text-center text-ink-muted">{t.empty}</p>;
   return (
     <ul className="divide-y divide-line rounded-[14px] bg-white px-4 shadow-[var(--shadow-1)]">
       {me.kit.lines.map((l) => (
@@ -456,6 +469,7 @@ function SaleMessage({ sale, me }: { sale: ResellerSale; me: Me }) {
 }
 
 function SaleForm({ me, onDone }: { me: Me; onDone: (sale: ResellerSale) => void }) {
+  const t = useSection('revenda');
   const lines = useMemo(() => (me.kit?.lines ?? []).filter((l) => l.available > 0), [me.kit]);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [price, setPrice] = useState<Record<string, string>>({});
@@ -500,7 +514,7 @@ function SaleForm({ me, onDone }: { me: Me; onDone: (sale: ResellerSale) => void
     }
   }
 
-  if (!lines.length) return <p className="text-ink-muted">Todas as peças da maleta já foram vendidas. 🎉</p>;
+  if (!lines.length) return <p className="text-ink-muted">{t.kit.soldOut}</p>;
   return (
     <div className="flex flex-col gap-5">
       <ul className="divide-y divide-line border-y border-line" aria-label="Peças da maleta">
@@ -553,7 +567,7 @@ function SaleForm({ me, onDone }: { me: Me; onDone: (sale: ResellerSale) => void
         ))}
       </div>
       <TextField label="Nome da cliente" optional value={customer} maxLength={80} onChange={(e) => setCustomer(e.target.value)} />
-      <TextField label="WhatsApp da cliente" optional inputMode="tel" value={phone} onChange={(e) => setPhone(maskPhone(e.target.value))} hint="Para enviar o resumo da compra com a garantia." />
+      <TextField label="WhatsApp da cliente" optional inputMode="tel" value={phone} onChange={(e) => setPhone(maskPhone(e.target.value))} {...(t.sale.phoneHint ? { hint: t.sale.phoneHint } : {})} />
       <TextField label="Observação" optional value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} />
       {error && <ErrorText>{error}</ErrorText>}
       <Button size="lg" block disabled={busy} aria-busy={busy} onClick={() => void submit()}>
@@ -564,17 +578,18 @@ function SaleForm({ me, onDone }: { me: Me; onDone: (sale: ResellerSale) => void
 }
 
 function SalesList({ me, onChanged }: { me: Me; onChanged: () => void }) {
+  const t = useSection('revenda');
   const [busy, setBusy] = useState<string | null>(null);
   const [messageFor, setMessageFor] = useState<ResellerSale | null>(null);
   // "Desfazer" is offered for sales younger than 24 h (as of when the list was shown; the server decides).
   const [now] = useState(() => Date.now());
-  if (!me.sales.length) return <p className="rounded-[12px] border border-dashed border-line px-4 py-8 text-center text-ink-muted">Nenhuma venda nesta maleta ainda.</p>;
+  if (!me.sales.length) return <p className="rounded-[12px] border border-dashed border-line px-4 py-8 text-center text-ink-muted">{t.history.salesEmpty}</p>;
   async function undo(sale: ResellerSale) {
     if (busy) return;
     setBusy(sale.id);
     try {
       await cancelSale(sale.id);
-      toast('Venda desfeita. As peças voltaram para a maleta.', { tone: 'success' });
+      toast(t.sale.undone, { tone: 'success' });
       onChanged();
     } catch (err) {
       toast(errorMessage(err), { tone: 'error' });
@@ -623,7 +638,8 @@ function SalesList({ me, onChanged }: { me: Me; onChanged: () => void }) {
 }
 
 function History({ me }: { me: Me }) {
-  if (!me.history.length) return <p className="rounded-[12px] border border-dashed border-line px-4 py-8 text-center text-ink-muted">Os acertos das maletas anteriores aparecem aqui.</p>;
+  const t = useSection('revenda').history;
+  if (!me.history.length) return <p className="rounded-[12px] border border-dashed border-line px-4 py-8 text-center text-ink-muted">{t.settlementsEmpty}</p>;
   return (
     <ul className="flex flex-col gap-2">
       {me.history.map((h) => (
@@ -649,6 +665,8 @@ function PanelPage() {
   const [tab, setTab] = useState<PanelTab>('maleta');
   const [selling, setSelling] = useState(false);
   const [sold, setSold] = useState<ResellerSale | null>(null);
+  const t = useSection('revenda');
+  const textsReady = useSectionsReady();
   useDocumentTitle(me ? `Revenda · ${me.reseller.firstName}` : 'Revenda');
 
   const load = useCallback(() => {
@@ -676,7 +694,7 @@ function PanelPage() {
     navigate('/revenda', { replace: true });
   }
 
-  if (!me) {
+  if (!me || !textsReady) {
     return (
       <Shell>
         {error ? (
@@ -696,11 +714,12 @@ function PanelPage() {
   }
 
   const showcase = `${window.location.origin}/r/${me.reseller.slug}`;
+  const greeting = fillString(t.panel.greeting, { primeiro_nome: me.reseller.firstName });
   return (
     <Shell onLogout={() => void exit()}>
       <div>
-        <p className="eyebrow text-ink-muted">Olá, {me.reseller.firstName}!</p>
-        <h1 className="font-display text-display-m">Seu painel</h1>
+        {greeting && <p className="eyebrow text-ink-muted">{greeting}</p>}
+        <h1 className="font-display text-display-m">{t.panel.title}</h1>
       </div>
       <ContractUpdate key={me.contractDue?.version ?? 0} me={me} onAccepted={load} />
       <Summary me={me} />
@@ -710,8 +729,8 @@ function PanelPage() {
         </Button>
       )}
       <div className="flex flex-col gap-2 rounded-[12px] border border-line bg-white p-4">
-        <p className="text-sm font-medium">Seu mostruário digital</p>
-        <p className="text-sm text-ink-muted">Envie para as suas clientes: elas veem as peças da sua maleta e falam com você.</p>
+        <p className="text-sm font-medium">{t.panel.showcaseTitle}</p>
+        {t.panel.showcaseText && <p className="text-sm text-ink-muted">{t.panel.showcaseText}</p>}
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
@@ -745,7 +764,7 @@ function PanelPage() {
       {tab === 'vendas' && <SalesList me={me} onChanged={load} />}
       {tab === 'historico' && <History me={me} />}
       <div className="flex justify-center">
-        <InstallAppButton app="reseller" />
+        <InstallAppButton app="reseller" intro={t.panel.installText} />
       </div>
 
       <Sheet open={selling} onClose={() => setSelling(false)} title="Registrar venda" side="right">
@@ -756,7 +775,7 @@ function PanelPage() {
               setSelling(false);
               setSold(sale);
               setTab('vendas');
-              toast('Venda registrada.', { tone: 'success' });
+              toast(t.sale.registered, { tone: 'success' });
               load();
             }}
           />
@@ -765,7 +784,7 @@ function PanelPage() {
       <Sheet open={!!sold} onClose={() => setSold(null)} title="Mensagem para a cliente" side="bottom" className="md-right">
         {sold && (
           <div className="flex flex-col gap-3">
-            <p className="text-sm text-ink-muted">Venda registrada. Envie o resumo com a garantia: no WhatsApp, é só tocar em enviar.</p>
+            {t.sale.done && <p className="text-sm text-ink-muted">{t.sale.done}</p>}
             <SaleMessage sale={sold} me={me} />
           </div>
         )}
@@ -799,7 +818,9 @@ function LoginGate() {
       alive = false;
     };
   }, []);
+  const textsReady = useSectionsReady();
   if (state === 'checking') return <div className="min-h-dvh bg-ivory" aria-busy="true" />;
   if (state === 'in') return <Navigate to="/revenda/painel" replace />;
+  if (!textsReady) return <div className="min-h-dvh bg-ivory" aria-busy="true" />;
   return <LoginPage />;
 }

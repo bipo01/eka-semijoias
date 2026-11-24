@@ -335,4 +335,82 @@ describe('reseller program', () => {
     expect((await catalog()).stock[p.id][key]).toBe(10);
     expect((await a.req(`/api/admin/stock/${p.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
   });
+  it('picks the next free showcase address when two resellers with the same first name are created at once', async () => {
+    const a = await admin();
+    const first = `Zuleica${randomUUID().slice(0, 4).replace(/\d/g, 'x')}`;
+    const made = await Promise.all(
+      [1, 2, 3].map((n) => a.req('/api/admin/resellers', { body: { name: `${first} Silva ${n}`, whatsapp: phoneOf(), city: 'Cuiabá', uf: 'MT' }, headers: { 'Idempotency-Key': randomUUID() } })),
+    );
+    expect(made.map((m) => m.status)).toEqual([201, 201, 201]);
+    expect(new Set(made.map((m) => m.json.reseller.slug)).size).toBe(3);
+    // An address she typed herself is never swapped silently.
+    const typed = await a.req('/api/admin/resellers', { body: { name: 'Outra Pessoa', whatsapp: phoneOf(), city: 'Cuiabá', uf: 'MT', slug: made[0]!.json.reseller.slug }, headers: { 'Idempotency-Key': randomUUID() } });
+    expect(typed.status).toBe(409);
+  });
+
+  it('erases a reseller who left: everything about her and her customers, only once the settlements are received', async () => {
+    const a = await admin();
+    // The last plain product: api.test.ts runs in parallel on the same server and uses the first ones.
+    const p = (await plainProducts(100)).at(-1);
+    const v = p.variants[0];
+    const key = `${v.id}|`;
+    expect((await a.req(`/api/admin/stock/${p.id}`, { method: 'PUT', body: { tracked: true, levels: [{ variantId: v.id, size: '', qty: 4, expected: null }] } })).status).toBe(200);
+
+    // Her whole path: application, effectivation, access (contract + PIN), kit, a sale with a customer, settlement.
+    const whatsapp = phoneOf();
+    const masked = `(${whatsapp.slice(0, 2)}) ${whatsapp.slice(2, 7)}-${whatsapp.slice(7)}`;
+    const lead = await new Client().req('/api/leads', { body: { name: 'Lia Saída Moraes', whatsapp: masked, city: 'Cuiabá', uf: 'MT', instagram: 'lia.moraes', alreadySells: false, source: '', consent: true } });
+    expect(lead.status).toBe(201);
+    const second = await new Client().req('/api/leads', { body: { name: 'Lia S. Moraes', whatsapp: masked, city: 'Cuiabá', uf: 'MT', instagram: '', alreadySells: false, source: '', consent: true } });
+    expect(second.status).toBe(201);
+    const created = await a.req('/api/admin/resellers', { body: { leadId: lead.json.id, name: 'Lia Saída Moraes', whatsapp, city: 'Cuiabá', uf: 'MT', instagram: 'lia.moraes' }, headers: { 'Idempotency-Key': randomUUID() } });
+    expect(created.status).toBe(201);
+    const reseller = created.json.reseller;
+    const r = await activate(created.json.invite.token, '736251');
+    const kit = (await a.req(`/api/admin/resellers/${reseller.id}/kits`, { body: { items: [{ productId: p.id, variantId: v.id, qty: 1 }] } })).json.kit;
+    expect((await catalog()).stock[p.id][key]).toBe(3);
+    const sale = await r.req('/api/revenda/sales', {
+      body: { lines: [{ productId: p.id, variantId: v.id, size: '', qty: 1, unitCents: p.promoPrice ?? p.price }], payment: 'pix', customer: { name: 'Cliente Sigilosa', whatsapp: '(65) 96666-2222' } },
+      headers: { 'Idempotency-Key': randomUUID() },
+    });
+    expect(sale.status).toBe(201);
+    const fresh = async () => (await a.req(`/api/admin/resellers/${reseller.id}`)).json;
+    const erase = async (updatedAt?: string) => a.req(`/api/admin/resellers/${reseller.id}/erase`, { body: { updatedAt: updatedAt ?? (await fresh()).reseller.updatedAt } });
+
+    // Not while she is active, nor with a kit open.
+    expect((await erase()).json.error.message).toContain('Encerre a parceria');
+    const openKit = (await fresh()).kits[0]; // the sale moved the kit's stamp
+    expect((await a.req(`/api/admin/kits/${kit.id}/settle`, { body: { updatedAt: openKit.updatedAt, returned: [] } })).status).toBe(200);
+    const ended = await a.req(`/api/admin/resellers/${reseller.id}`, { method: 'PATCH', body: { updatedAt: (await fresh()).reseller.updatedAt, status: 'encerrada' } });
+    expect(ended.status).toBe(200);
+    // Not while the store has not received the settlement.
+    const unpaid = await erase();
+    expect(unpaid.status).toBe(409);
+    expect(unpaid.json.error.message).toContain('falta receber');
+    expect((await a.req(`/api/admin/kits/${kit.id}/paid`, { body: { paid: true } })).status).toBe(200);
+    // A stale screen is refused.
+    expect((await erase('2020-01-01T00:00:00.000Z')).status).toBe(409);
+
+    const done = await erase();
+    expect(done.status).toBe(200);
+    expect(done.json.erased).toEqual({ kits: 1, sales: 1, leads: 2 });
+
+    // Nothing about her (or her customer) is left anywhere the panel or the public can reach.
+    expect((await a.req(`/api/admin/resellers/${reseller.id}`)).status).toBe(404);
+    const everything = JSON.stringify([(await a.req('/api/admin/resellers')).json, (await a.req('/api/admin/leads')).json, (await a.req('/api/admin/stock')).json]);
+    for (const trace of ['Lia', 'Moraes', 'lia.moraes', whatsapp, 'Cliente Sigilosa', '966662222', reseller.id]) expect(everything).not.toContain(trace);
+    expect((await new Client().req(`/api/r/${reseller.slug}`)).status).toBe(404);
+    expect((await r.req('/api/revenda/me')).status).toBe(401);
+    expect((await new Client().req('/api/revenda/login', { body: { whatsapp, pin: '736251' } })).status).not.toBe(200);
+    // Erasing twice is a clean 404; her number is free for a new partnership.
+    expect((await erase('x')).status).toBe(404);
+    expect((await a.req('/api/admin/resellers', { body: { name: 'Lia Moraes Volta', whatsapp, city: 'Cuiabá', uf: 'MT' }, headers: { 'Idempotency-Key': randomUUID() } })).status).toBe(201);
+
+    // Stock stays consistent: the kit movement remains, without her name.
+    const moves = (await a.req('/api/admin/stock')).json.movements.filter((m: any) => m.productId === p.id && m.kitId === kit.id);
+    expect(moves.map((m: any) => m.reason)).toEqual(['maleta']);
+    expect(moves[0].resellerName ?? '').toBe('');
+    expect((await catalog()).stock[p.id][key]).toBe(3);
+    expect((await a.req(`/api/admin/stock/${p.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
+  });
 });
