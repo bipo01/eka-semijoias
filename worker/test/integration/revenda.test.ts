@@ -113,8 +113,15 @@ describe('reseller program', () => {
     expect((await r.req(`/api/revenda/invite/${token}`, { body: { pin: '123456', contract: { version: 1, typedName: 'Bruna Revenda Silva' } } })).status).toBe(400);
     expect((await r.req(`/api/revenda/invite/${token}`, { body: { pin: '402817', contract: { version: 1, typedName: 'Outra' } } })).status).toBe(400);
     expect((await r.req(`/api/revenda/invite/${token}`, { body: { pin: '402817', contract: { version: 9, typedName: 'Bruna Revenda Silva' } } })).status).toBe(409);
-    const ok = await r.req(`/api/revenda/invite/${token}`, { body: { pin: '402817', contract: { version: 1, typedName: 'Bruna Revenda Silva' } } });
+    // Two submissions at once: exactly one sets the PIN.
+    const both = await Promise.all([r, new Client()].map((c) => c.req(`/api/revenda/invite/${token}`, { body: { pin: '402817', contract: { version: 1, typedName: 'Bruna Revenda Silva' } } })));
+    expect(both.map((x) => x.status).sort()).toEqual([200, 404]);
+    const ok = both.find((x) => x.status === 200)!;
     expect(ok.status).toBe(200);
+    if (!r.cookies.size) {
+      // The other client won the race: log in to continue as her.
+      expect((await r.req('/api/revenda/login', { body: { whatsapp, pin: '402817' } })).status).toBe(200);
+    }
     expect((await r.req('/api/revenda/me')).json.reseller).toMatchObject({ firstName: 'Bruna', contract: { version: 1, mode: 'aceite' } });
     // The link works once.
     expect((await new Client().req(`/api/revenda/invite/${token}`)).status).toBe(404);

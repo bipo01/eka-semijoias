@@ -17,7 +17,7 @@ import {
 import { hit, ipKey, readCookie, retryAfter } from './auth';
 import { IDEMPOTENCY_TTL_MS, parseSnapshotBody, WRITE_ATTEMPTS } from './catalog';
 import { randomBytes, randomToken, safeEqual, sha256Hex, toHex } from './crypto';
-import { isGuardMiss, toHttpError, withReadRetry } from './db';
+import { guard, isGuardMiss, toHttpError, withReadRetry } from './db';
 import type { Env } from './env';
 import { HttpError, json, readJson, zodDetails } from './http';
 import { notifyLeads } from './live';
@@ -186,7 +186,8 @@ export async function handleAcceptInvite(ctx: Context): Promise<Response> {
   const session = await sessionStatements(db, reseller.id, now);
   try {
     await db.batch([
-      // The link works once: a second use (or a concurrent one) fails here.
+      // The link works once: a concurrent second use aborts the whole batch here.
+      guard(db, '(SELECT used_at FROM reseller_invites WHERE token_hash = ?1) IS NULL', await sha256Hex(token)),
       db.prepare('UPDATE reseller_invites SET used_at = ?2 WHERE token_hash = ?1 AND used_at IS NULL').bind(await sha256Hex(token), now),
       ...statements,
       db
@@ -202,6 +203,7 @@ export async function handleAcceptInvite(ctx: Context): Promise<Response> {
       db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'reseller.access', `Primeiro acesso de ${reseller.id}${due ? ` (contrato v${c.version})` : ''}`),
     ]);
   } catch (error) {
+    if (isGuardMiss(error)) throw new HttpError('not_found', 'Este link de acesso não vale mais. Peça um novo para a ÉKA.');
     throw toHttpError(error);
   }
   if (due) ctx.waitUntil(notifyOwner(env, ctx.url.origin, { title: 'Contrato de revendedora aceito', body: `${reseller.name.split(/\s+/)[0]} aceitou o contrato e já pode usar o painel.`, url: '/admin/revendedoras', tag: `rev-${reseller.id}` }));
