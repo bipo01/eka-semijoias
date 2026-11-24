@@ -238,7 +238,9 @@ export async function handleResellerLogin(ctx: Context): Promise<Response> {
   if (!row || !ok) throw new HttpError('invalid_pin', 'WhatsApp ou PIN incorretos.', { attemptsLeft: Math.max(0, LOGIN_IP_MAX - byIp.count) });
   if (row.status !== 'ativa') throw new HttpError('unauthenticated', 'Seu acesso está pausado. Fale com a ÉKA.');
   const session = await sessionStatements(db, row.id, now);
-  await db.batch([...session.statements, db.prepare('DELETE FROM throttle WHERE key IN (?1, ?2)').bind(`rlogin:ip:${ip}`, `rlogin:r:${row.id}`)]);
+  // Only this reseller's own counter resets: the network counter keeps running, so logging into
+  // one's own account cannot buy more guesses at someone else's.
+  await db.batch([...session.statements, db.prepare('DELETE FROM throttle WHERE key = ?1').bind(`rlogin:r:${row.id}`)]);
   return json({ ok: true }, { headers: { 'Set-Cookie': sessionCookie(env, session.token, SESSION_MS / 1000) } });
 }
 
