@@ -15,6 +15,7 @@ import { apiUrl } from '../lib/api';
 import { leadFormSchema, leadVars, maskPhone, UFS, type LeadForm } from '../lib/lead';
 import { useMessages } from '../hooks/useMessages';
 import { whatsappUrl } from '../lib/whatsapp';
+import { goToSection } from '../lib/goToSection';
 
 /** Icons of the built-in benefits (by id, so they keep their icon when one is left out by the facts); others by position. */
 const BENEFIT_ICON: Record<string, typeof Wallet> = { 'b-investimento': PiggyBank, 'b-comissao': Wallet, 'b-suporte': Headset, 'b-pecas': Sparkles };
@@ -45,7 +46,12 @@ export function ResellersPage() {
             <Highlighted title={page.hero.title} highlight={page.hero.highlight} />
           </h1>
           {page.hero.text && <p className={`mt-4 max-w-lg text-lg text-ink ${ownerText}`}>{page.hero.text}</p>}
-          <a href="#pre-cadastro" className="mt-6 inline-flex min-h-13 w-full items-center justify-center gap-2 rounded-full bg-copper px-7 text-[1.0625rem] font-medium text-white hover:bg-copper-dark sm:w-auto">
+          <a
+            href="#pre-cadastro"
+            onClick={(e) => {
+              if (goToSection('pre-cadastro')) e.preventDefault();
+            }}
+            className="mt-6 inline-flex min-h-13 w-full items-center justify-center gap-2 rounded-full bg-copper px-7 text-[1.0625rem] font-medium text-white hover:bg-copper-dark sm:w-auto">
             {page.hero.cta} <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" />
           </a>
         </div>
@@ -204,7 +210,7 @@ function LeadFormSection({ whatsapp, title, intro }: { whatsapp: string | null; 
 
   return (
     <section id="pre-cadastro" aria-labelledby="pre-cadastro-title" className="scroll-mt-24 rounded-[12px] border border-line bg-white p-5 lg:p-8">
-      <h2 id="pre-cadastro-title" className="font-display text-display-m break-words md:text-display-l">{title}</h2>
+      <h2 id="pre-cadastro-title" tabIndex={-1} className="font-display text-display-m break-words outline-none md:text-display-l">{title}</h2>
       {intro && <p className={`mt-1 text-ink-muted ${ownerText}`}>{intro}</p>}
       <form ref={formRef} noValidate onSubmit={submit} className="mt-6 flex flex-col gap-4">
         <TextField label="Nome completo" required autoComplete="name" icon={<User size={18} strokeWidth={1.5} />} value={form.name} error={errors.name} onChange={(e) => set('name', e.target.value)} />

@@ -26,5 +26,5 @@ O site já funciona com informações e fotos provisórias. Cada resposta abaixo
 ## Marca e conteúdo
 14. **Sua história:** como a ÉKA começou, o que significa o nome, o que você quer que as clientes sintam? (Vira a página "Sobre".)
 15. **Depoimentos:** tem prints ou mensagens de clientes que autorizam aparecer no site (primeiro nome + cidade)?
-16. **Domínio:** quer um endereço próprio (ex.: ekasemijoias.com.br)? Por enquanto o site está no GitHub Pages; comprar domínio é decisão e custo seus.
-17. **PIN do painel:** que número de 4 dígitos você quer para entrar no painel?
+16. **Domínio:** quer um endereço próprio (ex.: ekasemijoias.com.br)? Por enquanto o site está em eka-semijoias.eka-semijoias.workers.dev (Cloudflare); comprar domínio é decisão e custo seus.
+17. **PIN do painel:** que número de 6 a 8 dígitos você quer para entrar no painel? (Ela mesma troca em Configurações.)

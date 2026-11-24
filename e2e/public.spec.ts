@@ -162,6 +162,44 @@ test('reseller pre-registration validates and saves the lead', async ({ page, co
   await expect(page.getByText(/Não conseguimos registrar/)).toHaveCount(0);
 });
 
+test('"Quero ser revendedora" reaches the form on the first tap (regression: it used to need two)', async ({ page }) => {
+  await open(page, '/revendedoras');
+  const form = page.locator('#pre-cadastro-title');
+  await expect(form).not.toBeInViewport();
+  await page.waitForLoadState('networkidle'); // the app is fully running, as when a visitor taps
+  await page.getByRole('link', { name: /Quero ser revendedora/ }).first().click();
+  // The bug scrolled and the router's scroll restoration undid it: check it is still there after that.
+  await page.waitForTimeout(1500);
+  await expect(form).toBeInViewport({ timeout: 0 });
+  await expect(form).toBeFocused(); // screen readers land on the form, the phone keyboard stays closed
+  expect(new URL(page.url()).pathname).toBe('/revendedoras');
+});
+
+test('"Novidades" arrows never do nothing: off at the start, on after scrolling', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'the arrows are a desktop control (phones swipe)');
+  await open(page, '/');
+  const prev = page.getByRole('button', { name: 'Ver anteriores' });
+  const next = page.getByRole('button', { name: 'Ver próximas' });
+  await expect(prev).toBeDisabled();
+  await next.click();
+  await expect(prev).toBeEnabled();
+});
+
+test('the bag icon on the bag page goes back to the top instead of doing nothing', async ({ page }) => {
+  await open(page, '/sacola');
+  const bag = page.getByRole('banner').getByRole('button', { name: /^Sacola/ });
+  await expect(bag).toHaveAttribute('aria-current', 'page');
+  await page.evaluate(() => window.scrollTo(0, 400));
+  await bag.click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test('a shared link to the pre-registration form lands on it', async ({ page }) => {
+  await page.goto('/revendedoras#pre-cadastro');
+  await page.waitForTimeout(1500); // past the catalog load and the router's scroll restoration
+  await expect(page.locator('#pre-cadastro-title')).toBeInViewport({ timeout: 0 });
+});
+
 test('menu drawer is keyboard accessible and returns focus', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'mobile drawer');
   await open(page, '/');

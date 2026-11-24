@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { isPurchasable } from '../../data/catalog';
 import { useSection } from '../../hooks/useSection';
@@ -16,6 +16,22 @@ export function NewArrivals() {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 8);
   const rail = useRef<HTMLUListElement>(null);
+  // Arrows know where the rail is: "Ver anteriores" is off at the start, "Ver próximas" at the end,
+  // and both hide when every piece already fits (a tap never "does nothing").
+  const [edges, setEdges] = useState({ start: true, end: false });
+  useEffect(() => {
+    const el = rail.current;
+    if (!el) return;
+    const update = () => setEdges({ start: el.scrollLeft <= 4, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4 });
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    resize?.observe(el);
+    return () => {
+      el.removeEventListener('scroll', update);
+      resize?.disconnect();
+    };
+  }, [newest.length]);
   if (!newest.length) return null;
   const scroll = (dir: 1 | -1) => rail.current?.scrollBy({ left: dir * rail.current.clientWidth * 0.8, behavior: 'smooth' });
   return (
@@ -25,11 +41,11 @@ export function NewArrivals() {
           id="home-novidades"
           title={titles.newArrivals}
           action={
-            <div className="hidden gap-1 self-center lg:flex">
-              <IconButton label="Ver anteriores" onClick={() => scroll(-1)} className="border border-line">
+            <div className={edges.start && edges.end ? 'hidden' : 'hidden gap-1 self-center lg:flex'}>
+              <IconButton label="Ver anteriores" onClick={() => scroll(-1)} disabled={edges.start} className="border border-line disabled:cursor-default disabled:opacity-35">
                 <ChevronLeft size={20} strokeWidth={1.5} />
               </IconButton>
-              <IconButton label="Ver próximas" onClick={() => scroll(1)} className="border border-line">
+              <IconButton label="Ver próximas" onClick={() => scroll(1)} disabled={edges.end} className="border border-line disabled:cursor-default disabled:opacity-35">
                 <ChevronRight size={20} strokeWidth={1.5} />
               </IconButton>
             </div>

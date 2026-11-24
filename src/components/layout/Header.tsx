@@ -1,5 +1,5 @@
 import { Heart, Menu, Search, ShoppingBag } from 'lucide-react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { cartCount, useCart } from '../../store/cart';
 import { useUi } from '../../store/ui';
 import { IconButton } from '../ui/Button';
@@ -11,8 +11,17 @@ import { MAIN_NAV } from './nav';
 function BagButton() {
   const count = useCart((s) => cartCount(s.items));
   const openPanel = useUi((s) => s.openPanel);
+  // On the bag page the side panel stays closed (it would show the same thing), so a tap there
+  // goes back to the top of the bag instead of doing nothing.
+  const onBagPage = useLocation().pathname === '/sacola';
+  const goTop = () => window.scrollTo({ top: 0, behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   return (
-    <IconButton label={count ? `Sacola, ${count} ${count === 1 ? 'item' : 'itens'}` : 'Sacola vazia'} onClick={() => openPanel('bag')} className="relative">
+    <IconButton
+      label={count ? `Sacola, ${count} ${count === 1 ? 'item' : 'itens'}` : 'Sacola vazia'}
+      onClick={() => (onBagPage ? goTop() : openPanel('bag'))}
+      aria-current={onBagPage ? 'page' : undefined}
+      className="relative"
+    >
       <ShoppingBag size={22} strokeWidth={1.5} />
       {count > 0 && (
         <span aria-hidden="true" className="price absolute top-1 right-0.5 flex min-w-[18px] items-center justify-center rounded-full bg-copper px-1 text-[11px] leading-[18px] text-white">

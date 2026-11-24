@@ -14,8 +14,36 @@ export function PageFallback() {
   return <div className="min-h-[60dvh]" aria-busy="true" />;
 }
 
+/**
+ * A link to a section (/revendedoras#pre-cadastro, shared on WhatsApp or Instagram) must land on it.
+ * The page renders only after the catalog is known, so the browser's own jump finds nothing, and the
+ * router's scroll restoration then puts the page at the top. Wait for the section (up to ~2 s) and go there.
+ */
+function useScrollToHash() {
+  const { hash, key } = useLocation();
+  useEffect(() => {
+    if (hash.length < 2 || hash.startsWith('#/')) return;
+    let id: string;
+    try {
+      id = decodeURIComponent(hash.slice(1));
+    } catch {
+      return;
+    }
+    let frame = 0;
+    let tries = 0;
+    const attempt = () => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ block: 'start' });
+      else if (tries++ < 120) frame = requestAnimationFrame(attempt);
+    };
+    frame = requestAnimationFrame(attempt);
+    return () => cancelAnimationFrame(frame);
+  }, [hash, key]);
+}
+
 export function Layout() {
   const { pathname } = useLocation();
+  useScrollToHash();
   const closePanel = useUi((s) => s.closePanel);
   const isProduct = pathname.startsWith('/produto/');
 
