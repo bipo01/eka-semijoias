@@ -102,7 +102,7 @@ export function summarize(state: Catalog & { leads?: unknown[] }): string {
   return [
     plural(state.products.length, 'produto', 'produtos'),
     plural(state.categories.length, 'categoria', 'categorias'),
-    ...(state.leads ? [plural(state.leads.length, 'revendedora', 'revendedoras')] : []),
+    ...(state.leads ? [plural(state.leads.length, 'ficha de revendedora', 'fichas de revendedoras')] : []),
   ].join(', ');
 }
 
@@ -202,8 +202,12 @@ export function BackupPage() {
       <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4">
         <h2 className="font-display text-title">Exportar</h2>
         <p className="text-sm text-ink-muted">
-          Baixa um arquivo com o catálogo do site (peças, fotos enviadas, categorias, textos do site e informações da loja) e os cadastros de revendedoras. Atualmente:{' '}
+          Baixa um arquivo com o catálogo do site (peças, fotos enviadas, categorias, textos do site e informações da loja) e as fichas de cadastro de revendedoras. Atualmente:{' '}
           {summarize(data)}.
+        </p>
+        {/* What the file does not carry, so it is never taken for a full copy of the store. */}
+        <p className="text-sm text-ink-muted">
+          Não inclui pedidos, clientes, comprovantes nem as contas das revendedoras: eles ficam no servidor, que guarda um histórico automático dos últimos 7 dias.
         </p>
         <Button
           onClick={async () => {

@@ -305,7 +305,7 @@ export function StockPage() {
       <section aria-label="Resumo do estoque" className="mb-4 grid grid-cols-6 gap-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1.4fr)]">
         <Kpi className="col-span-2 lg:col-span-1" label="Em casa" value={String(overview.home)} hint="unidades" />
         <Kpi className="col-span-2 lg:col-span-1" label="Nas maletas" value={String(overview.inKits)} hint="unidades" />
-        <Kpi className="col-span-2 lg:col-span-1" label="Total" value={String(overview.total)} hint="unidades" />
+        <Kpi className="col-span-2 lg:col-span-1" label="Total registrado" value={String(overview.total)} hint="das peças com controle" />
         <Kpi className="col-span-6 lg:col-span-1" label="Valor em estoque" value={formatBRL(overview.valueCents)} hint="a preço de venda, com as maletas" />
         <Kpi className="col-span-3 lg:col-span-1" label="Esgotadas" value={String(overview.soldOut)} tone={overview.soldOut ? 'danger' : undefined} hint="sem unidades em casa" />
         <Kpi className="col-span-3 lg:col-span-1" label="Poucas unidades" value={String(overview.low)} tone={overview.low ? 'copper' : undefined} hint={`até ${threshold} por acabamento`} />
