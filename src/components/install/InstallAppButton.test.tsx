@@ -61,8 +61,19 @@ describe('InstallAppButton', () => {
 
     await user.click(screen.getByRole('button', { name: 'Instalar o app' }));
     const guide = await screen.findByRole('dialog', { name: 'Instalar o app da ÉKA' });
-    expect(within(guide).getByText('Compartilhar')).toBeInTheDocument();
+    expect(within(guide).getAllByText('Compartilhar').length).toBeGreaterThan(0);
     expect(within(guide).getByText('Adicionar à Tela de Início')).toBeInTheDocument();
+    // Every step shows its real screenshot, the last one with the store's own icon and name.
+    const photos = within(guide).getAllByRole('img').filter((img) => img.getAttribute('src')?.startsWith('/images/install/'));
+    expect(photos.map((img) => img.getAttribute('src'))).toEqual([
+      '/images/install/ios-1.webp',
+      '/images/install/ios-2.webp',
+      '/images/install/ios-3.webp',
+      '/images/install/ios-4.webp',
+      '/images/install/ios-5-store.webp',
+      '/images/install/ios-6-store.webp',
+    ]);
+    expect(photos.every((img) => img.getAttribute('alt'))).toBe(true);
 
     await user.click(within(guide).getByRole('button', { name: 'Agora não' }));
     expect(screen.queryByRole('button', { name: 'Instalar o app' })).not.toBeInTheDocument();

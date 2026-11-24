@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Copy, Ellipsis, EllipsisVertical, Share, SquarePlus } from 'lucide-react';
-import type { InstallApp, InstallGuide as GuideKind, InstallPlatform } from '../../lib/install';
+import { APP_HEAD, type InstallApp, type InstallGuide as GuideKind, type InstallPlatform } from '../../lib/install';
 import { toast } from '../../store/ui';
 import { Button } from '../ui/Button';
 import { Sheet } from '../ui/Sheet';
@@ -22,10 +22,26 @@ const MenuButton = () => (
   </>
 );
 
+/**
+ * A real screenshot of the step (iPhone 17 · iOS 26 · Safari, Pixel 7 · Android 16 · Chrome), cropped,
+ * with a copper ring on what to tap. Made by scripts/install-guide-images.mjs from assets/install-guide/.
+ */
+interface Photo {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+}
+
 interface Step {
   text: ReactNode;
   hint?: ReactNode;
+  photo?: Photo;
 }
+
+const PHOTO_WIDTH = 640;
+const photo = (name: string, height: number, alt: string): Photo => ({ src: `/images/install/${name}.webp`, alt, width: PHOTO_WIDTH, height });
+const APP_SUFFIX: Record<InstallApp, string> = { store: 'store', admin: 'admin', reseller: 'reseller' };
 
 interface GuideContent {
   lead?: ReactNode;
@@ -34,24 +50,43 @@ interface GuideContent {
   copy?: { browser: string };
 }
 
-function content(guide: GuideKind, platform: InstallPlatform): GuideContent {
+function content(guide: GuideKind, platform: InstallPlatform, app: InstallApp): GuideContent {
   switch (guide) {
-    case 'ios-safari':
+    case 'ios-safari': {
+      const name = APP_HEAD[app].appleTitle;
       return {
         steps: [
           {
             text: (
               <>
-                Toque em <MoreButton />, no canto de baixo, e depois em <Share {...icon} /> <strong>Compartilhar</strong>.
+                Toque em <MoreButton />, no canto de baixo da tela.
               </>
             ),
             // iOS 26 moved Share into the "•••" menu; older versions keep it on the Safari bar.
             // Safari 26 freezes the system version in its user agent, so the guide covers both.
             hint: (
               <>
-                Em iPhones mais antigos, o <Share {...icon} /> fica direto na barra do Safari.
+                Em iPhones mais antigos, o <Share {...icon} /> <strong>Compartilhar</strong> fica direto na barra do Safari: toque nele e pule para o passo 3.
               </>
             ),
+            photo: photo('ios-1', 266, 'Barra do Safari com o botão de três pontinhos marcado.'),
+          },
+          {
+            text: (
+              <>
+                Toque em <Share {...icon} /> <strong>Compartilhar</strong>.
+              </>
+            ),
+            photo: photo('ios-2', 476, 'Menu do Safari com Compartilhar marcado.'),
+          },
+          {
+            text: (
+              <>
+                Toque em <strong>Ver mais</strong>.
+              </>
+            ),
+            hint: 'Se “Adicionar à Tela de Início” já aparecer, pule este passo.',
+            photo: photo('ios-3', 456, 'Tela de compartilhar com o botão Ver mais marcado.'),
           },
           {
             text: (
@@ -59,11 +94,27 @@ function content(guide: GuideKind, platform: InstallPlatform): GuideContent {
                 Toque em <SquarePlus {...icon} /> <strong>Adicionar à Tela de Início</strong>.
               </>
             ),
-            hint: 'Não está à vista? Toque em “Ver mais” ou role a lista para baixo.',
+            photo: photo('ios-4', 361, 'Lista de ações com Adicionar à Tela de Início marcado.'),
           },
-          { text: <>Toque em <strong>Adicionar</strong>, no canto de cima.</> },
+          {
+            text: (
+              <>
+                Toque em <strong>Adicionar</strong>, no canto de cima.
+              </>
+            ),
+            photo: photo(`ios-5-${APP_SUFFIX[app]}`, 318, `Tela Adicionar à Tela de Início com o nome ${name} e o botão Adicionar marcado.`),
+          },
+          {
+            text: (
+              <>
+                Pronto: o ícone <strong>{name}</strong> fica na sua tela de início.
+              </>
+            ),
+            photo: photo(`ios-6-${APP_SUFFIX[app]}`, 175, `Tela de início do iPhone com o ícone ${name} marcado.`),
+          },
         ],
       };
+    }
     case 'ios-chrome':
       return {
         steps: [
@@ -143,7 +194,8 @@ function content(guide: GuideKind, platform: InstallPlatform): GuideContent {
           { text: <>Confirme em <strong>Adicionar</strong>.</> },
         ],
       };
-    case 'android-manual':
+    case 'android-manual': {
+      const name = APP_HEAD[app].appleTitle === 'ÉKA' ? 'ÉKA Semijoias' : APP_HEAD[app].appleTitle;
       return {
         steps: [
           {
@@ -152,17 +204,33 @@ function content(guide: GuideKind, platform: InstallPlatform): GuideContent {
                 Toque em <MenuButton />, no canto de cima do navegador.
               </>
             ),
+            photo: photo('android-1', 140, 'Barra do Chrome com o botão de menu (três pontinhos) marcado.'),
           },
           {
             text: (
               <>
-                Toque em <strong>Instalar app</strong> ou <strong>Adicionar à tela inicial</strong>.
+                Toque em <strong>Adicionar à tela inicial</strong>.
               </>
             ),
+            hint: (
+              <>
+                Em alguns celulares aparece <strong>Instalar app</strong>: pode tocar nele.
+              </>
+            ),
+            photo: photo('android-2', 592, 'Menu do Chrome com Adicionar à tela inicial marcado.'),
           },
-          { text: <>Confirme em <strong>Instalar</strong>.</> },
+          {
+            text: (
+              <>
+                Confirme em <strong>Instalar</strong>.
+              </>
+            ),
+            hint: 'Se o celular perguntar, escolha Instalar (e não Criar atalho).',
+            photo: photo(`android-3-${APP_SUFFIX[app]}`, 347, `Janela Instalar aplicativo com ${name} e o botão Instalar marcado.`),
+          },
         ],
       };
+    }
   }
 }
 
@@ -193,7 +261,7 @@ interface InstallGuideProps {
 }
 
 export function InstallGuide({ open, app, guide, platform, link, onClose, onDismiss, intro = INTRO[app] }: InstallGuideProps) {
-  const { lead, steps, copy } = content(guide, platform);
+  const { lead, steps, copy } = content(guide, platform, app);
 
   const copyLink = async () => {
     if (await copyText(link)) toast(`Link copiado. Agora é só colar no ${copy?.browser ?? 'navegador'}.`, { tone: 'success' });
@@ -231,9 +299,20 @@ export function InstallGuide({ open, app, guide, platform, link, onClose, onDism
               <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-full bg-champagne font-medium text-copper">
                 {i + 1}
               </span>
-              <span className="flex flex-col gap-0.5 pt-0.5">
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5 pt-0.5">
                 <span>{step.text}</span>
                 {step.hint && <span className="text-sm text-ink-muted">{step.hint}</span>}
+                {step.photo && (
+                  <img
+                    src={step.photo.src}
+                    alt={step.photo.alt}
+                    width={step.photo.width}
+                    height={step.photo.height}
+                    loading="lazy"
+                    decoding="async"
+                    className="mt-2 h-auto w-full max-w-[320px] rounded-[12px] border border-line bg-champagne/40"
+                  />
+                )}
               </span>
             </li>
           ))}
