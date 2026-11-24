@@ -3,6 +3,7 @@ import { useBusiness } from '../../hooks/useBusiness';
 import { useSection } from '../../hooks/useSection';
 import { siteImageSources } from '../../lib/assets';
 import { InstagramIcon } from '../ui/Icons';
+import { SectionHeading } from '../ui/Misc';
 
 export function InstagramStrip() {
   const biz = useBusiness();
@@ -10,15 +11,20 @@ export function InstagramStrip() {
   if (!biz.instagramUrl || !shots.length) return null;
   return (
     <section aria-labelledby="home-instagram" className="container-x pt-12 lg:pt-20">
-      <div className="mb-4 flex items-end justify-between gap-4">
-        <h2 id="home-instagram" className="flex items-center gap-2 font-display text-display-m">
-          <InstagramIcon size={26} className="text-copper" />@{biz.instagram}
-        </h2>
-        <a href={biz.instagramUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-[0.9375rem] text-copper hover:text-copper-dark">
-          <span className="link-underline">Ver no Instagram</span>
-          <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
-        </a>
-      </div>
+      <SectionHeading
+        id="home-instagram"
+        title={
+          <span className="inline-flex items-center gap-2">
+            <InstagramIcon size={26} className="size-[22px] shrink-0 text-copper md:size-[26px]" />@{biz.instagram}
+          </span>
+        }
+        action={
+          <a href={biz.instagramUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-[0.9375rem] text-copper hover:text-copper-dark">
+            <span className="link-underline">Ver no Instagram</span>
+            <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
+          </a>
+        }
+      />
       <ul className="grid grid-cols-3 gap-2 lg:grid-cols-6 lg:gap-4">
         {shots.map((shot) => {
           const src = siteImageSources(shot, 'tile');

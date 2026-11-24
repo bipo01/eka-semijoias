@@ -102,7 +102,9 @@ export function Switch({ checked, onChange, label, className }: { checked: boole
 
 export function SectionHeading({ title, action, id, as: Tag = 'h2', className }: { title: React.ReactNode; action?: React.ReactNode; id?: string; as?: 'h1' | 'h2'; className?: string }) {
   return (
-    <div className={cx('mb-4 flex items-end justify-between gap-4 md:mb-6', className)}>
+    // Baseline: a "Ver todas" link sits on the same line as the big serif title (items-end aligned the
+    // boxes, and the link's 44 px tap area floated it above the title's text). Wraps under on narrow screens.
+    <div className={cx('mb-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 md:mb-6', className)}>
       <Tag id={id} className="font-display text-display-m md:text-display-l">
         {title}
       </Tag>

@@ -25,7 +25,7 @@ export function NewArrivals() {
           id="home-novidades"
           title={titles.newArrivals}
           action={
-            <div className="hidden gap-1 lg:flex">
+            <div className="hidden gap-1 self-center lg:flex">
               <IconButton label="Ver anteriores" onClick={() => scroll(-1)} className="border border-line">
                 <ChevronLeft size={20} strokeWidth={1.5} />
               </IconButton>
