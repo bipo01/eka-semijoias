@@ -52,8 +52,15 @@ function clippedRings(): string[] {
       // Scrolled out of view, or as big as the box itself (a focus frame around a whole screen): not a cut ring.
       if (r.left < left - 0.5 || r.right > right + 0.5 || r.top < top - 0.5 || r.bottom > bottom + 0.5) continue;
       if (r.width >= box.clientWidth - 1 && r.height >= box.clientHeight - 1) continue;
+      // An edge only counts while the box rests at that end of its scroll (the defect: the first photo of a
+      // strip at rest). Mid-scroll, a piece next to the visible edge is cut by the scroll position, as expected.
+      const atStartX = box.scrollLeft <= 0.5;
+      const atEndX = box.scrollLeft >= box.scrollWidth - box.clientWidth - 0.5;
+      const atStartY = box.scrollTop <= 0.5;
+      const atEndY = box.scrollTop >= box.scrollHeight - box.clientHeight - 0.5;
       const cut =
-        (clipX && (r.left - ring < left - 0.5 || r.right + ring > right + 0.5)) || (clipY && (r.top - ring < top - 0.5 || r.bottom + ring > bottom + 0.5));
+        (clipX && ((atStartX && r.left - ring < left - 0.5) || (atEndX && r.right + ring > right + 0.5))) ||
+        (clipY && ((atStartY && r.top - ring < top - 0.5) || (atEndY && r.bottom + ring > bottom + 0.5)));
       if (cut) found.push(`${(el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 50)} — inside ${box.tagName.toLowerCase()}.${String(box.className).split(' ').slice(0, 4).join('.')}`);
     }
   }

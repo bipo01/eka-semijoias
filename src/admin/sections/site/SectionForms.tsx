@@ -1,14 +1,9 @@
-import { useState, type ChangeEvent, type ComponentType } from 'react';
-import { ImagePlus, Images, Loader2 } from 'lucide-react';
-import { Button, buttonClass } from '../../../components/ui/Button';
-import { Sheet } from '../../../components/ui/Sheet';
-import { cx } from '../../../components/ui/cx';
-import { toast } from '../../../store/ui';
+import { useState, type ComponentType } from 'react';
 import { newItemId, type ContentImage, type QaItem, type TextItem, type TitledItem } from '../../../data/content';
 import { Group, HeaderFields, TextInput, Toggle, useEditor } from './fields';
-import { ImageField, ImageInput, photoFromFile } from './ImageField';
+import { HeroSlides } from './HeroSlidesForm';
+import { AddPhoto, ImageField, ImageInput } from './ImageField';
 import { ListField } from './ListEditor';
-import { ProductPhotoChooser } from './ProductPhotoChooser';
 import { pathKey, type Path } from './sectionDraft';
 import type { SiteSectionId } from './siteSections';
 import { TestimonialsForm } from './TestimonialsForm';
@@ -128,50 +123,6 @@ function InstagramPhotos() {
   );
 }
 
-/** Adding a gallery photo: send a new one or pick a product photo. */
-function AddPhoto({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (img: ContentImage) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [choosing, setChoosing] = useState(false);
-
-  async function upload(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setBusy(true);
-    const result = await photoFromFile(file, 'product');
-    setBusy(false);
-    if (!result.ok) return void toast(result.message, { tone: 'error' });
-    onPick({ src: result.src, thumb: result.thumb, alt: '' });
-    onClose();
-  }
-
-  return (
-    <>
-      <Sheet open={open && !choosing} onClose={() => !busy && onClose()} title="Adicionar foto" side="center">
-        <div className="flex flex-col gap-2">
-          <label className={cx(buttonClass('primary', 'md', true), 'cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-copper', busy && 'pointer-events-none opacity-50')}>
-            <input type="file" accept="image/*" className="sr-only" onChange={upload} disabled={busy} />
-            {busy ? <Loader2 size={18} strokeWidth={1.5} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <ImagePlus size={18} strokeWidth={1.5} aria-hidden="true" />}
-            {busy ? 'Preparando foto…' : 'Enviar foto'}
-          </label>
-          <Button variant="secondary" block onClick={() => setChoosing(true)} disabled={busy}>
-            <Images size={18} strokeWidth={1.5} aria-hidden="true" /> Escolher das fotos das peças
-          </Button>
-        </div>
-      </Sheet>
-      <ProductPhotoChooser
-        open={open && choosing}
-        onClose={() => setChoosing(false)}
-        onPick={(img) => {
-          setChoosing(false);
-          onClose();
-          onPick({ src: img.src, ...(img.thumb ? { thumb: img.thumb } : {}), alt: img.alt });
-        }}
-      />
-    </>
-  );
-}
-
 function InicioForm() {
   return (
     <>
@@ -183,8 +134,8 @@ function InicioForm() {
           <TextInput path={['hero', 'primaryCta']} label="Botão principal" hint="Leva ao catálogo." />
           <TextInput path={['hero', 'secondaryCta']} label="Segundo botão" hint="Leva à página de revendedoras. Vazio, o botão some." />
         </div>
-        <ImageInput path={['hero', 'image']} label="Foto da chamada" hint="Prefira uma foto em pé (retrato): no celular ela aparece vertical, e as bordas podem ser cortadas." wide ratio="4 / 5" />
       </Group>
+      <HeroSlides />
       <Group title="Títulos das seções">
         <div className="grid gap-3 sm:grid-cols-2">
           <TextInput path={['titles', 'categories']} label="Categorias" />

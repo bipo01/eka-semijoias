@@ -98,8 +98,12 @@ describe('section schemas', () => {
 
   it('refuse images that are not built-in, uploaded or data URLs', () => {
     const inicio = defaultSections(none).inicio;
-    expect(parseSection('inicio', { ...inicio, hero: { ...inicio.hero, image: { src: 'https://evil.example/x.png', alt: '' } } }).ok).toBe(false);
-    expect(parseSection('inicio', { ...inicio, hero: { ...inicio.hero, image: { src: MEDIA, alt: 'Foto' } } }).ok).toBe(true);
+    const slide = (src: string) => ({ ...inicio, hero: { ...inicio.hero, slides: [{ id: 's1', alt: '', image: { src, alt: '' }, frames: {} }] } });
+    expect(parseSection('inicio', slide('https://evil.example/x.png')).ok).toBe(false);
+    expect(parseSection('inicio', slide(MEDIA)).ok).toBe(true);
+    const framed = (src: string) => ({ ...inicio, hero: { ...inicio.hero, slides: [{ id: 's1', alt: '', image: { src: MEDIA, alt: '' }, frames: { tablet: { image: { src, alt: '' } } } }] } });
+    expect(parseSection('inicio', framed('https://evil.example/x.png'))).toMatchObject({ ok: false, path: 'hero.slides.0.frames.tablet.image.src' });
+    expect(parseSection('inicio', framed(MEDIA)).ok).toBe(true);
   });
 
   it('a stored section this build cannot read falls back to the built-in text instead of breaking the catalog', () => {
@@ -150,15 +154,23 @@ describe('content change sets', () => {
 
   it('images of the content are listed and swapped', () => {
     const inicio = defaultSections(none).inicio;
-    const edited = { ...inicio, hero: { ...inicio.hero, image: { src: MEDIA, alt: 'x' } } };
+    const FRAME = `media/${'f'.repeat(64)}.webp`;
+    const edited = {
+      ...inicio,
+      hero: { ...inicio.hero, slides: [{ id: 's1', alt: 'x', image: { src: MEDIA, alt: 'x' }, frames: { celular: { image: { src: FRAME, alt: '' }, x: 30, y: 70, zoom: 1.4 }, amplo: { x: 10, y: 50, zoom: 1 } } }] },
+    };
     const content = { inicio: edited, compartilhar: { ...defaultSections(none).compartilhar, image: { src: 'images/lifestyle/l01-colo', alt: '' } } };
     const sources = contentImageSources(content);
     expect(sources).toContain(MEDIA);
+    expect(sources).toContain(FRAME);
     expect(sources).toContain('images/lifestyle/l01-colo');
     expect(sources).toContain('images/lifestyle/l02-mostruario-revendedora');
     expect(imageSourcesOf({ products: [], collections: [], content })).toEqual(sources);
     const swapped = mapSectionImages('inicio', edited, (img) => ({ ...img, src: img.src === MEDIA ? 'images/x' : img.src }));
-    expect(swapped.hero.image.src).toBe('images/x');
+    expect(swapped.hero.slides[0]!.image.src).toBe('images/x');
+    const swappedFrames = mapSectionImages('inicio', edited, (img) => ({ ...img, src: img.src === FRAME ? 'images/y' : img.src })).hero.slides[0]!.frames;
+    expect(swappedFrames.celular).toEqual({ image: { src: 'images/y', alt: '' }, x: 30, y: 70, zoom: 1.4 });
+    expect(swappedFrames.amplo).toEqual({ x: 10, y: 50, zoom: 1 });
     expect(swapped.instagram.map((i) => i.id)).toEqual(inicio.instagram.map((i) => i.id));
   });
 });

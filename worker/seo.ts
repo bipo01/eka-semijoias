@@ -1,5 +1,6 @@
 import { defaultSections } from '../src/content/defaults';
 import { parseSection } from '../src/data/content';
+import { firstHeroSlide, framePlacement, HERO_STEM_PREFIX, HERO_WIDTHS, type HeroFrameId } from '../src/data/heroFrames';
 import { MEDIA_KEY_PATTERN } from '../src/data/imageSrc';
 import type { Catalog } from '../src/data/schema';
 import { formatBRL } from '../src/lib/format';
@@ -23,7 +24,7 @@ export interface PageMeta {
   type: 'website' | 'product';
   /** Private areas: never indexed. */
   noindex: boolean;
-  /** Whether the built-in home hero picture is the one the page shows first (keeps its preload). */
+  /** Whether the built-in first hero slide is the one the page shows first (keeps its preloads). */
   preloadHero: boolean;
 }
 
@@ -39,11 +40,19 @@ const PAGE_TITLES: Record<string, string> = {
   '/sacola': 'Sua sacola',
 };
 const PRIVATE = /^\/(admin|revenda|pagamento|r)(\/|$)/;
-export const DEFAULT_HERO = 'images/lifestyle/l01-hero-pescoco';
+const NO_FACTS = { warrantyMonths: null, whatsapp: null, shipsNationwide: null, hypoallergenic: null, installments: null, plating: null, consignment: null, noUpfrontInvestment: null };
+
+/** Frames of the first hero slide preloaded by index.html (phones and the common laptop/desktop sizes). */
+export const PRELOADED_FRAMES: readonly HeroFrameId[] = ['celular', 'computador'];
+/** The built-in first slide's photo per preloaded frame (what index.html preloads). */
+export const DEFAULT_HERO: Readonly<Record<string, string>> = Object.fromEntries(
+  PRELOADED_FRAMES.map((id) => [id, framePlacement(defaultSections(NO_FACTS).inicio.hero.slides[0]!, id).image.src]),
+);
 
 /** Absolute URL of a catalog/content image for previews (largest built-in size, or the uploaded file). */
 export function absoluteImage(src: string, origin: string): string | null {
   if (MEDIA_KEY_PATTERN.test(src)) return `${origin}/${src}`;
+  if (src.startsWith(HERO_STEM_PREFIX) && /^images\/[a-z0-9/_-]+$/.test(src)) return `${origin}/${src}-${HERO_WIDTHS[1]}.webp`;
   if (/^images\/[a-z0-9/_-]+$/.test(src)) return `${origin}/${src}-960.webp`;
   return null;
 }
@@ -57,7 +66,6 @@ export function clip(text: string, max: number): string {
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,.;:–-]+$/, '')}…`;
 }
 
-const NO_FACTS = { warrantyMonths: null, whatsapp: null, shipsNationwide: null, hypoallergenic: null, installments: null, plating: null, consignment: null, noUpfrontInvestment: null };
 /** Built-in share texts (they do not depend on business facts). */
 const BUILT_IN_SHARE = defaultSections(NO_FACTS).compartilhar;
 
@@ -71,6 +79,19 @@ const decode = (part: string): string | null => {
 
 /** Private areas never read the catalog for their tags. */
 export const isPrivatePath = (pathname: string) => PRIVATE.test(pathname.replace(/\/+$/, '') || '/');
+
+/**
+ * Whether the home page opens on the built-in first hero photos (so index.html's preloads are the
+ * photos it shows): no saved "Página inicial", or a first slide that still shows those photos on
+ * the preloaded frames (her framing may differ: same files). Reads the stored shape as is (the
+ * snapshot is not parsed here), old single-photo heroes included.
+ */
+export function showsBuiltInHero(catalog: Catalog | null): boolean {
+  const inicio = catalog?.content?.inicio as { hero?: unknown } | undefined;
+  if (!inicio) return true;
+  const slide = firstHeroSlide(inicio.hero);
+  return !!slide && PRELOADED_FRAMES.every((id) => framePlacement(slide, id).image.src === DEFAULT_HERO[id]);
+}
 
 /** The page's tags; never throws (an unexpected stored shape falls back to the built-in tags). */
 export function pageMeta(url: URL, catalog: Catalog | null): PageMeta {
@@ -89,8 +110,7 @@ function buildMeta(url: URL, catalog: Catalog | null): PageMeta {
   const siteTitle = share.title;
   const description = share.description;
   const image = (share.image && absoluteImage(share.image.src, origin)) || `${origin}/og-image.jpg`;
-  const heroSrc = catalog?.content?.inicio?.hero?.image?.src ?? DEFAULT_HERO;
-  const base: PageMeta = { title: siteTitle, description, image, url: `${origin}${path === '/' ? '/' : path}`, type: 'website', noindex: PRIVATE.test(path), preloadHero: path === '/' && heroSrc === DEFAULT_HERO };
+  const base: PageMeta = { title: siteTitle, description, image, url: `${origin}${path === '/' ? '/' : path}`, type: 'website', noindex: PRIVATE.test(path), preloadHero: path === '/' && showsBuiltInHero(catalog) };
   if (!catalog || base.noindex) return base;
 
   const product = /^\/produto\/([^/]+)$/.exec(path);
