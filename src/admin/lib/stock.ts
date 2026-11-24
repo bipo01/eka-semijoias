@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { effectivePrice } from '../../data/catalog';
+import type { Product } from '../../data/schema';
+import { comboKey, combosOf, type MovementReason } from '../../data/stock';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { ownWrite, useCatalog } from '../../store/catalog';
 import { signalSessionLost } from './session';
@@ -19,14 +22,165 @@ export interface StockMovement {
   size: string;
   delta: number;
   qtyAfter: number;
-  reason: 'ajuste' | 'pedido' | 'devolucao';
+  reason: MovementReason;
   orderNumber: number | null;
+  /** Motive and the owner's note for entries/exits ("Compra do fornecedor — NF 123"). */
+  note?: string | null;
+  /** The reseller kit of a 'maleta' / 'retorno_maleta' movement. */
+  kitId?: string | null;
+  /** First name of the kit's reseller. */
+  resellerName?: string | null;
+}
+
+/** Units of a combination with one reseller (open kit, minus what she sold). */
+export interface KitHolding {
+  kitId: string;
+  resellerId: string;
+  resellerName: string;
+  qty: number;
 }
 
 export interface StockData {
   levels: StockLevel[];
   tracked: string[];
   movements: StockMovement[];
+  /** Units with resellers per "productId|variantId|size". */
+  inKits: Record<string, number>;
+  kitsByCombo: Record<string, KitHolding[]>;
+}
+
+/** "productId|variantId|size", the key of `inKits` / `kitsByCombo`. */
+export const holdingKey = (productId: string, variantId: string, size: string) => `${productId}|${comboKey(variantId, size)}`;
+
+// ---------------------------------------------------------------------------
+// Entries and exits (POST /api/admin/stock/moves). The server writes the motive label into the
+// movement note; these are the same words (worker/stock.ts MOTIVE_LABEL).
+// ---------------------------------------------------------------------------
+
+export type MoveKind = 'entrada' | 'saida';
+export const MOTIVES = {
+  entrada: [
+    { id: 'compra', label: 'Compra do fornecedor' },
+    { id: 'troca', label: 'Troca' },
+    { id: 'outro', label: 'Outra entrada' },
+  ],
+  saida: [
+    { id: 'perda', label: 'Perda ou defeito' },
+    { id: 'brinde', label: 'Brinde' },
+    { id: 'uso', label: 'Uso próprio' },
+    { id: 'outro', label: 'Outra saída' },
+  ],
+} as const satisfies Record<MoveKind, readonly { id: string; label: string }[]>;
+export const MOVE_NOTE_MAX = 200;
+
+export interface MoveInput {
+  kind: MoveKind;
+  productId: string;
+  variantId: string;
+  size: string;
+  qty: number;
+  motive: string;
+  note?: string;
+}
+
+export interface MoveResult {
+  version: number;
+  kind: MoveKind;
+  qty: number;
+  qtyAfter: number;
+  note: string;
+  trackingStarted: boolean;
+}
+
+/**
+ * Registers an entry or exit. `key` (Idempotency-Key) must stay the same while retrying the same
+ * move, so a lost answer never applies it twice. Rejects with an ApiError (409 "Só há N em estoque").
+ */
+export async function registerMove(input: MoveInput, key: string): Promise<MoveResult> {
+  try {
+    return await ownWrite(
+      () => api<MoveResult>('/api/admin/stock/moves', { json: input, headers: { 'Idempotency-Key': key }, retries: 2, timeoutMs: 20_000 }),
+      (r) => r.version,
+    );
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'unauthenticated') signalSessionLost();
+    throw error;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Overview (pure): per product and for the whole stock
+// ---------------------------------------------------------------------------
+
+export interface ProductStock {
+  tracked: boolean;
+  /** Units at home (stock_levels of the product's current combinations; 0 when not tracked). */
+  home: number;
+  /** Units with resellers (open kits, any product, tracked or not). */
+  inKits: number;
+  soldOut: boolean;
+  low: boolean;
+}
+
+export function productStock(product: Product, data: Pick<StockData, 'levels' | 'tracked' | 'inKits'>, threshold: number): ProductStock {
+  const tracked = data.tracked.includes(product.id);
+  const combos = combosOf(product);
+  const inKits = combos.reduce((sum, c) => sum + (data.inKits[holdingKey(product.id, c.variantId, c.size)] ?? 0), 0);
+  if (!tracked) return { tracked, home: 0, inKits, soldOut: false, low: false };
+  const qty = new Map(data.levels.filter((l) => l.productId === product.id).map((l) => [comboKey(l.variantId, l.size), l.qty]));
+  const units = combos.map((c) => qty.get(comboKey(c.variantId, c.size)) ?? 0);
+  const home = units.reduce((s, n) => s + n, 0);
+  return { tracked, home, inKits, soldOut: home === 0, low: home > 0 && threshold > 0 && units.some((n) => n > 0 && n <= threshold) };
+}
+
+export interface StockOverview {
+  home: number;
+  inKits: number;
+  total: number;
+  /** (home + kits) × the product's selling price (promo when there is one), centavos. */
+  valueCents: number;
+  soldOut: number;
+  low: number;
+}
+
+export function stockOverview(rows: { product: Product; stock: ProductStock }[]): StockOverview {
+  const out: StockOverview = { home: 0, inKits: 0, total: 0, valueCents: 0, soldOut: 0, low: 0 };
+  for (const { product, stock } of rows) {
+    out.home += stock.home;
+    out.inKits += stock.inKits;
+    out.valueCents += (stock.home + stock.inKits) * effectivePrice(product);
+    if (stock.tracked && stock.soldOut) out.soldOut++;
+    if (stock.low) out.low++;
+  }
+  out.total = out.home + out.inKits;
+  return out;
+}
+
+export type StockFilter = 'todas' | 'com-estoque' | 'esgotadas' | 'poucas' | 'maletas' | 'sem-controle';
+export const STOCK_FILTERS: { id: StockFilter; label: string }[] = [
+  { id: 'todas', label: 'Todas' },
+  { id: 'com-estoque', label: 'Com estoque' },
+  { id: 'esgotadas', label: 'Esgotadas' },
+  { id: 'poucas', label: 'Poucas unidades' },
+  { id: 'maletas', label: 'Nas maletas' },
+  { id: 'sem-controle', label: 'Sem controle' },
+];
+
+export function matchesFilter(stock: ProductStock, filter: StockFilter): boolean {
+  switch (filter) {
+    case 'todas':
+      return true;
+    case 'com-estoque':
+      return stock.tracked && stock.home > 0;
+    case 'esgotadas':
+      return stock.tracked && stock.soldOut;
+    case 'poucas':
+      return stock.low;
+    case 'maletas':
+      return stock.inKits > 0;
+    case 'sem-controle':
+      return !stock.tracked;
+  }
 }
 
 type StockState = { status: 'loading' } | { status: 'ready'; data: StockData } | { status: 'error'; message: string };
@@ -40,7 +194,7 @@ export function useStockData(): { state: StockState; reload: () => void } {
   useEffect(() => {
     let active = true;
     api<StockData>('/api/admin/stock', { retries: 2 }).then(
-      (data) => active && setState({ status: 'ready', data }),
+      (data) => active && setState({ status: 'ready', data: { ...data, inKits: data.inKits ?? {}, kitsByCombo: data.kitsByCombo ?? {} } }),
       (error: unknown) => {
         if (!active) return;
         if (error instanceof ApiError && error.code === 'unauthenticated') signalSessionLost();

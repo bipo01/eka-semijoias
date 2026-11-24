@@ -201,3 +201,70 @@ describe('Web Push (RFC 8291 / RFC 8292)', () => {
     expect(isPushEndpoint('https://user@fcm.googleapis.com/x')).toBe(false);
   });
 });
+
+// worker/stock.ts reaches the LiveHub module, which imports the workerd-only 'cloudflare:workers'.
+vi.mock('cloudflare:workers', () => ({ DurableObject: class {} }));
+
+describe('stock entries and exits', () => {
+  it('validates the move request per kind and tidies the note', async () => {
+    const { moveRequestSchema } = await import('../stock');
+    const base = { productId: 'p1', variantId: 'v1', qty: 2 };
+    expect(moveRequestSchema.parse({ ...base, kind: 'entrada', motive: 'compra', note: '  NF   123 ' })).toEqual({ ...base, size: '', kind: 'entrada', motive: 'compra', note: 'NF 123' });
+    expect(moveRequestSchema.parse({ ...base, kind: 'saida', motive: 'perda', note: '   ' }).note).toBeUndefined();
+    expect(moveRequestSchema.safeParse({ ...base, kind: 'saida', motive: 'compra' }).success).toBe(false); // an entry motive on an exit
+    expect(moveRequestSchema.safeParse({ ...base, kind: 'entrada', motive: 'perda' }).success).toBe(false);
+    expect(moveRequestSchema.safeParse({ ...base, kind: 'ajuste', motive: 'outro' }).success).toBe(false);
+    expect(moveRequestSchema.safeParse({ ...base, qty: 0, kind: 'entrada', motive: 'compra' }).success).toBe(false);
+    expect(moveRequestSchema.safeParse({ ...base, qty: 1.5, kind: 'entrada', motive: 'compra' }).success).toBe(false);
+    expect(moveRequestSchema.safeParse({ ...base, qty: 100_001, kind: 'entrada', motive: 'compra' }).success).toBe(false);
+    expect(moveRequestSchema.safeParse({ ...base, kind: 'entrada', motive: 'compra', note: 'x'.repeat(201) }).success).toBe(false);
+  });
+
+  it('writes the motive label and the owner note into the movement note', async () => {
+    const { moveNote } = await import('../stock');
+    expect(moveNote({ kind: 'entrada', motive: 'compra', note: 'NF 123' })).toBe('Compra do fornecedor — NF 123');
+    expect(moveNote({ kind: 'saida', motive: 'uso' })).toBe('Uso próprio');
+    expect(moveNote({ kind: 'saida', motive: 'outro' })).toBe('Outra saída');
+  });
+
+  it('counts the units still with resellers: open kits minus active sales, skipping unreadable rows', async () => {
+    const { unitsInKits } = await import('../stock');
+    const item = (productId: string, qty: number, size = '') => ({ productId, variantId: 'v1', size, qty, unitCents: 10_000, name: 'Peça', finish: 'dourado' });
+    const kit = (id: string, resellerId: string, items: unknown[], status = 'aberta') => ({
+      id,
+      reseller_id: resellerId,
+      status,
+      opened_at: '2026-11-01T00:00:00.000Z',
+      due_at: '2026-12-01T00:00:00.000Z',
+      updated_at: '2026-11-02T00:00:00.000Z',
+      data: JSON.stringify({ items, stockMoves: [], tiers: [{ fromCents: 0, percent: 25 }] }),
+      reseller_data: JSON.stringify({ name: `${resellerId === 'r1' ? 'Ana Paula' : 'Bia'} Souza`, whatsapp: '67999998888' }),
+    });
+    const sale = (kitId: string, lines: unknown[], status = 'ativa') => ({
+      id: `s-${kitId}-${Math.random()}`,
+      reseller_id: 'r1',
+      kit_id: kitId,
+      created_at: '2026-11-03T00:00:00.000Z',
+      status,
+      total_cents: 10_000,
+      data: JSON.stringify({ lines, payment: 'pix' }),
+    });
+    const line = (productId: string, qty: number, size = '') => ({ productId, variantId: 'v1', size, qty, unitCents: 10_000, name: 'Peça', finish: 'dourado' });
+    const kits = [
+      kit('k1', 'r1', [item('p1', 3), item('p2', 2, '16')]),
+      kit('k2', 'r2', [item('p1', 1)]),
+      kit('k3', 'r3', [item('p1', 5)], 'fechada'), // closed: back home or settled
+      { ...kit('k4', 'r4', []), data: '{not json' },
+      { ...kit('k5', 'r5', []), data: JSON.stringify({ items: 'nope' }) },
+    ];
+    const sales = [sale('k1', [line('p1', 2)]), sale('k1', [line('p2', 2, '16')]), sale('k1', [line('p1', 1)], 'cancelada'), { ...sale('k2', []), data: '[]' }];
+    const { inKits, kitsByCombo } = unitsInKits(kits, sales);
+    expect(inKits).toEqual({ 'p1|v1|': 2 });
+    expect(kitsByCombo['p1|v1|']).toEqual([
+      { kitId: 'k1', resellerId: 'r1', resellerName: 'Ana', qty: 1 },
+      { kitId: 'k2', resellerId: 'r2', resellerName: 'Bia', qty: 1 },
+    ]);
+    expect(JSON.stringify(kitsByCombo)).not.toContain('67999998888'); // first name only, no contact data
+    expect(unitsInKits([], [])).toEqual({ inKits: {}, kitsByCombo: {} });
+  });
+});

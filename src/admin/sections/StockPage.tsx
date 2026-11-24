@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { ChevronRight, Minus, Plus, Search } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -10,37 +10,19 @@ import { byOrder, sizeLabel } from '../../data/catalog';
 import { FINISH_LABEL, type Product } from '../../data/schema';
 import { combosOf, comboKey, DEFAULT_LOW_STOCK, MAX_STOCK_QTY } from '../../data/stock';
 import { productImageSources } from '../../lib/assets';
+import { formatBRL } from '../../lib/format';
+import { normalize } from '../../lib/search';
 import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
 import { EmptyState, SwitchRow } from '../FormBits';
-import { formatDateTime } from '../lib/contact';
-import { saveStock, useStockData, type StockData, type StockMovement } from '../lib/stock';
+import { holdingKey, matchesFilter, productStock, saveStock, STOCK_FILTERS, stockOverview, useStockData, type MoveKind, type ProductStock, type StockData, type StockFilter } from '../lib/stock';
+import { MovementList, StockHistory } from './StockHistory';
+import { StockMoveSheet, type MoveRequestState } from './StockMoveSheet';
 
-type Filter = 'todas' | 'controladas' | 'esgotadas' | 'ultimas';
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: 'todas', label: 'Todas' },
-  { id: 'controladas', label: 'Com controle' },
-  { id: 'ultimas', label: 'Últimas unidades' },
-  { id: 'esgotadas', label: 'Esgotadas' },
-];
-
-interface Summary {
-  tracked: boolean;
-  total: number;
-  soldOut: boolean;
-  low: boolean;
-}
-
-function summarize(product: Product, data: StockData, threshold: number): Summary {
-  const tracked = data.tracked.includes(product.id);
-  if (!tracked) return { tracked, total: 0, soldOut: false, low: false };
-  const qty = new Map(data.levels.filter((l) => l.productId === product.id).map((l) => [comboKey(l.variantId, l.size), l.qty]));
-  const units = combosOf(product).map((c) => qty.get(comboKey(c.variantId, c.size)) ?? 0);
-  const total = units.reduce((s, n) => s + n, 0);
-  return { tracked, total, soldOut: total === 0, low: total > 0 && threshold > 0 && units.some((n) => n > 0 && n <= threshold) };
-}
-
-const REASON_LABEL: Record<StockMovement['reason'], string> = { ajuste: 'Ajuste', pedido: 'Pedido', devolucao: 'Devolução' };
+/*
+ * Estoque: overview (at home, with resellers, value), entries and exits,
+ * per-piece stock with an absolute "Ajustar contagem" editor, and the history.
+ */
 
 function StockEditor({ product, data, onClose }: { product: Product; data: StockData; onClose: () => void }) {
   // The numbers this edit started from: sent as `expected`, so a change made meanwhile (an order
@@ -65,12 +47,6 @@ function StockEditor({ product, data, onClose }: { product: Product; data: Stock
     setValues(valuesFrom(next.start));
     setError(null);
   };
-  const movements = data.movements.filter((m) => m.productId === product.id).slice(0, 30);
-  const variantName = (id: string) => {
-    const v = product.variants.find((x) => x.id === id);
-    return v ? FINISH_LABEL[v.finish] : 'Acabamento removido';
-  };
-
   const qtyOf = (key: string) => {
     const n = Number(values[key]);
     return Number.isInteger(n) && n >= 0 ? n : NaN;
@@ -172,32 +148,6 @@ function StockEditor({ product, data, onClose }: { product: Product; data: Stock
         {busy ? 'Salvando…' : 'Salvar estoque'}
       </Button>
 
-      {movements.length > 0 && (
-        <section aria-labelledby={`mov-${product.id}`}>
-          <h3 id={`mov-${product.id}`} className="mb-2 text-sm font-medium">Entradas e saídas</h3>
-          <ul className="divide-y divide-line border-y border-line text-sm">
-            {movements.map((m) => (
-              <li key={m.id} className="flex items-start justify-between gap-3 py-2">
-                <div className="min-w-0">
-                  <p>
-                    {REASON_LABEL[m.reason]}
-                    {m.orderNumber ? ` · pedido nº ${m.orderNumber}` : ''}
-                  </p>
-                  <p className="text-ink-muted">
-                    {variantName(m.variantId)}
-                    {m.size && ` · ${sizeLabel(m.size)}`} · {formatDateTime(m.at)}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className={cx('price font-medium', m.delta < 0 ? 'text-danger' : 'text-success')}>{m.delta > 0 ? `+${m.delta}` : m.delta}</p>
-                  <p className="price text-ink-muted">fica {m.qtyAfter}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       <ConfirmDialog
         open={confirmOff}
         title="Desligar o controle de estoque?"
@@ -216,48 +166,162 @@ function StockEditor({ product, data, onClose }: { product: Product; data: Stock
   );
 }
 
+function Kpi({ label, value, hint, tone, className }: { label: string; value: string; hint?: string | undefined; tone?: 'danger' | 'copper' | undefined; className?: string }) {
+  return (
+    <div className={cx('min-w-0 rounded-[12px] border border-line bg-white px-3 py-2.5 md:p-4', className)}>
+      <p className="truncate text-sm text-ink-muted">{label}</p>
+      <p className={cx('price mt-0.5 text-[1.375rem] leading-tight md:text-[1.5rem]', tone === 'danger' ? 'text-danger' : tone === 'copper' ? 'text-copper' : 'text-ink')}>{value}</p>
+      {hint && <p className="mt-0.5 text-xs text-ink-muted">{hint}</p>}
+    </div>
+  );
+}
+
+/** "3 em casa · 2 nas maletas" (or the sold-out / no-control wording) for a product row. */
+export function stockLine(stock: ProductStock): string {
+  const kits = stock.inKits > 0 ? ` · ${stock.inKits} nas maletas` : '';
+  if (!stock.tracked) return `Sem controle de estoque${kits}`;
+  if (stock.soldOut) return `Esgotada em casa${kits}`;
+  return `${stock.home} em casa${kits}${stock.low ? ' · poucas unidades' : ''}`;
+}
+
+/** Where the units of each finish/size are: at home and with which resellers. */
+function Whereabouts({ product, data }: { product: Product; data: StockData }) {
+  const tracked = data.tracked.includes(product.id);
+  const qty = new Map(data.levels.filter((l) => l.productId === product.id).map((l) => [comboKey(l.variantId, l.size), l.qty]));
+  const lines = combosOf(product)
+    .map((c) => {
+      const variant = product.variants.find((v) => v.id === c.variantId);
+      const holders = data.kitsByCombo[holdingKey(product.id, c.variantId, c.size)] ?? [];
+      return { key: comboKey(c.variantId, c.size), label: [variant ? FINISH_LABEL[variant.finish] : '', c.size && sizeLabel(c.size)].filter(Boolean).join(' · '), home: tracked ? (qty.get(comboKey(c.variantId, c.size)) ?? 0) : null, holders };
+    })
+    .filter((l) => l.home !== null || l.holders.length > 0);
+  if (!lines.length) return null;
+  return (
+    <section aria-labelledby={`where-${product.id}`}>
+      <h3 id={`where-${product.id}`} className="mb-2 text-[1.25rem] leading-tight">
+        Onde estão as peças
+      </h3>
+      <ul className="divide-y divide-line rounded-[12px] border border-line bg-white text-sm">
+        {lines.map((l) => (
+          <li key={l.key} className="flex items-start justify-between gap-3 px-4 py-2.5">
+            <span className="min-w-0">
+              {l.label || 'Unidades'}
+              {l.holders.length > 0 && (
+                <span className="block text-ink-muted">
+                  Nas maletas: {l.holders.map((h) => `${h.resellerName || 'revendedora'} (${h.qty})`).join(', ')}
+                </span>
+              )}
+            </span>
+            <span className="price shrink-0 text-right">{l.home === null ? '—' : `${l.home} em casa`}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ProductStockPanel({ product, data, onMove, onClose }: { product: Product; data: StockData; onMove: (kind: MoveKind) => void; onClose: () => void }) {
+  const movements = data.movements.filter((m) => m.productId === product.id).slice(0, 30);
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="secondary" onClick={() => onMove('entrada')}>
+          <Plus size={18} strokeWidth={1.5} aria-hidden="true" /> Entrada
+        </Button>
+        <Button variant="secondary" onClick={() => onMove('saida')}>
+          <Minus size={18} strokeWidth={1.5} aria-hidden="true" /> Saída
+        </Button>
+      </div>
+      <Whereabouts product={product} data={data} />
+      <section aria-labelledby={`adjust-${product.id}`} className="flex flex-col gap-3">
+        <div>
+          <h3 id={`adjust-${product.id}`} className="text-[1.25rem] leading-tight">
+            Ajustar contagem
+          </h3>
+          <p className="text-sm text-ink-muted">Para corrigir depois de contar as peças: os números abaixo substituem os atuais.</p>
+        </div>
+        <StockEditor key={product.id} product={product} data={data} onClose={onClose} />
+      </section>
+      {movements.length > 0 && (
+        <section aria-labelledby={`mov-${product.id}`}>
+          <h3 id={`mov-${product.id}`} className="mb-2 text-[1.25rem] leading-tight">
+            Entradas e saídas
+          </h3>
+          <MovementList movements={movements} products={[product]} showProduct={false} />
+        </section>
+      )}
+    </div>
+  );
+}
+
+let moveSession = 0;
+
 export function StockPage() {
   const { state, reload } = useStockData();
   const products = useCatalog((s) => s.data.products);
   const threshold = useCatalog((s) => s.data.settings.lowStockThreshold ?? DEFAULT_LOW_STOCK);
-  const [filter, setFilter] = useState<Filter>('todas');
+  const [filter, setFilter] = useState<StockFilter>('todas');
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [move, setMove] = useState<MoveRequestState | null>(null);
+  const data = state.status === 'ready' ? state.data : null;
+  const rows = useMemo(() => (data ? [...products].sort(byOrder).map((p) => ({ product: p, stock: productStock(p, data, threshold) })) : []), [products, data, threshold]);
 
-  if (state.status === 'loading') return <p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando estoque…</p>;
-  if (state.status === 'error') {
+  if (state.status === 'loading' || !data) {
+    if (state.status === 'error') {
+      return (
+        <div role="alert" className="flex flex-col items-center gap-3 py-10 text-center">
+          <p className="text-ink-muted">{state.message}</p>
+          <Button variant="secondary" onClick={reload}>
+            Tentar de novo
+          </Button>
+        </div>
+      );
+    }
     return (
-      <div role="alert" className="flex flex-col items-center gap-3 py-10 text-center">
-        <p className="text-ink-muted">{state.message}</p>
-        <Button variant="secondary" onClick={reload}>
-          Tentar de novo
-        </Button>
-      </div>
+      <p className="py-10 text-center text-ink-muted" aria-busy="true">
+        Carregando estoque…
+      </p>
     );
   }
-  const data = state.data;
-  const rows = [...products].sort(byOrder).map((p) => ({ product: p, summary: summarize(p, data, threshold) }));
-  const counts: Record<Filter, number> = {
-    todas: rows.length,
-    controladas: rows.filter((r) => r.summary.tracked).length,
-    ultimas: rows.filter((r) => r.summary.low).length,
-    esgotadas: rows.filter((r) => r.summary.tracked && r.summary.soldOut).length,
-  };
-  const q = query.trim().toLowerCase();
-  const visible = rows.filter(
-    ({ product, summary }) =>
-      (filter === 'todas' || (filter === 'controladas' && summary.tracked) || (filter === 'ultimas' && summary.low) || (filter === 'esgotadas' && summary.tracked && summary.soldOut)) &&
-      (!q || product.name.toLowerCase().includes(q) || product.variants.some((v) => v.sku?.toLowerCase().includes(q))),
-  );
+
+  const overview = stockOverview(rows);
+  const counts = Object.fromEntries(STOCK_FILTERS.map((f) => [f.id, rows.filter((r) => matchesFilter(r.stock, f.id)).length])) as Record<StockFilter, number>;
+  const q = normalize(query.trim());
+  const visible = rows.filter(({ product, stock }) => matchesFilter(stock, filter) && (!q || normalize(`${product.name} ${product.variants.map((v) => v.sku ?? '').join(' ')}`).includes(q)));
   const open = products.find((p) => p.id === openId) ?? null;
+  const startMove = (kind: MoveKind, productId: string | null = null) => {
+    setOpenId(null);
+    setMove({ kind, productId, session: ++moveSession });
+  };
 
   return (
     <>
-      <p className="mb-3 text-sm text-ink-muted">
-        Ligue o controle numa peça para o site mostrar “Esgotado” sozinho quando acabar. As peças saem do estoque quando você confirma um pedido e voltam se ele for cancelado.
+      <p className="mb-4 text-sm text-ink-muted">
+        Com o controle ligado, o site mostra “Esgotado” sozinho quando a peça acaba. Pedidos confirmados e maletas tiram do estoque; cancelamentos e acertos devolvem.
       </p>
-      <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1">
-        {FILTERS.map((f) => (
+
+      {/* Phone: units in a row of three, the value on its own line, then the alerts; wide screens: one row. */}
+      <section aria-label="Resumo do estoque" className="mb-4 grid grid-cols-6 gap-2 lg:grid-cols-7">
+        <Kpi className="col-span-2 lg:col-span-1" label="Em casa" value={String(overview.home)} hint="unidades" />
+        <Kpi className="col-span-2 lg:col-span-1" label="Nas maletas" value={String(overview.inKits)} hint="unidades" />
+        <Kpi className="col-span-2 lg:col-span-1" label="Total" value={String(overview.total)} hint="unidades" />
+        <Kpi className="col-span-6 lg:col-span-2" label="Valor em estoque" value={formatBRL(overview.valueCents)} hint="a preço de venda, com as maletas" />
+        <Kpi className="col-span-3 lg:col-span-1" label="Esgotadas" value={String(overview.soldOut)} tone={overview.soldOut ? 'danger' : undefined} hint="sem unidades em casa" />
+        <Kpi className="col-span-3 lg:col-span-1" label="Poucas unidades" value={String(overview.low)} tone={overview.low ? 'copper' : undefined} hint={`até ${threshold} por acabamento`} />
+      </section>
+
+      <div className="mb-5 grid grid-cols-2 gap-2 sm:flex">
+        <Button className="px-3 text-[0.9375rem] whitespace-nowrap sm:px-6" onClick={() => startMove('entrada')}>
+          <Plus size={18} strokeWidth={1.5} aria-hidden="true" className="hidden sm:block" /> Registrar entrada
+        </Button>
+        <Button variant="secondary" className="px-3 text-[0.9375rem] whitespace-nowrap sm:px-6" onClick={() => startMove('saida')}>
+          <Minus size={18} strokeWidth={1.5} aria-hidden="true" className="hidden sm:block" /> Registrar saída
+        </Button>
+      </div>
+
+      <div role="group" aria-label="Filtrar peças" className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1">
+        {STOCK_FILTERS.map((f) => (
           <Chip key={f.id} selected={filter === f.id} onClick={() => setFilter(f.id)}>
             {f.label}
             <span className={cx('price text-xs', filter === f.id ? 'text-white/85' : 'text-ink-muted')}>{counts[f.id]}</span>
@@ -265,7 +329,9 @@ export function StockPage() {
         ))}
       </div>
       <div className="relative mb-4">
-        <label htmlFor="stock-search" className="sr-only">Buscar peça</label>
+        <label htmlFor="stock-search" className="sr-only">
+          Buscar peça
+        </label>
         <Search size={18} strokeWidth={1.5} aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-muted" />
         <input
           id="stock-search"
@@ -279,7 +345,7 @@ export function StockPage() {
 
       {visible.length ? (
         <ul className="flex flex-col gap-2">
-          {visible.map(({ product, summary }) => {
+          {visible.map(({ product, stock }) => {
             const image = product.images[0];
             return (
               <li key={product.id}>
@@ -295,18 +361,7 @@ export function StockPage() {
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate">{product.name}</p>
-                    <p
-                      className={cx(
-                        'text-sm',
-                        !summary.tracked ? 'text-ink-muted' : summary.soldOut ? 'font-medium text-danger' : summary.low ? 'font-medium text-copper' : 'text-ink',
-                      )}
-                    >
-                      {!summary.tracked
-                        ? 'Sem controle de estoque'
-                        : summary.soldOut
-                          ? 'Esgotada'
-                          : `${summary.total} ${summary.total === 1 ? 'unidade' : 'unidades'}${summary.low ? ' · últimas unidades' : ''}`}
-                    </p>
+                    <p className={cx('text-sm', !stock.tracked ? 'text-ink-muted' : stock.soldOut ? 'font-medium text-danger' : stock.low ? 'font-medium text-copper' : 'text-ink')}>{stockLine(stock)}</p>
                   </div>
                   <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-muted" />
                 </button>
@@ -318,9 +373,12 @@ export function StockPage() {
         <EmptyState>Nenhuma peça neste filtro.</EmptyState>
       )}
 
+      <StockHistory movements={data.movements} products={products} />
+
       <Sheet open={!!open} onClose={() => setOpenId(null)} title={open?.name ?? 'Estoque'} side="right">
-        {open && <StockEditor key={open.id} product={open} data={data} onClose={() => setOpenId(null)} />}
+        {open && <ProductStockPanel product={open} data={data} onMove={(kind) => startMove(kind, open.id)} onClose={() => setOpenId(null)} />}
       </Sheet>
+      <StockMoveSheet request={move} data={data} onClose={() => setMove(null)} />
     </>
   );
 }
