@@ -1320,3 +1320,133 @@ describe('PIN change', () => {
     expect((await fresh.req('/api/admin/session')).json).toEqual({ authenticated: true, pinLength: 8 });
   });
 });
+
+describe('stock entries and exits', () => {
+  const moveReq = (client: Client, body: unknown, key: string = randomUUID()) => client.req('/api/admin/stock/moves', { body, headers: { 'Idempotency-Key': key } });
+  /** A product without stock control whose finishes have no sizes (at least `finishes` of them). */
+  async function freeProduct(finishes = 1) {
+    const c = await catalog();
+    return c.products.find((p: any) => p.variants.length >= finishes && p.variants.every((v: any) => !v.sizes?.length) && !c.stock?.[p.id]);
+  }
+
+  it('is admin-only and needs an Idempotency-Key', async () => {
+    const product = await freeProduct();
+    const body = { kind: 'entrada', motive: 'compra', productId: product.id, variantId: product.variants[0].id, size: '', qty: 1 };
+    const anonymous = await moveReq(new Client(), body);
+    expect(anonymous.status).toBe(401);
+    expect((await new Client().req('/api/admin/stock')).status).toBe(401);
+    const a = await admin();
+    expect((await a.req('/api/admin/stock/moves', { body })).status).toBe(400);
+    expect((await moveReq(a, body, 'short')).status).toBe(400);
+    expect((await moveReq(a, body, undefined)).status).toBe(201); // sanity: the admin can
+    expect((await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
+    expect((await catalog()).stock?.[product.id]).toBeUndefined();
+  });
+
+  it('turns stock control on with a first entry, updates the public snapshot and records the motive', async () => {
+    const a = await admin();
+    const product = await freeProduct(2);
+    const [v1, v2] = product.variants;
+    const k1 = `${v1.id}|`;
+    const versionBefore = (await catalog()).version;
+
+    const first = await moveReq(a, { kind: 'entrada', motive: 'compra', note: '  NF  123 ', productId: product.id, variantId: v1.id, size: '', qty: 3 });
+    expect(first.status).toBe(201);
+    expect(first.json).toMatchObject({ kind: 'entrada', qty: 3, qtyAfter: 3, trackingStarted: true, note: 'Compra do fornecedor — NF 123' });
+    expect(first.json.version).toBeGreaterThan(versionBefore);
+    let pub = await catalog();
+    expect(pub.version).toBe(first.json.version);
+    expect(pub.stock[product.id]).toEqual({ [k1]: 3 }); // the other finish counts as 0 (sold out)
+
+    const second = await moveReq(a, { kind: 'entrada', motive: 'troca', productId: product.id, variantId: v1.id, qty: 2 });
+    expect(second.json).toMatchObject({ qtyAfter: 5, trackingStarted: false, note: 'Troca' });
+    pub = await catalog();
+    expect(pub.stock[product.id][k1]).toBe(5);
+
+    const stock = (await a.req('/api/admin/stock')).json;
+    expect(stock.tracked).toContain(product.id);
+    expect(stock.levels.filter((l: any) => l.productId === product.id).map((l: any) => [l.variantId, l.qty])).toEqual([[v1.id, 5]]);
+    // Newest first; earlier tests may have moved this product before (the history is kept).
+    const moves = stock.movements.filter((m: any) => m.productId === product.id).slice(0, 2);
+    expect(moves.map((m: any) => [m.reason, m.delta, m.qtyAfter, m.note, m.orderNumber, m.kitId])).toEqual([
+      ['entrada', 2, 5, 'Troca', null, null],
+      ['entrada', 3, 3, 'Compra do fornecedor — NF 123', null, null],
+    ]);
+    // No kits yet: nothing with resellers. TODO: cover open kits once the kit API lands.
+    expect(stock.inKits).toEqual({});
+    expect(stock.kitsByCombo).toEqual({});
+
+    // Wrong finish/size, unknown product, beyond the limit.
+    expect((await moveReq(a, { kind: 'entrada', motive: 'compra', productId: product.id, variantId: 'nope', qty: 1 })).status).toBe(400);
+    expect((await moveReq(a, { kind: 'entrada', motive: 'compra', productId: product.id, variantId: v2.id, size: '16', qty: 1 })).status).toBe(400);
+    expect((await moveReq(a, { kind: 'entrada', motive: 'compra', productId: 'nope', variantId: v1.id, qty: 1 })).status).toBe(404);
+    expect((await moveReq(a, { kind: 'entrada', motive: 'perda', productId: product.id, variantId: v1.id, qty: 1 })).status).toBe(400);
+    const over = await moveReq(a, { kind: 'entrada', motive: 'compra', productId: product.id, variantId: v1.id, qty: 100_000 });
+    expect(over.status).toBe(422);
+    expect((await catalog()).stock[product.id][k1]).toBe(5);
+    expect((await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
+  });
+
+  it('replays a retried move once and refuses the key for another body', async () => {
+    const a = await admin();
+    const product = await freeProduct();
+    const v = product.variants[0];
+    const body = { kind: 'entrada', motive: 'outro', productId: product.id, variantId: v.id, qty: 4 };
+    const key = randomUUID();
+    const lastId = (await a.req('/api/admin/stock')).json.movements[0]?.id ?? 0;
+    const first = await moveReq(a, body, key);
+    expect(first.status).toBe(201);
+    const replay = await moveReq(a, body, key);
+    expect(replay.status).toBe(201);
+    expect(replay.json).toEqual(first.json);
+    expect((await catalog()).stock[product.id][`${v.id}|`]).toBe(4);
+    expect((await moveReq(a, { ...body, qty: 5 }, key)).status).toBe(400);
+    const moves = (await a.req('/api/admin/stock')).json.movements.filter((m: any) => m.id > lastId);
+    expect(moves.map((m: any) => [m.productId, m.reason, m.delta])).toEqual([[product.id, 'entrada', 4]]);
+    expect((await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
+  });
+
+  it('guards exits: never below zero, never without control, and one winner for the last unit', async () => {
+    const a = await admin();
+    const product = await freeProduct(2);
+    const [v1, v2] = product.variants;
+    const exit = (variantId: string, qty: number, key?: string) => moveReq(a, { kind: 'saida', motive: 'perda', productId: product.id, variantId, qty }, key);
+
+    const untracked = await exit(v1.id, 1);
+    expect(untracked.status).toBe(409);
+    expect(untracked.json.error.message).toMatch(/não tem controle de estoque/);
+
+    expect((await moveReq(a, { kind: 'entrada', motive: 'compra', productId: product.id, variantId: v1.id, qty: 3 })).status).toBe(201);
+    const tooMany = await exit(v1.id, 4);
+    expect(tooMany.status).toBe(409);
+    expect(tooMany.json.error.message).toBe('Só há 3 em estoque.');
+    expect(tooMany.json.error.details).toEqual({ available: 3 });
+    const none = await exit(v2.id, 1); // tracked product, finish without units
+    expect(none.status).toBe(409);
+    expect(none.json.error.message).toBe('Não há unidades desta peça em estoque.');
+
+    const gift = await moveReq(a, { kind: 'saida', motive: 'brinde', note: 'sorteio', productId: product.id, variantId: v1.id, qty: 2 });
+    expect(gift.status).toBe(201);
+    expect(gift.json).toMatchObject({ kind: 'saida', qtyAfter: 1, note: 'Brinde — sorteio', trackingStarted: false });
+    expect((await catalog()).stock[product.id][`${v1.id}|`]).toBe(1);
+
+    // Two devices take the last unit at the same time: exactly one wins.
+    const both = await Promise.all([exit(v1.id, 1), exit(v1.id, 1)]);
+    expect(both.map((r) => r.status).sort()).toEqual([201, 409]);
+    expect(both.find((r) => r.status === 409)!.json.error.message).toBe('Não há unidades desta peça em estoque.');
+    expect((await catalog()).stock[product.id][`${v1.id}|`]).toBe(0);
+
+    const stock = (await a.req('/api/admin/stock')).json;
+    expect(stock.levels.find((l: any) => l.productId === product.id && l.variantId === v1.id).qty).toBe(0);
+    const moves = stock.movements
+      .filter((m: any) => m.productId === product.id)
+      .slice(0, 3)
+      .map((m: any) => [m.reason, m.delta, m.qtyAfter, m.note]);
+    expect(moves).toEqual([
+      ['saida', -1, 0, 'Perda ou defeito'],
+      ['saida', -2, 1, 'Brinde — sorteio'],
+      ['entrada', 3, 3, 'Compra do fornecedor'],
+    ]);
+    expect((await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
+  });
+});
