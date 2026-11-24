@@ -166,8 +166,19 @@ export const sectionSchemas = {
     bagEmptyTitle: req(60),
     bagEmptyText: text(200),
     afterOrderText: req(300),
+    /** Not-found page, piece case (a piece that left the catalog or whose link changed). */
     notFoundTitle: req(60),
     notFoundText: text(200),
+    /*
+     * Added later, so optional: a section saved before them still validates, and the missing
+     * fields show the built-in text (resolveSection fills them in).
+     */
+    categoryNotFoundTitle: req(60).optional(),
+    categoryNotFoundText: text(200).optional(),
+    pageNotFoundTitle: req(60).optional(),
+    pageNotFoundText: text(200).optional(),
+    /** Title of the row of suggested pieces on the not-found page; empty hides the row. */
+    notFoundSuggestions: text(40).optional(),
   }),
   privacidade: stamped({
     header: pageHeaderSchema,

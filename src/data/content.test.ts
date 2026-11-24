@@ -57,6 +57,20 @@ describe('facts', () => {
     expect(resolveSection('contato', { contato: saved }, none).quickTitle).toBe('Escreva aqui');
     expect(resolveSection('contato', {}, none).quickTitle).toBe('Mensagem rápida');
   });
+
+  it('fills fields added after the owner saved a section with the built-in text, keeping her own values', () => {
+    const builtIn = defaultSections(none).geral;
+    // A "Textos gerais" saved before the per-case not-found texts existed.
+    const old = { footerTagline: '', bagEmptyTitle: 'Sacola vazia', bagEmptyText: 'Volte sempre', afterOrderText: 'Obrigada!', notFoundTitle: 'Sumiu', notFoundText: '' };
+    expect(parseSection('geral', old)).toMatchObject({ ok: true });
+    const resolved = resolveSection('geral', { geral: old }, none);
+    expect(resolved.notFoundTitle).toBe('Sumiu');
+    expect(resolved.notFoundText).toBe(''); // her empty text stays empty
+    expect(resolved.footerTagline).toBe('');
+    expect(resolved.pageNotFoundTitle).toBe(builtIn.pageNotFoundTitle);
+    expect(resolved.categoryNotFoundText).toBe(builtIn.categoryNotFoundText);
+    expect(resolved.notFoundSuggestions).toBe(builtIn.notFoundSuggestions);
+  });
 });
 
 describe('section schemas', () => {

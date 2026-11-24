@@ -17,4 +17,6 @@ export const PUBLIC_ROUTES = [
   '/contato',
   '/privacidade',
   '/pagina-que-nao-existe',
+  '/produto/peca-que-saiu-do-catalogo',
+  '/catalogo/vitrine-que-nao-existe',
 ];

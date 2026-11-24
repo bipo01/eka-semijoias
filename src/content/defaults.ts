@@ -300,7 +300,13 @@ export function defaultSections(f: ContentFacts): Sections {
       bagEmptyText: 'Escolha suas peças preferidas e envie o pedido pelo WhatsApp em poucos toques.',
       afterOrderText: 'Agora envie o pedido pelo WhatsApp. A gente confirma a disponibilidade e combina com você o pagamento por lá.',
       notFoundTitle: 'Esta peça escapou da caixinha',
-      notFoundText: 'Parece que ela saiu do lugar: pode ter deixado o catálogo ou o link mudou. Enquanto isso, que tal descobrir outras peças?',
+      // Not-found page per case; concept and copy made with ChatGPT (docs/mockups/pagina-nao-encontrada-*).
+      notFoundText: 'A peça que você procura pode ter saído do catálogo ou mudado de link. A gente separou outras semijoias que podem conquistar você.',
+      categoryNotFoundTitle: 'Esta vitrine mudou de lugar',
+      categoryNotFoundText: 'As peças que você procura podem estar em outra categoria ou com outro link. A gente selecionou outras peças especiais para você continuar descobrindo.',
+      pageNotFoundTitle: 'Nem todo caminho leva ao brilho',
+      pageNotFoundText: 'Parece que este link não levou à página que você procurava. A gente separou algumas peças especiais para deixar seu caminho mais bonito.',
+      notFoundSuggestions: 'Outros brilhos para você',
     },
     privacidade: {
       header: {
@@ -322,5 +328,18 @@ export function defaultSections(f: ContentFacts): Sections {
 
 /** The section the site shows: the owner's saved one, or the built-in text. */
 export function resolveSection<K extends SectionId>(id: K, content: SiteContent | undefined, facts: ContentFacts): Sections[K] {
-  return (content?.[id] as Sections[K] | undefined) ?? defaultSections(facts)[id];
+  return withBuiltIn(id, content?.[id] as Sections[K] | undefined, facts);
+}
+
+/**
+ * The owner's saved section with any field it lacks taken from the built-in text: a field added
+ * to a section after she saved it shows the built-in text instead of nothing. Her own values,
+ * empty ones included, always win.
+ */
+export function withBuiltIn<K extends SectionId>(id: K, saved: Sections[K] | undefined, facts: ContentFacts): Sections[K] {
+  const builtIn = defaultSections(facts)[id];
+  if (!saved) return builtIn;
+  const merged: Record<string, unknown> = { ...builtIn };
+  for (const [key, value] of Object.entries(saved)) if (value !== undefined) merged[key] = value;
+  return merged as Sections[K];
 }

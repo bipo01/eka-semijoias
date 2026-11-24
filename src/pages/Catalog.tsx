@@ -12,6 +12,7 @@ import { categoriesWithProducts } from '../data/catalog';
 import { FINISHES, FINISH_LABEL, type Finish } from '../data/schema';
 import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useSection } from '../hooks/useSection';
 import { useMessages } from '../hooks/useMessages';
 import {
   activeFilterCount,
@@ -40,7 +41,9 @@ export function CatalogPage() {
   const [sortOpen, setSortOpen] = useState(false);
   const [query, setQuery] = useState(filters.q);
 
-  useDocumentTitle(category ? category.name : 'Catálogo');
+  const geral = useSection('geral');
+  // An unknown category shows the not-found page: its title, not "Catálogo" (this effect runs after the child's).
+  useDocumentTitle(category ? category.name : categoria ? (geral.categoryNotFoundTitle ?? geral.notFoundTitle) : 'Catálogo');
 
   // Keep the input in sync when the URL changes (back/forward, chips).
   const [syncedQ, setSyncedQ] = useState(filters.q);
@@ -64,7 +67,7 @@ export function CatalogPage() {
 
   const results = useMemo(() => filterProducts(data, category?.id ?? null, filters), [data, category, filters]);
 
-  if (categoria && !category) return <NotFoundPage />;
+  if (categoria && !category) return <NotFoundPage kind="categoria" />;
 
   const visible = results.slice(0, filters.show);
   const activeCount = activeFilterCount(filters);

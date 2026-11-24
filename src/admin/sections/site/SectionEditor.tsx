@@ -6,7 +6,8 @@ import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { Sheet } from '../../../components/ui/Sheet';
 import { jsonEqual } from '../../../data/changes';
 import { SECTION_LABEL, type Sections } from '../../../data/content';
-import { useDefaultSection } from '../../../hooks/useSection';
+import { withBuiltIn } from '../../../content/defaults';
+import { useContentFacts, useDefaultSection } from '../../../hooks/useSection';
 import { useCatalog } from '../../../store/catalog';
 import { formatDateTime } from '../../lib/contact';
 import { save } from '../../lib/persist';
@@ -53,7 +54,10 @@ export function SectionEditor({ id, onClose }: { id: SiteSectionId; onClose: () 
   const formRef = useRef<HTMLFormElement>(null);
   const stored = useCatalog((s) => s.data.content?.[id]) as Data | undefined;
   const defaults = useDefaultSection(id) as Data;
-  const [baseline, setBaseline] = useState<Data>(() => stored ?? defaults);
+  const facts = useContentFacts();
+  /** The saved section, with fields added after she saved it taken from the built-in text. */
+  const savedFull = useMemo(() => (stored ? withBuiltIn(id, stored, facts) : undefined), [id, stored, facts]) as Data | undefined;
+  const [baseline, setBaseline] = useState<Data>(() => savedFull ?? defaults);
   const [draft, setDraft] = useState<Data>(baseline);
   /** The saved section as it was when the editor opened (or last saved here), to notice saves from another device. */
   const opened = useRef<Data | undefined>(stored);
@@ -70,12 +74,12 @@ export function SectionEditor({ id, onClose }: { id: SiteSectionId; onClose: () 
   // Saved elsewhere (or, for the built-in text, the store facts changed) while nothing was typed here: follow it.
   useEffect(() => {
     if (dirty || busy) return;
-    const next = stored ?? defaults;
+    const next = savedFull ?? defaults;
     if (jsonEqual(stored, opened.current) && jsonEqual(next, baseline)) return;
     opened.current = stored;
     setBaseline(next);
     setDraft(next);
-  }, [stored, defaults, baseline, dirty, busy]);
+  }, [stored, savedFull, defaults, baseline, dirty, busy]);
 
   // Leaving the panel or reloading with unsaved edits asks first.
   const blocker = useBlocker(() => dirty && !closing.current);

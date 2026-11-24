@@ -314,9 +314,18 @@ function GeralForm() {
       <Group title="Depois do pedido">
         <TextInput path={['afterOrderText']} label="Texto que aparece com o número do pedido" long rows={3} />
       </Group>
-      <Group title="Página não encontrada">
+      <Group title="Página não encontrada: peça" hint="Quando alguém abre o link de uma peça que saiu do catálogo ou teve o link trocado.">
         <TextInput path={['notFoundTitle']} label="Título" />
         <TextInput path={['notFoundText']} label="Texto" long rows={2} />
+      </Group>
+      <Group title="Página não encontrada: categoria" hint="Quando alguém abre o link de uma categoria que foi apagada ou renomeada.">
+        <TextInput path={['categoryNotFoundTitle']} label="Título" />
+        <TextInput path={['categoryNotFoundText']} label="Texto" long rows={2} />
+      </Group>
+      <Group title="Página não encontrada: outros links" hint="Quando o link está errado ou é de uma página que não existe mais.">
+        <TextInput path={['pageNotFoundTitle']} label="Título" />
+        <TextInput path={['pageNotFoundText']} label="Texto" long rows={2} />
+        <TextInput path={['notFoundSuggestions']} label="Título das peças sugeridas (vazio esconde as peças)" />
       </Group>
     </>
   );

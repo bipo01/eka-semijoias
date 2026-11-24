@@ -39,7 +39,7 @@ export function ProductPage() {
   const product = useCatalog((s) => s.data.products.find((p) => p.slug === slug));
   const { notFoundTitle } = useSection('geral');
   useDocumentTitle(product?.name ?? notFoundTitle);
-  if (!product) return <NotFoundPage />;
+  if (!product) return <NotFoundPage kind="peca" />;
   return <ProductView key={product.id} product={product} />;
 }
 
