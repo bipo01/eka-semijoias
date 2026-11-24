@@ -34,6 +34,7 @@ import { checkContract, eraseReseller, erasureBlocker, isError, markKitPaid, new
 import { LeadsPage } from './LeadsPage';
 import { copyText } from './OrderMessages';
 import { InviteMessage, KitEditor, NewResellerForm, SettleForm } from './ResellerForms';
+import { countInput } from '../../lib/countInput';
 
 /*
  * Painel → Revendedoras (docs/revenda/PLAN.md §2–§5): the resellers with their
@@ -574,7 +575,7 @@ function ProgramForm({ program, onSaved }: { program: Program; onSaved: () => vo
             <Plus size={16} strokeWidth={1.5} /> Adicionar faixa
           </Button>
         )}
-        <TextField label="Prazo do acerto (dias)" inputMode="numeric" value={cycleDays} onChange={(e) => setCycleDays(e.target.value.replace(/\D/g, ''))} wrapperClassName="max-w-48" />
+        <TextField label="Prazo do acerto (dias)" inputMode="numeric" value={cycleDays} onChange={(e) => setCycleDays(countInput(e.target.value, { allowZero: false, maxDigits: 3 }))} wrapperClassName="max-w-48" />
       </section>
 
       <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4" aria-labelledby="contract-title">

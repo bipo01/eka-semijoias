@@ -1479,6 +1479,55 @@ describe('stock entries and exits', () => {
     ]);
     expect((await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
   });
+
+  it('saves her own motive with the move, offers it again, and forgets or restores it on request', async () => {
+    const a = await admin();
+    const product = await freeProduct();
+    const v = product.variants[0];
+    const motives = async () => (await a.req('/api/admin/stock')).json.motives;
+    const setMotive = (client: Client, body: unknown) => client.req('/api/admin/stock-motives', { method: 'PUT', body });
+    expect(await motives()).toEqual({ entrada: [], saida: [] });
+
+    const first = await moveReq(a, { kind: 'entrada', motive: 'outro', motiveLabel: '  feira   de artesanato ', note: 'banca 4', productId: product.id, variantId: v.id, qty: 2 });
+    expect(first.status).toBe(201);
+    expect(first.json.note).toBe('Feira de artesanato — banca 4');
+    expect(await motives()).toEqual({ entrada: ['Feira de artesanato'], saida: [] });
+
+    // Same motive in other spelling: kept once with the first spelling; a built-in one typed again is not saved.
+    const again = await moveReq(a, { kind: 'entrada', motive: 'outro', motiveLabel: 'FEIRA DE ARTESANATO', productId: product.id, variantId: v.id, qty: 1 });
+    expect(again.status).toBe(201);
+    const typedBuiltIn = await moveReq(a, { kind: 'entrada', motive: 'outro', motiveLabel: 'troca', productId: product.id, variantId: v.id, qty: 1 });
+    expect(typedBuiltIn.json.note).toBe('Troca');
+    await moveReq(a, { kind: 'saida', motive: 'outro', motiveLabel: 'Doação', productId: product.id, variantId: v.id, qty: 1 });
+    expect(await motives()).toEqual({ entrada: ['Feira de artesanato'], saida: ['Doação'] });
+
+    // A refused move saves nothing; a too-short motive is refused before anything moves.
+    expect((await moveReq(a, { kind: 'saida', motive: 'outro', motiveLabel: 'Sumiu na mudança', productId: product.id, variantId: v.id, qty: 999 })).status).toBe(409);
+    expect((await moveReq(a, { kind: 'entrada', motive: 'outro', motiveLabel: 'x', productId: product.id, variantId: v.id, qty: 1 })).status).toBe(400);
+    expect((await motives()).saida).toEqual(['Doação']);
+
+    // Forget (idempotent), then "Desfazer" brings it back. Admin-only, same-origin.
+    expect((await setMotive(new Client(), { kind: 'entrada', label: 'Feira de artesanato', saved: false })).status).toBe(401);
+    expect((await a.req('/api/admin/stock-motives', { method: 'PUT', body: { kind: 'entrada', label: 'Feira de artesanato', saved: false }, origin: 'https://evil.example' })).status).toBe(403);
+    const forgot = await setMotive(a, { kind: 'entrada', label: 'feira de ARTESANATO', saved: false });
+    expect(forgot.status).toBe(200);
+    expect(forgot.json.motives).toEqual({ entrada: [], saida: ['Doação'] });
+    expect((await setMotive(a, { kind: 'entrada', label: 'Feira de artesanato', saved: false })).json.motives.entrada).toEqual([]);
+    expect((await setMotive(a, { kind: 'entrada', label: 'Feira de artesanato', saved: true })).json.motives.entrada).toEqual(['Feira de artesanato']);
+    expect((await setMotive(a, { kind: 'entrada', label: 'Compra do fornecedor', saved: true })).status).toBe(400);
+    expect((await setMotive(a, { kind: 'ajuste', label: 'Feira', saved: true })).status).toBe(400);
+    // The history keeps the text of moves already made.
+    expect((await a.req('/api/admin/stock')).json.movements.some((m: any) => m.note === 'Feira de artesanato — banca 4')).toBe(true);
+
+    // At most 12 per kind: the least recently used one leaves.
+    for (let i = 1; i <= 12; i++) expect((await setMotive(a, { kind: 'saida', label: `Motivo ${String(i).padStart(2, '0')}`, saved: true })).status).toBe(200);
+    const saida = (await motives()).saida;
+    expect(saida).toHaveLength(12);
+    expect(saida).not.toContain('Doação');
+    for (const label of [...saida, 'Feira de artesanato']) await setMotive(a, { kind: label.startsWith('Motivo') ? 'saida' : 'entrada', label, saved: false });
+    expect(await motives()).toEqual({ entrada: [], saida: [] });
+    expect((await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
+  });
 });
 
 describe('customers', () => {

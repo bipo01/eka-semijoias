@@ -14,7 +14,7 @@ import { handleLive } from './live';
 import { handleAnonymizeOrder, handleCreateManualOrder, handleCreateOrder, handleDeleteOrder, handleEditOrderItems, handleListOrders, handleOrderStatus } from './orders';
 import { handleCharge, handleGetReceipt, handlePayView, handleUploadReceipt } from './payments';
 import { handlePushDelete, handlePushStatus, handlePushSubscribe, handlePushTest } from './push';
-import { handleGetStock, handlePutStock, handleStockMove } from './stock';
+import { handleGetStock, handlePutStock, handleSetStockMotive, handleStockMove } from './stock';
 import { handleMedia, handleUpload } from './media';
 import { handleCheckMpPix, handleCreateMpPix, handleMpWebhook } from './mercadopago';
 import { Router, type Context } from './router';
@@ -95,6 +95,7 @@ const router = new Router()
   .on('DELETE', '/api/admin/push/:id', handlePushDelete)
   .on('GET', '/api/admin/stock', handleGetStock)
   .on('POST', '/api/admin/stock/moves', handleStockMove)
+  .on('PUT', '/api/admin/stock-motives', handleSetStockMotive)
   .on('PUT', '/api/admin/stock/:productId', handlePutStock)
   .on('GET', '/media/:file', handleMedia);
 

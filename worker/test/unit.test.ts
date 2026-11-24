@@ -226,6 +226,32 @@ describe('stock entries and exits', () => {
     expect(moveNote({ kind: 'entrada', motive: 'compra', note: 'NF 123' })).toBe('Compra do fornecedor — NF 123');
     expect(moveNote({ kind: 'saida', motive: 'uso' })).toBe('Uso próprio');
     expect(moveNote({ kind: 'saida', motive: 'outro' })).toBe('Outra saída');
+    expect(moveNote({ kind: 'entrada', motive: 'outro', note: 'banca 4' }, 'Feira de artesanato')).toBe('Feira de artesanato — banca 4');
+  });
+
+  it('resolves her own motive: tidied, a built-in one typed again is that one, limits enforced', async () => {
+    const { resolveMotive, savedMotivesFrom } = await import('../stock');
+    expect(resolveMotive({ kind: 'entrada', motive: 'compra' })).toEqual({ motive: 'compra', own: null });
+    expect(resolveMotive({ kind: 'entrada', motive: 'outro', motiveLabel: '   ' })).toEqual({ motive: 'outro', own: null });
+    expect(resolveMotive({ kind: 'entrada', motive: 'outro', motiveLabel: '  feira   de artesanato ' })).toEqual({ motive: 'outro', own: { label: 'Feira de artesanato', key: 'feira de artesanato' } });
+    expect(resolveMotive({ kind: 'saida', motive: 'outro', motiveLabel: 'Doação à ÓNG' }).own).toEqual({ label: 'Doação à ÓNG', key: 'doacao a ong' });
+    // Typing a built-in motive (any case or accents) records that motive and saves nothing.
+    expect(resolveMotive({ kind: 'entrada', motive: 'outro', motiveLabel: 'TROCA' })).toEqual({ motive: 'troca', own: null });
+    expect(resolveMotive({ kind: 'saida', motive: 'outro', motiveLabel: 'uso proprio' })).toEqual({ motive: 'uso', own: null });
+    expect(resolveMotive({ kind: 'entrada', motive: 'outro', motiveLabel: 'outra entrada' })).toEqual({ motive: 'outro', own: null });
+    expect(() => resolveMotive({ kind: 'entrada', motive: 'outro', motiveLabel: 'x' })).toThrow('pelo menos 2');
+    expect(() => resolveMotive({ kind: 'entrada', motive: 'outro', motiveLabel: 'x'.repeat(41) })).toThrow('no máximo 40');
+    expect(() => resolveMotive({ kind: 'entrada', motive: 'compra', motiveLabel: 'Feira' })).toThrow('Confira o motivo');
+    // Alphabetical per kind (pt-BR, accents and case ignored); unknown kinds are skipped.
+    expect(
+      savedMotivesFrom([
+        { kind: 'entrada', label: 'Feira' },
+        { kind: 'entrada', label: 'Bazar' },
+        { kind: 'saida', label: 'Ética' },
+        { kind: 'saida', label: 'Doação' },
+        { kind: 'ajuste', label: 'x' },
+      ]),
+    ).toEqual({ entrada: ['Bazar', 'Feira'], saida: ['Doação', 'Ética'] });
   });
 
   it('counts the units still with resellers: open kits minus active sales, skipping unreadable rows', async () => {

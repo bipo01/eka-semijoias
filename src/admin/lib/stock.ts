@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { effectivePrice } from '../../data/catalog';
 import type { Product } from '../../data/schema';
-import { comboKey, combosOf, ENTRY_MOTIVES, EXIT_MOTIVES, MOTIVE_LABEL, MOVE_NOTE_MAX, type MovementReason } from '../../data/stock';
+import { comboKey, combosOf, ENTRY_MOTIVES, EXIT_MOTIVES, MOTIVE_LABEL, motiveKey, MOVE_NOTE_MAX, type MovementReason } from '../../data/stock';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { ownWrite, useCatalog } from '../../store/catalog';
 import { signalSessionLost } from './session';
@@ -47,7 +47,12 @@ export interface StockData {
   /** Units with resellers per "productId|variantId|size". */
   inKits: Record<string, number>;
   kitsByCombo: Record<string, KitHolding[]>;
+  /** The owner's own motives per kind ("Feira de artesanato"), alphabetical. */
+  motives: SavedMotives;
 }
+
+export type SavedMotives = Record<MoveKind, string[]>;
+export const NO_SAVED_MOTIVES: SavedMotives = { entrada: [], saida: [] };
 
 /** "productId|variantId|size", the key of `inKits` / `kitsByCombo`. */
 export const holdingKey = (productId: string, variantId: string, size: string) => `${productId}|${comboKey(variantId, size)}`;
@@ -71,6 +76,8 @@ export interface MoveInput {
   size: string;
   qty: number;
   motive: string;
+  /** Her own motive ("Outra entrada" → "Feira de artesanato"); the server saves it for next time. */
+  motiveLabel?: string;
   note?: string;
 }
 
@@ -93,6 +100,23 @@ export async function registerMove(input: MoveInput, key: string): Promise<MoveR
       () => api<MoveResult>('/api/admin/stock/moves', { json: input, headers: { 'Idempotency-Key': key }, retries: 2, timeoutMs: 20_000 }),
       (r) => r.version,
     );
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'unauthenticated') signalSessionLost();
+    throw error;
+  }
+}
+
+/** Her motives with one more (kept once, whatever the case or accents), in the server's order. */
+export function withMotive(list: readonly string[], label: string): string[] {
+  if (list.some((m) => motiveKey(m) === motiveKey(label))) return [...list];
+  return [...list, label].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+}
+
+/** Keeps (`saved`) or forgets one of her motives; answers with both lists as the server has them. */
+export async function setStockMotive(kind: MoveKind, label: string, saved: boolean): Promise<SavedMotives> {
+  try {
+    const r = await api<{ motives: SavedMotives }>('/api/admin/stock-motives', { method: 'PUT', json: { kind, label, saved }, retries: 2 });
+    return r.motives;
   } catch (error) {
     if (error instanceof ApiError && error.code === 'unauthenticated') signalSessionLost();
     throw error;
@@ -177,7 +201,7 @@ export function matchesFilter(stock: ProductStock, filter: StockFilter): boolean
 type StockState = { status: 'loading' } | { status: 'ready'; data: StockData } | { status: 'error'; message: string };
 
 /** Exact stock from the server; refetches whenever the catalog version moves (every stock change bumps it). */
-export function useStockData(): { state: StockState; reload: () => void } {
+export function useStockData(): { state: StockState; reload: () => void; setMotives: (motives: SavedMotives) => void } {
   const [state, setState] = useState<StockState>({ status: 'loading' });
   const version = useCatalog((s) => s.version);
   const [tick, setTick] = useState(0);
@@ -185,7 +209,7 @@ export function useStockData(): { state: StockState; reload: () => void } {
   useEffect(() => {
     let active = true;
     api<StockData>('/api/admin/stock', { retries: 2 }).then(
-      (data) => active && setState({ status: 'ready', data: { ...data, inKits: data.inKits ?? {}, kitsByCombo: data.kitsByCombo ?? {} } }),
+      (data) => active && setState({ status: 'ready', data: { ...data, inKits: data.inKits ?? {}, kitsByCombo: data.kitsByCombo ?? {}, motives: data.motives ?? NO_SAVED_MOTIVES } }),
       (error: unknown) => {
         if (!active) return;
         if (error instanceof ApiError && error.code === 'unauthenticated') signalSessionLost();
@@ -202,7 +226,10 @@ export function useStockData(): { state: StockState; reload: () => void } {
     setTick((t) => t + 1);
   }, []);
 
-  return { state, reload };
+  // Her motives change without a new catalog version (forget / undo): applied here as the server answered.
+  const setMotives = useCallback((motives: SavedMotives) => setState((s) => (s.status === 'ready' ? { ...s, data: { ...s.data, motives } } : s)), []);
+
+  return { state, reload, setMotives };
 }
 
 export interface StockLevelInput {

@@ -15,6 +15,7 @@ import { normalize } from '../../lib/search';
 import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
 import { EmptyState, SwitchRow } from '../FormBits';
+import { QuantityStepper } from '../QuantityStepper';
 import { holdingKey, matchesFilter, productStock, saveStock, STOCK_FILTERS, stockOverview, useStockData, type MoveKind, type ProductStock, type StockData, type StockFilter } from '../lib/stock';
 import { MovementList, StockHistory } from './StockHistory';
 import { StockMoveSheet, type MoveRequestState } from './StockMoveSheet';
@@ -51,7 +52,6 @@ function StockEditor({ product, data, onClose }: { product: Product; data: Stock
     const n = Number(values[key]);
     return Number.isInteger(n) && n >= 0 ? n : NaN;
   };
-  const step = (key: string, delta: number) => setValues((v) => ({ ...v, [key]: String(Math.max(0, Math.min(MAX_STOCK_QTY, (Number(v[key]) || 0) + delta))) }));
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
@@ -109,23 +109,7 @@ function StockEditor({ product, data, onClose }: { product: Product; data: Stock
                         {label}
                         {start.has(key) && <span className="text-ink-muted"> · antes {start.get(key)}</span>}
                       </label>
-                      <div className="inline-flex h-11 items-center rounded-full border border-line bg-white">
-                        <button type="button" aria-label={`Diminuir ${label}`} className="inline-flex size-10 items-center justify-center rounded-full hover:bg-champagne" onClick={() => step(key, -1)}>
-                          <Minus size={16} strokeWidth={1.5} />
-                        </button>
-                        <input
-                          id={id}
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          value={values[key] ?? '0'}
-                          onChange={(e) => setValues((x) => ({ ...x, [key]: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
-                          onFocus={(e) => e.currentTarget.select()}
-                          className="price w-12 bg-transparent text-center text-base focus:outline-none"
-                        />
-                        <button type="button" aria-label={`Aumentar ${label}`} className="inline-flex size-10 items-center justify-center rounded-full hover:bg-champagne" onClick={() => step(key, 1)}>
-                          <Plus size={16} strokeWidth={1.5} />
-                        </button>
-                      </div>
+                      <QuantityStepper id={id} name={label} value={values[key] ?? '0'} onChange={(value) => setValues((x) => ({ ...x, [key]: value }))} min={0} max={MAX_STOCK_QTY} />
                     </li>
                   );
                 })}
@@ -257,7 +241,7 @@ function ProductStockPanel({ product, data, onMove, onClose }: { product: Produc
 let moveSession = 0;
 
 export function StockPage() {
-  const { state, reload } = useStockData();
+  const { state, reload, setMotives } = useStockData();
   const products = useCatalog((s) => s.data.products);
   const threshold = useCatalog((s) => s.data.settings.lowStockThreshold ?? DEFAULT_LOW_STOCK);
   const [filter, setFilter] = useState<StockFilter>('todas');
@@ -378,7 +362,7 @@ export function StockPage() {
       <Sheet open={!!open} onClose={() => setOpenId(null)} title={open?.name ?? 'Estoque'} side="right">
         {open && <ProductStockPanel product={open} data={data} onMove={(kind) => startMove(kind, open.id)} onClose={() => setOpenId(null)} />}
       </Sheet>
-      <StockMoveSheet request={move} data={data} onClose={() => setMove(null)} />
+      <StockMoveSheet request={move} data={data} onMotives={setMotives} onClose={() => setMove(null)} />
     </>
   );
 }

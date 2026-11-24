@@ -14,7 +14,7 @@ const untracked = products.find((p) => p.id !== plain.id && p.id !== sized.id &&
 const level = (p: Product, variantIndex: number, qty: number, size = '') => ({ productId: p.id, variantId: p.variants[variantIndex]!.id, size, qty, updatedAt: '2026-11-23T10:00:00.000Z' });
 
 function data(over: Partial<StockData> = {}): StockData {
-  return { levels: [], tracked: [], movements: [], inKits: {}, kitsByCombo: {}, ...over };
+  return { levels: [], tracked: [], movements: [], inKits: {}, kitsByCombo: {}, motives: { entrada: [], saida: [] }, ...over };
 }
 
 describe('productStock', () => {

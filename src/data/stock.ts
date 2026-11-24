@@ -34,6 +34,35 @@ export const MOTIVE_LABEL = {
 } as const;
 export const MOVE_NOTE_MAX = 200;
 
+/*
+ * The owner's own motives: "Outra entrada" / "Outra saída" asks what it was ("Feira de artesanato"),
+ * and the server keeps it (table stock_motives) so it shows next to the built-in ones next time.
+ */
+export const MOTIVE_LABEL_MIN = 2;
+export const MOTIVE_LABEL_MAX = 40;
+/** Saved motives per kind; the least recently used one leaves when a new one passes the cap. */
+export const SAVED_MOTIVES_MAX = 12;
+export type MotiveKind = keyof typeof MOTIVE_LABEL;
+
+/** "  feira   de artesanato " → "Feira de artesanato" (the stored and shown spelling). */
+export function tidyMotiveLabel(text: string): string {
+  const t = text.trim().replace(/\s+/g, ' ');
+  return t ? t.charAt(0).toLocaleUpperCase('pt-BR') + t.slice(1) : '';
+}
+
+/** Comparison key: case, accents and spacing do not make two motives different. */
+export function motiveKey(text: string): string {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('pt-BR').trim().replace(/\s+/g, ' ');
+}
+
+/** The built-in motive a typed text means ("troca" → 'troca'), or null when it is a new one. */
+export function builtInMotiveFor(kind: MotiveKind, text: string): string | null {
+  const key = motiveKey(text);
+  if (!key) return null;
+  const labels = MOTIVE_LABEL[kind] as Record<string, string>;
+  return Object.keys(labels).find((id) => motiveKey(labels[id]!) === key) ?? null;
+}
+
 export const STOCK_PUBLIC_CAP = 20;
 export const DEFAULT_LOW_STOCK = 2;
 export const MAX_STOCK_QTY = 100_000;

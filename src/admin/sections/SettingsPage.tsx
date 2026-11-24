@@ -21,6 +21,7 @@ import { save } from '../lib/persist';
 import { LojaSettings } from './LojaSettings';
 import { PushSettings } from './PushSettings';
 import { changePin, signalSessionLost } from '../lib/session';
+import { countInput } from '../../lib/countInput';
 
 /** Checklist items completed by a settings field or a site section; the others stay open. */
 // Instagram and warranty start with unconfirmed values from business.ts, so they only
@@ -303,7 +304,7 @@ function StockSettings() {
         error={error}
         hint="Unidades. Vale para peças com controle de estoque; use 0 para nunca mostrar."
         wrapperClassName="max-w-xs"
-        onChange={(e) => setValue(e.target.value.replace(/\D/g, ''))}
+        onChange={(e) => setValue(countInput(e.target.value, { maxDigits: 2 }))}
       />
       <Button type="submit" className="self-start" disabled={busy} aria-busy={busy}>
         {busy ? 'Salvando…' : 'Salvar'}

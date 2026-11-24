@@ -2,7 +2,25 @@ import { z } from 'zod';
 import { kitSchema, kitState, lineKey, resellerSaleSchema } from '../src/data/revenda';
 import { sizeLabel } from '../src/data/catalog';
 import { FINISH_LABEL, type Catalog } from '../src/data/schema';
-import { comboKey, combosOf, ENTRY_MOTIVES, EXIT_MOTIVES, materializeStock, MAX_STOCK_QTY, MOTIVE_LABEL, MOVE_NOTE_MAX, type MovementReason, type StockRow } from '../src/data/stock';
+import {
+  builtInMotiveFor,
+  comboKey,
+  combosOf,
+  ENTRY_MOTIVES,
+  EXIT_MOTIVES,
+  materializeStock,
+  MAX_STOCK_QTY,
+  MOTIVE_LABEL,
+  MOTIVE_LABEL_MAX,
+  MOTIVE_LABEL_MIN,
+  motiveKey,
+  MOVE_NOTE_MAX,
+  SAVED_MOTIVES_MAX,
+  tidyMotiveLabel,
+  type MotiveKind,
+  type MovementReason,
+  type StockRow,
+} from '../src/data/stock';
 import { requireSession } from './auth';
 import { ensureSeeded, IDEMPOTENCY_TTL_MS, nextVersion, parseSnapshotBody, snapshotBody, SNAPSHOT_MAX_BYTES, WRITE_ATTEMPTS } from './catalog';
 import { sha256Hex } from './crypto';
@@ -151,8 +169,8 @@ export function unitsInKits(kitRows: Record<string, unknown>[], saleRows: Record
 }
 
 /**
- * GET /api/admin/stock — exact levels, tracked products, the latest movements and the units with
- * resellers (`inKits`, `kitsByCombo`), in one round trip.
+ * GET /api/admin/stock — exact levels, tracked products, the latest movements, the units with
+ * resellers (`inKits`, `kitsByCombo`) and the owner's saved motives, in one round trip.
  */
 export async function handleGetStock(ctx: Context): Promise<Response> {
   await requireSession(ctx);
@@ -176,6 +194,7 @@ export async function handleGetStock(ctx: Context): Promise<Response> {
         `SELECT s.id, s.reseller_id, s.kit_id, s.created_at, s.status, s.total_cents, s.data
          FROM reseller_sales s JOIN kits k ON k.id = s.kit_id WHERE k.status = 'aberta' AND s.status = 'ativa'`,
       ),
+      db.prepare('SELECT kind, label FROM stock_motives'),
     ]),
   );
   const kits = unitsInKits(results[3]?.results ?? [], results[4]?.results ?? []);
@@ -198,6 +217,7 @@ export async function handleGetStock(ctx: Context): Promise<Response> {
     })),
     inKits: kits.inKits,
     kitsByCombo: kits.kitsByCombo,
+    motives: savedMotivesFrom(results[5]?.results ?? []),
   });
 }
 
@@ -328,6 +348,8 @@ const moveCommon = {
     .max(MOVE_NOTE_MAX, `A observação tem no máximo ${MOVE_NOTE_MAX} caracteres.`)
     .optional()
     .transform((v) => (v?.trim() ? v.trim().replace(/\s+/g, ' ') : undefined)),
+  /** What "Outra entrada" / "Outra saída" was, in her words; saved for next time (resolveMotive). */
+  motiveLabel: z.string().max(200).optional(),
 };
 
 export const moveRequestSchema = z.discriminatedUnion('kind', [
@@ -336,10 +358,98 @@ export const moveRequestSchema = z.discriminatedUnion('kind', [
 ]);
 export type MoveRequest = z.infer<typeof moveRequestSchema>;
 
-/** "Compra do fornecedor — NF 123": the motive label, plus the owner's text when there is one. */
-export function moveNote(move: { kind: MoveRequest['kind']; motive: string; note?: string | undefined }): string {
-  const label = (MOTIVE_LABEL[move.kind] as Record<string, string>)[move.motive] ?? '';
+/** "Compra do fornecedor — NF 123": the motive label (or her own motive), plus her note when there is one. */
+export function moveNote(move: { kind: MoveRequest['kind']; motive: string; note?: string | undefined }, ownLabel?: string | null): string {
+  const label = ownLabel || ((MOTIVE_LABEL[move.kind] as Record<string, string>)[move.motive] ?? '');
   return move.note ? `${label} — ${move.note}` : label;
+}
+
+export interface ResolvedMotive {
+  /** The built-in motive id the move is recorded under ('outro' for her own ones). */
+  motive: string;
+  /** Her own motive to show and save, or null for a built-in one. */
+  own: { label: string; key: string } | null;
+}
+
+/** Checks her own motive text: tidied, within the limits, and not just a built-in one typed again. */
+export function ownMotive(kind: MotiveKind, text: string): { label: string; key: string } | { builtIn: string } {
+  const label = tidyMotiveLabel(text);
+  const builtIn = builtInMotiveFor(kind, label);
+  if (builtIn) return { builtIn };
+  if (label.length < MOTIVE_LABEL_MIN) throw new HttpError('bad_request', 'Escreva o motivo com pelo menos 2 letras.');
+  if (label.length > MOTIVE_LABEL_MAX) throw new HttpError('bad_request', `O motivo tem no máximo ${MOTIVE_LABEL_MAX} caracteres.`);
+  return { label, key: motiveKey(label) };
+}
+
+/**
+ * The motive a move is recorded under. A text that only repeats a built-in motive ("troca") is that
+ * motive; an empty one leaves the generic "Outra entrada"; anything else is her own motive.
+ */
+export function resolveMotive(move: Pick<MoveRequest, 'kind' | 'motive' | 'motiveLabel'>): ResolvedMotive {
+  const text = move.motiveLabel?.trim() ?? '';
+  if (!text) return { motive: move.motive, own: null };
+  if (move.motive !== 'outro') throw new HttpError('bad_request', 'Confira o motivo da movimentação.');
+  const own = ownMotive(move.kind, text);
+  return 'builtIn' in own ? { motive: own.builtIn, own: null } : { motive: 'outro', own };
+}
+
+/** Saves (or refreshes) her motive and keeps only the most recently used ones. */
+function saveMotiveStatements(db: D1Database, kind: MotiveKind, own: { label: string; key: string }, at: string): D1PreparedStatement[] {
+  return [
+    db
+      .prepare(
+        `INSERT INTO stock_motives (kind, label_key, label, created_at, used_at) VALUES (?1, ?2, ?3, ?4, ?4)
+         ON CONFLICT (kind, label_key) DO UPDATE SET used_at = excluded.used_at`,
+      )
+      .bind(kind, own.key, own.label, at),
+    db
+      .prepare(
+        `DELETE FROM stock_motives WHERE kind = ?1 AND label_key NOT IN
+           (SELECT label_key FROM stock_motives WHERE kind = ?1 ORDER BY used_at DESC, created_at DESC LIMIT ?2)`,
+      )
+      .bind(kind, SAVED_MOTIVES_MAX),
+  ];
+}
+
+export type SavedMotives = Record<MotiveKind, string[]>;
+
+/** Rows → her motives per kind, in alphabetical order (pt-BR), so the list never jumps around. */
+export function savedMotivesFrom(rows: Record<string, unknown>[]): SavedMotives {
+  const out: SavedMotives = { entrada: [], saida: [] };
+  for (const r of rows) if ((r.kind === 'entrada' || r.kind === 'saida') && typeof r.label === 'string') out[r.kind].push(r.label);
+  for (const list of Object.values(out)) list.sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  return out;
+}
+
+const motiveRequestSchema = z.object({
+  kind: z.enum(['entrada', 'saida']),
+  label: z.string().max(200),
+  saved: z.boolean(),
+});
+
+/**
+ * PUT /api/admin/stock-motives { kind, label, saved } — keeps (saved: true, the "Desfazer" of a
+ * removal) or forgets (saved: false) one of her motives. Idempotent; answers with both lists.
+ * Movements already recorded keep their text.
+ */
+export async function handleSetStockMotive(ctx: Context): Promise<Response> {
+  await requireSession(ctx);
+  const db = ctx.env.DB;
+  const parsed = motiveRequestSchema.safeParse(await readJson(ctx.request, 2 * 1024));
+  if (!parsed.success) throw new HttpError('bad_request', 'Confira o motivo.', zodDetails(parsed.error.issues));
+  const { kind, label, saved } = parsed.data;
+  const at = new Date().toISOString();
+  if (saved) {
+    const own = ownMotive(kind, label);
+    if ('builtIn' in own) throw new HttpError('bad_request', 'Esse motivo já faz parte da lista.');
+    await db.batch(saveMotiveStatements(db, kind, own, at));
+  } else {
+    const key = motiveKey(label);
+    if (!key) throw new HttpError('bad_request', 'Confira o motivo.');
+    await db.prepare('DELETE FROM stock_motives WHERE kind = ?1 AND label_key = ?2').bind(kind, key).run();
+  }
+  const rows = await withReadRetry(() => db.prepare('SELECT kind, label FROM stock_motives').all<Record<string, unknown>>());
+  return json({ motives: savedMotivesFrom(rows.results ?? []) });
 }
 
 /**
@@ -363,7 +473,8 @@ export async function handleStockMove(ctx: Context): Promise<Response> {
   const move = parsed.data;
   const idemKey = `stock-move:${key}`;
   const requestHash = await sha256Hex(JSON.stringify(move));
-  const note = moveNote(move);
+  const resolved = resolveMotive(move);
+  const note = moveNote({ ...move, motive: resolved.motive }, resolved.own?.label);
 
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, Math.random() * 25 * Math.min(attempt, 4)));
@@ -427,6 +538,7 @@ export async function handleStockMove(ctx: Context): Promise<Response> {
       );
     }
     statements.push(movementStatement(db, at, product.id, move.variantId, move.size, move.kind === 'entrada' ? move.qty : -move.qty, move.kind, null, { note }));
+    if (resolved.own) statements.push(...saveMotiveStatements(db, move.kind, resolved.own, at));
 
     const rows = state.rows.filter((r) => rowKey(r.product_id, r.variant_id, r.size) !== key_);
     rows.push({ product_id: product.id, variant_id: move.variantId, size: move.size, qty: after });
@@ -443,8 +555,8 @@ export async function handleStockMove(ctx: Context): Promise<Response> {
       // True when this entry turned stock control on for the product (its other combinations start at 0).
       trackingStarted: move.kind === 'entrada' && !wasTracked,
     };
-    // The owner's free text stays out of the audit log (it may name someone); the motive is enough.
-    const summary = `${move.kind === 'entrada' ? 'Entrada' : 'Saída'} de ${move.qty} · ${label} (${moveNote({ kind: move.kind, motive: move.motive })})`;
+    // The owner's free text (note and own motive) stays out of the audit log (it may name someone).
+    const summary = `${move.kind === 'entrada' ? 'Entrada' : 'Saída'} de ${move.qty} · ${label} (${moveNote({ kind: move.kind, motive: resolved.motive })})`;
     try {
       await db.batch([
         publish.first,

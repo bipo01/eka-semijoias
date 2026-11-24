@@ -13,13 +13,16 @@ import { productImageSources } from '../../lib/assets';
 import { normalize } from '../../lib/search';
 import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
-import { MOTIVES, MOVE_NOTE_MAX, registerMove, type MoveInput, type MoveKind, type StockData } from '../lib/stock';
+import { QuantityStepper } from '../QuantityStepper';
+import { MOVE_NOTE_MAX, registerMove, setStockMotive, withMotive, type MoveInput, type MoveKind, type SavedMotives, type StockData } from '../lib/stock';
+import { MotivePicker, motiveToSend, type MotiveChoice } from './StockMotivePicker';
 
 /*
  * "Registrar entrada" / "Registrar saída": one piece (finish, size), a
  * quantity, a motive and an optional note. The server is the authority: it
  * refuses an exit without enough units ("Só há N em estoque") and an entry on
- * a piece without stock control turns control on.
+ * a piece without stock control turns control on. "Outra entrada/saída" asks what it was; the
+ * server saves that motive with the move and it comes back as a chip ("Tirar da lista" forgets it).
  */
 
 const KIND_LABEL: Record<MoveKind, string> = { entrada: 'Registrar entrada', saida: 'Registrar saída' };
@@ -82,13 +85,30 @@ function PiecePicker({ products, data, onPick }: { products: Product[]; data: St
   );
 }
 
-function MoveForm({ kind, onKind, initialProductId, data, onDone }: { kind: MoveKind; onKind: (k: MoveKind) => void; initialProductId: string | null; data: StockData; onDone: () => void }) {
+function MoveForm({
+  kind,
+  onKind,
+  initialProductId,
+  data,
+  onMotives,
+  onDone,
+}: {
+  kind: MoveKind;
+  onKind: (k: MoveKind) => void;
+  initialProductId: string | null;
+  data: StockData;
+  onMotives: (motives: SavedMotives) => void;
+  onDone: () => void;
+}) {
   const products = useCatalog((s) => s.data.products);
   const [product, setProduct] = useState<Product | null>(() => products.find((p) => p.id === initialProductId) ?? null);
   const [variant, setVariant] = useState<Variant | null>(() => product?.variants[0] ?? null);
   const [size, setSize] = useState<string | undefined>(undefined);
   const [qty, setQty] = useState('1');
-  const [motive, setMotive] = useState<string | null>(null);
+  const [motive, setMotive] = useState<MotiveChoice>(null);
+  const [motiveText, setMotiveText] = useState('');
+  const [forgetting, setForgetting] = useState(false);
+  const motiveTextRef = useRef<HTMLInputElement>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,8 +124,32 @@ function MoveForm({ kind, onKind, initialProductId, data, onDone }: { kind: Move
   const switchKind = (k: MoveKind) => {
     onKind(k);
     setMotive(null);
+    setMotiveText('');
     setError(null);
   };
+  const saved = data.motives[kind];
+
+  async function forgetMotive(label: string) {
+    if (forgetting) return;
+    setForgetting(true);
+    try {
+      onMotives(await setStockMotive(kind, label, false));
+      setMotive(null);
+      setError(null);
+      toast(`“${label}” saiu da lista de motivos.`, {
+        action: {
+          label: 'Desfazer',
+          onClick: () => {
+            setStockMotive(kind, label, true).then(onMotives, (err: unknown) => toast(errorMessage(err), { tone: 'error' }));
+          },
+        },
+      });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setForgetting(false);
+    }
+  }
 
   if (!product || !variant) {
     return (
@@ -124,7 +168,6 @@ function MoveForm({ kind, onKind, initialProductId, data, onDone }: { kind: Move
   const n = Number(qty);
   const qtyValid = qty !== '' && Number.isInteger(n) && n >= 1 && n <= MAX_STOCK_QTY;
   const max = kind === 'saida' ? Math.max(1, current ?? 1) : MAX_STOCK_QTY;
-  const step = (delta: number) => setQty((v) => String(Math.max(1, Math.min(max, (Number(v) || 0) + delta))));
   const image = product.images[0];
   const after = current !== null && qtyValid ? (kind === 'entrada' ? current + n : current - n) : null;
 
@@ -133,10 +176,14 @@ function MoveForm({ kind, onKind, initialProductId, data, onDone }: { kind: Move
     if (busy || !product || !variant) return;
     if (needsSize) return setError(`Escolha o ${sizeFieldLabel(sizes).toLowerCase()}.`);
     if (!qtyValid) return setError('Informe a quantidade: um número inteiro, de 1 em diante.');
-    if (!motive) return setError('Escolha o motivo.');
+    const motiveFields = motiveToSend(kind, motive, motiveText, saved);
+    if ('error' in motiveFields) {
+      if (motiveFields.focusText) motiveTextRef.current?.focus();
+      return setError(motiveFields.error);
+    }
     if (kind === 'saida' && !tracked) return setError('Esta peça não tem controle de estoque. Ligue o controle em “Ajustar contagem” antes de registrar uma saída.');
     if (kind === 'saida' && current !== null && n > current) return setError(current === 0 ? 'Não há unidades desta peça em estoque.' : `Só há ${current} em estoque.`);
-    const input: MoveInput = { kind, productId: product.id, variantId: variant.id, size: comboSize, qty: n, motive, ...(note.trim() ? { note: note.trim() } : {}) };
+    const input: MoveInput = { kind, productId: product.id, variantId: variant.id, size: comboSize, qty: n, ...motiveFields, ...(note.trim() ? { note: note.trim() } : {}) };
     const body = JSON.stringify(input);
     if (sent.current?.body !== body) sent.current = { body, key: idempotencyKey() };
     setError(null);
@@ -145,6 +192,8 @@ function MoveForm({ kind, onKind, initialProductId, data, onDone }: { kind: Move
       const result = await registerMove(input, sent.current.key);
       const what = kind === 'entrada' ? 'Entrada registrada' : 'Saída registrada';
       toast(`${what}: ${product.name}, fica ${result.qtyAfter}.${result.trackingStarted ? ' Controle de estoque ligado.' : ''}`, { tone: 'success' });
+      // Her new motive is a chip right away (the stock reload that follows brings the server's list).
+      if (input.motiveLabel) onMotives({ ...data.motives, [kind]: withMotive(saved, input.motiveLabel) });
       onDone();
     } catch (err) {
       setError(errorMessage(err));
@@ -214,35 +263,23 @@ function MoveForm({ kind, onKind, initialProductId, data, onDone }: { kind: Move
         <label htmlFor="move-qty" className="font-medium">
           Quantidade
         </label>
-        <div className="inline-flex h-11 items-center rounded-full border border-line bg-white">
-          <button type="button" aria-label="Diminuir quantidade" className="inline-flex size-10 items-center justify-center rounded-full hover:bg-champagne" onClick={() => step(-1)}>
-            <Minus size={16} strokeWidth={1.5} />
-          </button>
-          <input
-            id="move-qty"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            value={qty}
-            onChange={(e) => setQty(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            onFocus={(e) => e.currentTarget.select()}
-            className="price w-14 bg-transparent text-center text-base focus:outline-none"
-          />
-          <button type="button" aria-label="Aumentar quantidade" className="inline-flex size-10 items-center justify-center rounded-full hover:bg-champagne" onClick={() => step(1)}>
-            <Plus size={16} strokeWidth={1.5} />
-          </button>
-        </div>
+        <QuantityStepper id="move-qty" name="quantidade" value={qty} onChange={setQty} min={1} max={max} />
       </div>
 
-      <div>
-        <p className="mb-2 font-medium">Motivo</p>
-        <div role="group" aria-label="Motivo" className="flex flex-wrap gap-2">
-          {MOTIVES[kind].map((m) => (
-            <Chip key={m.id} selected={motive === m.id} onClick={() => setMotive(m.id)}>
-              {m.label}
-            </Chip>
-          ))}
-        </div>
-      </div>
+      <MotivePicker
+        kind={kind}
+        saved={saved}
+        choice={motive}
+        onChoice={(c) => {
+          setMotive(c);
+          setError(null);
+        }}
+        text={motiveText}
+        onText={setMotiveText}
+        onForget={(label) => void forgetMotive(label)}
+        forgetting={forgetting}
+        textRef={motiveTextRef}
+      />
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="move-note" className="font-medium">
@@ -294,7 +331,7 @@ export interface MoveRequestState {
   session: number;
 }
 
-export function StockMoveSheet({ request, data, onClose }: { request: MoveRequestState | null; data: StockData; onClose: () => void }) {
+export function StockMoveSheet({ request, data, onMotives, onClose }: { request: MoveRequestState | null; data: StockData; onMotives: (motives: SavedMotives) => void; onClose: () => void }) {
   // The last request stays rendered while the sheet slides out; the title follows the kind chosen inside.
   const [last, setLast] = useState<MoveRequestState | null>(request);
   const [kind, setKind] = useState<MoveKind>(request?.kind ?? 'entrada');
@@ -304,7 +341,7 @@ export function StockMoveSheet({ request, data, onClose }: { request: MoveReques
   }
   return (
     <Sheet open={!!request} onClose={onClose} title={KIND_LABEL[kind]} side="right">
-      {last && <MoveForm key={last.session} kind={kind} onKind={setKind} initialProductId={last.productId} data={data} onDone={onClose} />}
+      {last && <MoveForm key={last.session} kind={kind} onKind={setKind} initialProductId={last.productId} data={data} onMotives={onMotives} onDone={onClose} />}
     </Sheet>
   );
 }
