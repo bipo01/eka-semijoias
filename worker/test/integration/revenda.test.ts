@@ -191,6 +191,11 @@ describe('reseller program', () => {
     const s2 = await sell([line1(1)]);
     expect(s2.status).toBe(201);
 
+    // The stock page counts the pieces with her: 2 in the kit, 1 sold → 1 of p1; p2 sold out.
+    const stockView = (await a.req('/api/admin/stock')).json;
+    expect(stockView.inKits[`${p1.id}|${v1.id}|`]).toBe(1);
+    expect(stockView.inKits[`${p2.id}|${v2.id}|`] ?? 0).toBe(0);
+    expect(stockView.kitsByCombo[`${p1.id}|${v1.id}|`]).toEqual([expect.objectContaining({ resellerName: 'Carla', qty: 1 })]);
     const me2 = (await r.req('/api/revenda/me')).json;
     const sold = (p2.promoPrice ?? p2.price) + (p1.promoPrice ?? p1.price);
     expect(me2.soldCents).toBe(sold);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { effectivePrice } from '../../data/catalog';
 import type { Product } from '../../data/schema';
-import { comboKey, combosOf, type MovementReason } from '../../data/stock';
+import { comboKey, combosOf, ENTRY_MOTIVES, EXIT_MOTIVES, MOTIVE_LABEL, MOVE_NOTE_MAX, type MovementReason } from '../../data/stock';
 import { api, ApiError, errorMessage } from '../../lib/api';
 import { ownWrite, useCatalog } from '../../store/catalog';
 import { signalSessionLost } from './session';
@@ -53,25 +53,16 @@ export interface StockData {
 export const holdingKey = (productId: string, variantId: string, size: string) => `${productId}|${comboKey(variantId, size)}`;
 
 // ---------------------------------------------------------------------------
-// Entries and exits (POST /api/admin/stock/moves). The server writes the motive label into the
-// movement note; these are the same words (worker/stock.ts MOTIVE_LABEL).
+// Entries and exits (POST /api/admin/stock/moves). The motives and their labels are shared with
+// the server, which writes the label into the movement note (src/data/stock.ts).
 // ---------------------------------------------------------------------------
 
 export type MoveKind = 'entrada' | 'saida';
 export const MOTIVES = {
-  entrada: [
-    { id: 'compra', label: 'Compra do fornecedor' },
-    { id: 'troca', label: 'Troca' },
-    { id: 'outro', label: 'Outra entrada' },
-  ],
-  saida: [
-    { id: 'perda', label: 'Perda ou defeito' },
-    { id: 'brinde', label: 'Brinde' },
-    { id: 'uso', label: 'Uso próprio' },
-    { id: 'outro', label: 'Outra saída' },
-  ],
-} as const satisfies Record<MoveKind, readonly { id: string; label: string }[]>;
-export const MOVE_NOTE_MAX = 200;
+  entrada: ENTRY_MOTIVES.map((id) => ({ id, label: MOTIVE_LABEL.entrada[id] })),
+  saida: EXIT_MOTIVES.map((id) => ({ id, label: MOTIVE_LABEL.saida[id] })),
+} satisfies Record<MoveKind, readonly { id: string; label: string }[]>;
+export { MOVE_NOTE_MAX };
 
 export interface MoveInput {
   kind: MoveKind;

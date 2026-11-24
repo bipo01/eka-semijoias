@@ -64,7 +64,7 @@ function Bubble({ text, side, clamp }: { text: string; side: 'cliente' | 'loja';
     <div className={cx('flex', side === 'loja' ? 'justify-end' : 'justify-start')}>
       <div
         className={cx(
-          'relative max-w-[92%] rounded-[14px] px-3.5 py-2.5 text-[0.875rem] leading-relaxed break-words text-ink shadow-[0_1px_1px_rgb(43_29_24/0.08)]',
+          'relative max-w-[92%] min-w-0 rounded-[14px] px-3.5 py-2.5 text-[0.875rem] leading-relaxed [overflow-wrap:anywhere] text-ink shadow-[0_1px_1px_rgb(43_29_24/0.08)]',
           side === 'loja' ? 'rounded-tr-[4px] bg-champagne' : 'rounded-tl-[4px] bg-white',
           clamp && 'max-h-40 overflow-hidden [mask-image:linear-gradient(to_bottom,black_70%,transparent)]',
         )}

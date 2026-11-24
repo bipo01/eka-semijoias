@@ -25,6 +25,15 @@ export const MOVEMENT_REASON_LABEL: Record<MovementReason, string> = {
   retorno_maleta: 'Volta da maleta',
 };
 
+/** Why the owner registered an entry or an exit (Painel → Estoque); the label goes into the movement note. */
+export const ENTRY_MOTIVES = ['compra', 'troca', 'outro'] as const;
+export const EXIT_MOTIVES = ['perda', 'brinde', 'uso', 'outro'] as const;
+export const MOTIVE_LABEL = {
+  entrada: { compra: 'Compra do fornecedor', troca: 'Troca', outro: 'Outra entrada' },
+  saida: { perda: 'Perda ou defeito', brinde: 'Brinde', uso: 'Uso próprio', outro: 'Outra saída' },
+} as const;
+export const MOVE_NOTE_MAX = 200;
+
 export const STOCK_PUBLIC_CAP = 20;
 export const DEFAULT_LOW_STOCK = 2;
 export const MAX_STOCK_QTY = 100_000;

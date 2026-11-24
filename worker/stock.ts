@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { kitSchema, kitState, lineKey, resellerSaleSchema } from '../src/data/revenda';
 import { sizeLabel } from '../src/data/catalog';
 import { FINISH_LABEL, type Catalog } from '../src/data/schema';
-import { comboKey, combosOf, materializeStock, MAX_STOCK_QTY, type MovementReason, type StockRow } from '../src/data/stock';
+import { comboKey, combosOf, ENTRY_MOTIVES, EXIT_MOTIVES, materializeStock, MAX_STOCK_QTY, MOTIVE_LABEL, MOVE_NOTE_MAX, type MovementReason, type StockRow } from '../src/data/stock';
 import { requireSession } from './auth';
 import { ensureSeeded, IDEMPOTENCY_TTL_MS, nextVersion, parseSnapshotBody, snapshotBody, SNAPSHOT_MAX_BYTES, WRITE_ATTEMPTS } from './catalog';
 import { sha256Hex } from './crypto';
@@ -316,14 +316,7 @@ export async function handlePutStock(ctx: Context): Promise<Response> {
 // Entries and exits (docs/revenda/PLAN.md §6)
 // ---------------------------------------------------------------------------
 
-export const ENTRY_MOTIVES = ['compra', 'troca', 'outro'] as const;
-export const EXIT_MOTIVES = ['perda', 'brinde', 'uso', 'outro'] as const;
-/** Labels written into the movement note (the admin shows the same words on its chips: src/admin/lib/stock.ts). */
-export const MOTIVE_LABEL = {
-  entrada: { compra: 'Compra do fornecedor', troca: 'Troca', outro: 'Outra entrada' },
-  saida: { perda: 'Perda ou defeito', brinde: 'Brinde', uso: 'Uso próprio', outro: 'Outra saída' },
-} as const;
-export const MOVE_NOTE_MAX = 200;
+export { ENTRY_MOTIVES, EXIT_MOTIVES, MOTIVE_LABEL, MOVE_NOTE_MAX };
 
 const moveCommon = {
   productId: z.string().min(1).max(64),
