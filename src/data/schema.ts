@@ -117,6 +117,12 @@ export const resellerLeadSchema = z.object({
   alreadySells: z.boolean(),
   source: shortText(200).optional(),
   createdAt: isoDate,
+  /** Review state (docs/revenda/PLAN.md §2); absent on older rows = 'nova'. */
+  status: z.enum(['nova', 'analise', 'aprovada', 'recusada', 'efetivada']).optional(),
+  /** Internal note of the owner. */
+  note: shortText(600).optional(),
+  /** The reseller created from this application. */
+  resellerId: id.optional(),
 });
 
 export const settingsSchema = z.object({

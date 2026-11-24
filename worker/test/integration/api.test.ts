@@ -610,7 +610,8 @@ describe('orders and stock', () => {
     expect((await catalog()).stock[product.id][key]).toBe(0);
 
     const stock = (await a.req('/api/admin/stock')).json;
-    const moves = stock.movements.filter((m: any) => m.productId === product.id).map((m: any) => [m.reason, m.delta, m.qtyAfter]);
+    // Newest first; other suites may have moved this piece before (only this test's four count).
+    const moves = stock.movements.filter((m: any) => m.productId === product.id).slice(0, 4).map((m: any) => [m.reason, m.delta, m.qtyAfter]);
     expect(moves).toEqual([
       ['pedido', -1, 0],
       ['devolucao', 1, 1],

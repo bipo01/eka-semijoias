@@ -3,7 +3,9 @@ import { handleBackup, handleCatalog, handleChanges } from './catalog';
 import { toHttpError } from './db';
 import type { Env } from './env';
 import { assertSameOrigin, errorResponse, HttpError, json } from './http';
-import { handleCreateLead, handleDeleteLead, handleListLeads } from './leads';
+import { handleCreateLead, handleDeleteLead, handleListLeads, handlePatchLead } from './leads';
+import { handleContractCheck, handleCreateKit, handleCreateReseller, handleEditKit, handleGetProgram, handleGetReseller, handleKitPaid, handleListResellers, handleNewInvite, handlePatchReseller, handlePutProgram, handleSettleKit } from './resellers';
+import { handleAcceptInvite, handleCancelResellerSale, handleGetInvite, handleResellerLogin, handleResellerLogout, handleResellerMe, handleResellerSale, handleShowcase } from './revenda';
 import { handleLive } from './live';
 import { handleAnonymizeOrder, handleCreateManualOrder, handleCreateOrder, handleDeleteOrder, handleEditOrderItems, handleListOrders, handleOrderStatus } from './orders';
 import { handleCharge, handleGetReceipt, handlePayView, handleUploadReceipt } from './payments';
@@ -46,6 +48,27 @@ const router = new Router()
   .on('POST', '/api/admin/media', handleUpload)
   .on('GET', '/api/admin/leads', handleListLeads)
   .on('DELETE', '/api/admin/leads/:id', handleDeleteLead)
+  .on('PATCH', '/api/admin/leads/:id', handlePatchLead)
+  .on('GET', '/api/admin/reseller-program', handleGetProgram)
+  .on('PUT', '/api/admin/reseller-program', handlePutProgram)
+  .on('GET', '/api/admin/resellers', handleListResellers)
+  .on('POST', '/api/admin/resellers', handleCreateReseller)
+  .on('GET', '/api/admin/resellers/:id', handleGetReseller)
+  .on('PATCH', '/api/admin/resellers/:id', handlePatchReseller)
+  .on('POST', '/api/admin/resellers/:id/invite', handleNewInvite)
+  .on('POST', '/api/admin/resellers/:id/contract-check', handleContractCheck)
+  .on('POST', '/api/admin/resellers/:id/kits', handleCreateKit)
+  .on('PUT', '/api/admin/kits/:id/items', handleEditKit)
+  .on('POST', '/api/admin/kits/:id/settle', handleSettleKit)
+  .on('POST', '/api/admin/kits/:id/paid', handleKitPaid)
+  .on('GET', '/api/revenda/invite/:token', handleGetInvite)
+  .on('POST', '/api/revenda/invite/:token', handleAcceptInvite)
+  .on('POST', '/api/revenda/login', handleResellerLogin)
+  .on('POST', '/api/revenda/logout', handleResellerLogout)
+  .on('GET', '/api/revenda/me', handleResellerMe)
+  .on('POST', '/api/revenda/sales', handleResellerSale)
+  .on('POST', '/api/revenda/sales/:id/cancel', handleCancelResellerSale)
+  .on('GET', '/api/r/:slug', handleShowcase)
   .on('GET', '/api/admin/orders', handleListOrders)
   .on('POST', '/api/admin/orders', handleCreateManualOrder)
   .on('PUT', '/api/admin/orders/:id/items', handleEditOrderItems)

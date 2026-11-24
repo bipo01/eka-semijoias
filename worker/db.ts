@@ -49,6 +49,8 @@ export async function withReadRetry<T>(run: () => Promise<T>, attempts = 3): Pro
 export function toHttpError(error: unknown): HttpError {
   if (error instanceof HttpError) return error;
   if (isTransient(error)) return new HttpError('unavailable');
+  // D1 messages name tables and constraints, never bound values: safe to log, and the only clue otherwise.
+  console.log(JSON.stringify({ event: 'db_error', message: (error instanceof Error ? error.message : String(error)).slice(0, 300) }));
   return new HttpError('internal');
 }
 

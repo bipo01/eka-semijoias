@@ -68,11 +68,41 @@ export async function handleCreateLead(ctx: Context): Promise<Response> {
   return json({ ok: true, id: lead.id }, { status: 201 });
 }
 
-/** GET /api/admin/leads */
+/** GET /api/admin/leads — with the review status (column) merged in. */
 export async function handleListLeads(ctx: Context): Promise<Response> {
   await requireSession(ctx);
-  const { results } = await withReadRetry(() => ctx.env.DB.prepare('SELECT data FROM leads ORDER BY created_at DESC LIMIT ?1').bind(MAX_LEADS).all<{ data: string }>());
-  return json({ leads: results.map((r) => JSON.parse(r.data) as ResellerLead) });
+  const { results } = await withReadRetry(() => ctx.env.DB.prepare('SELECT data, status FROM leads ORDER BY created_at DESC LIMIT ?1').bind(MAX_LEADS).all<{ data: string; status: string }>());
+  return json({ leads: results.map((r) => ({ ...(JSON.parse(r.data) as ResellerLead), status: r.status as ResellerLead['status'] })) });
+}
+
+const leadPatchSchema = z.object({
+  status: z.enum(['nova', 'analise', 'aprovada', 'recusada']).optional(),
+  note: z.string().max(600).optional(),
+});
+
+/** PATCH /api/admin/leads/:id { status?, note? } — review of an application ('efetivada' only via the reseller creation). */
+export async function handlePatchLead(ctx: Context): Promise<Response> {
+  await requireSession(ctx);
+  const id = ctx.params.id ?? '';
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new HttpError('not_found');
+  const input = leadPatchSchema.safeParse(await readJson(ctx.request, 2048));
+  if (!input.success) throw new HttpError('bad_request', 'Dados inválidos.');
+  const row = await withReadRetry(() => ctx.env.DB.prepare('SELECT data, status FROM leads WHERE id = ?1').bind(id).first<{ data: string; status: string }>());
+  if (!row) throw new HttpError('not_found', 'Cadastro não encontrado.');
+  if (row.status === 'efetivada' && input.data.status) throw new HttpError('conflict', 'Este cadastro já virou revendedora.');
+  const lead: ResellerLead = { ...(JSON.parse(row.data) as ResellerLead) };
+  if (input.data.note !== undefined) {
+    const note = input.data.note.trim();
+    if (note) lead.note = note;
+    else delete lead.note;
+  }
+  const status = input.data.status ?? (row.status as NonNullable<ResellerLead['status']>);
+  await ctx.env.DB.batch([
+    ctx.env.DB.prepare('UPDATE leads SET data = ?2, status = ?3 WHERE id = ?1').bind(id, JSON.stringify({ ...lead, status: undefined }), status),
+    ctx.env.DB.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(new Date().toISOString(), 'lead.review', `Cadastro ${id}: ${status}`),
+  ]);
+  ctx.waitUntil(notifyLeads(ctx.env));
+  return json({ lead: { ...lead, status } });
 }
 
 /** DELETE /api/admin/leads/:id — idempotent. */
