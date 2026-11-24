@@ -6,7 +6,7 @@ import type { Env } from './env';
 import { assertSameOrigin, errorResponse, HttpError, json } from './http';
 import { handleCreateLead, handleDeleteLead, handleListLeads, handlePatchLead } from './leads';
 import { handleContractCheck, handleCreateKit, handleCreateReseller, handleEditKit, handleGetProgram, handleGetReseller, handleKitPaid, handleListResellers, handleNewInvite, handlePatchReseller, handlePutProgram, handleSettleKit } from './resellers';
-import { handleAcceptInvite, handleCancelResellerSale, handleGetInvite, handleResellerLogin, handleResellerLogout, handleResellerMe, handleResellerSale, handleShowcase } from './revenda';
+import { handleAcceptContract, handleAcceptInvite, handleCancelResellerSale, handleGetInvite, handleResellerLogin, handleResellerLogout, handleResellerMe, handleResellerSale, handleShowcase } from './revenda';
 import { handleLive } from './live';
 import { handleAnonymizeOrder, handleCreateManualOrder, handleCreateOrder, handleDeleteOrder, handleEditOrderItems, handleListOrders, handleOrderStatus } from './orders';
 import { handleCharge, handleGetReceipt, handlePayView, handleUploadReceipt } from './payments';
@@ -65,6 +65,7 @@ const router = new Router()
   .on('GET', '/api/revenda/invite/:token', handleGetInvite)
   .on('POST', '/api/revenda/invite/:token', handleAcceptInvite)
   .on('POST', '/api/revenda/login', handleResellerLogin)
+  .on('POST', '/api/revenda/contract', handleAcceptContract)
   .on('POST', '/api/revenda/logout', handleResellerLogout)
   .on('GET', '/api/revenda/me', handleResellerMe)
   .on('POST', '/api/revenda/sales', handleResellerSale)

@@ -266,6 +266,12 @@ describe('reseller program', () => {
   it('versions the contract: a changed text asks for a new acceptance at the next access', async () => {
     const a = await admin();
     const current = (await a.req('/api/admin/reseller-program')).json.program;
+    // A reseller already working when the text changes.
+    const [p] = await plainProducts(1);
+    const working = await newReseller(a, 'Gabi Contrato Antiga');
+    const r = await activate(working.token, '730418');
+    expect((await a.req(`/api/admin/resellers/${working.reseller.id}/kits`, { body: { items: [{ productId: p.id, variantId: p.variants[0].id, qty: 1 }] } })).status).toBe(201);
+    expect((await r.req('/api/revenda/me')).json.contractDue).toBeNull();
     const bad = await a.req('/api/admin/reseller-program', { method: 'PUT', body: { program: { ...current, tiers: [{ fromCents: 500, percent: 20 }] } } });
     expect(bad.status).toBe(400);
     const saved = await a.req('/api/admin/reseller-program', { method: 'PUT', body: { program: { ...current, contract: { ...current.contract, text: `${current.contract.text}\n10. Cláusula nova de teste.` } } } });
@@ -274,6 +280,28 @@ describe('reseller program', () => {
     expect(same.json.program.contract.version).toBe(saved.json.program.contract.version);
     const { token } = await newReseller(a, 'Fabi Contrato Nova');
     expect((await new Client().req(`/api/revenda/invite/${token}`)).json.contract.version).toBe(current.contract.version + 1);
+
+    // She sees the new version in her panel; sales wait for the acceptance.
+    const me = (await r.req('/api/revenda/me')).json;
+    expect(me.contractDue).toMatchObject({ mode: 'aceite', version: current.contract.version + 1 });
+    expect(me.contractDue.text).toContain('Cláusula nova de teste');
+    const sell = () =>
+      r.req('/api/revenda/sales', { body: { lines: [{ productId: p.id, variantId: p.variants[0].id, size: '', qty: 1, unitCents: p.promoPrice ?? p.price }], payment: 'pix', customer: { name: 'Cliente', whatsapp: '' } }, headers: { 'Idempotency-Key': randomUUID() } });
+    const blocked = await sell();
+    expect(blocked.status).toBe(409);
+    expect(blocked.json.error.message).toContain('contrato');
+    // Old version or a name that is not hers: refused.
+    expect((await r.req('/api/revenda/contract', { body: { version: current.contract.version, typedName: 'Gabi Contrato Antiga' } })).status).toBe(409);
+    expect((await r.req('/api/revenda/contract', { body: { version: me.contractDue.version, typedName: 'Outra Pessoa' } })).status).toBe(400);
+    expect((await new Client().req('/api/revenda/contract', { body: { version: me.contractDue.version, typedName: 'Gabi Contrato Antiga' } })).status).toBe(401);
+    expect((await r.req('/api/revenda/contract', { body: { version: me.contractDue.version, typedName: 'Gabi Contrato Antiga' } })).status).toBe(200);
+    // A repeated tap is harmless.
+    expect((await r.req('/api/revenda/contract', { body: { version: me.contractDue.version, typedName: 'Gabi Contrato Antiga' } })).status).toBe(200);
+    expect((await r.req('/api/revenda/me')).json.contractDue).toBeNull();
+    expect((await sell()).status).toBe(201);
+    const detail = (await a.req(`/api/admin/resellers/${working.reseller.id}`)).json;
+    expect(detail.acceptances.map((x: any) => x.version)).toEqual(expect.arrayContaining([current.contract.version, current.contract.version + 1]));
+    expect(detail.reseller.contract.version).toBe(current.contract.version + 1);
     // Restore the default text for the other tests.
     await a.req('/api/admin/reseller-program', { method: 'PUT', body: { program: current } });
   });

@@ -13,6 +13,8 @@ export interface Me {
   earnings: { receivedCents: number; projectedCents: number; totalCents: number };
   history: { id: string; openedAt: string; closedAt?: string; settlement?: Settlement }[];
   images: Record<string, ProductImage>;
+  /** An updated contract she still has to accept (sales are refused until then). */
+  contractDue: InviteView['contract'];
 }
 
 export interface InviteView {
@@ -28,5 +30,6 @@ export const logout = () => api<{ ok: true }>('/api/revenda/logout', { json: {} 
 export const fetchInvite = (token: string) => api<InviteView>(`/api/revenda/invite/${encodeURIComponent(token)}`, { retries: 1 });
 export const acceptInvite = (token: string, body: { pin: string; contract?: { version: number; typedName?: string; signedExternal?: true } }) =>
   api<{ ok: true }>(`/api/revenda/invite/${encodeURIComponent(token)}`, { json: body });
+export const acceptContract = (body: { version: number; typedName?: string; signedExternal?: true }) => api<{ ok: true }>('/api/revenda/contract', { json: body, retries: 1 });
 export const registerSale = (sale: SaleRequest, key: string) => api<{ sale: ResellerSale }>('/api/revenda/sales', { json: sale, headers: { 'Idempotency-Key': key }, retries: 2 });
 export const cancelSale = (id: string) => api<{ sale: ResellerSale }>(`/api/revenda/sales/${encodeURIComponent(id)}/cancel`, { json: {}, retries: 1 });

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, ChevronRight, Copy, ExternalLink, KeyRound, Plus } from 'lucide-react';
 import { Button, ButtonAnchor } from '../../components/ui/Button';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TextArea, TextField } from '../../components/ui/Field';
 import { WhatsAppIcon } from '../../components/ui/Icons';
 import { Chip } from '../../components/ui/Misc';
@@ -68,7 +69,7 @@ function ResellerRow({ item, onOpen }: { item: ResellerSummary; onOpen: () => vo
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{reseller.name}</span>
           <StatusPill status={reseller.status} />
-          {!reseller.hasPin && <span className="inline-flex min-h-6 items-center rounded-full border border-copper px-2.5 text-xs text-copper">Convite pendente</span>}
+          {!reseller.hasPin && reseller.status === 'ativa' && <span className="inline-flex min-h-6 items-center rounded-full border border-copper px-2.5 text-xs text-copper">Convite pendente</span>}
         </div>
         <p className="mt-1 text-sm text-ink-muted">
           {[reseller.city, reseller.uf].filter(Boolean).join('/') || '—'}
@@ -126,6 +127,7 @@ function KitSummary({ kit, sales }: { kit: Kit; sales: ResellerSale[] }) {
 function ResellerDetailView({ id, program, onClose }: { id: string; program: Program; onClose: () => void }) {
   const { state, reload } = useResellerDetail(id);
   const [sheet, setSheet] = useState<'kit' | 'settle' | 'edit' | null>(null);
+  const [ending, setEnding] = useState(false);
   const [invite, setInvite] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   if (state.status === 'loading') return <p className="py-8 text-center text-ink-muted" aria-busy="true">Carregando…</p>;
@@ -182,10 +184,10 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
               Marcar assinatura conferida
             </button>
           )}
-          {contractDue && reseller.contract && <span className="block text-danger">O contrato mudou: ela aceita a versão nova no próximo convite.</span>}
+          {contractDue && reseller.contract && <span className="block text-danger">O contrato mudou: ela aceita a versão nova no painel dela (as vendas ficam bloqueadas até lá).</span>}
         </dd>
         <dt className="text-ink-muted">Acesso</dt>
-        <dd>{reseller.hasPin ? `Painel ativo${reseller.lastSeenAt ? ` · visto ${formatDateTime(reseller.lastSeenAt)}` : ''}` : invitePendingUntil ? `Convite válido até ${formatDateTime(invitePendingUntil)}` : 'Sem convite válido'}</dd>
+        <dd>{reseller.status !== 'ativa' ? (reseller.status === 'pausada' ? 'Acesso pausado' : 'Acesso encerrado') : reseller.hasPin ? `Painel ativo${reseller.lastSeenAt ? ` · visto ${formatDateTime(reseller.lastSeenAt)}` : ''}` : invitePendingUntil ? `Convite válido até ${formatDateTime(invitePendingUntil)}` : 'Sem convite válido'}</dd>
       </dl>
       {acceptances[0] && (
         <details className="text-sm text-ink-muted">
@@ -310,11 +312,24 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
           </button>
         )}
         {reseller.status !== 'encerrada' && !open && (
-          <button type="button" className="min-h-11 self-start text-sm text-danger underline underline-offset-4" disabled={busy} onClick={() => void setStatus('encerrada')}>
+          <button type="button" className="min-h-11 self-start text-sm text-danger underline underline-offset-4" disabled={busy} onClick={() => setEnding(true)}>
             Encerrar parceria
           </button>
         )}
       </div>
+      <ConfirmDialog
+        open={ending}
+        title="Encerrar a parceria?"
+        confirmLabel="Encerrar parceria"
+        tone="danger"
+        onCancel={() => setEnding(false)}
+        onConfirm={() => {
+          setEnding(false);
+          void setStatus('encerrada');
+        }}
+      >
+        O acesso de {firstNameOf(reseller.name)} ao painel termina e o mostruário digital dela passa a mostrar só o contato da ÉKA. O histórico de maletas e vendas continua guardado, e dá para reativar depois.
+      </ConfirmDialog>
 
       <Sheet open={sheet === 'kit'} onClose={() => setSheet(null)} title={open ? 'Ajustar maleta' : `Maleta de ${firstNameOf(reseller.name)}`} side="right">
         {sheet === 'kit' && (
@@ -406,7 +421,7 @@ function EditReseller({ reseller, program, onDone }: { reseller: Reseller; progr
   );
 }
 
-const centsToInput = (c: number) => (c / 100).toFixed(2).replace('.', ',');
+const centsToInput = (c: number) => (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const inputToCents = (v: string) => parseBRL(v) ?? NaN;
 
 function ProgramPanel() {
@@ -438,7 +453,7 @@ function ProgramForm({ program, onSaved }: { program: Program; onSaved: () => vo
     const r = await saveProgram(next);
     setBusy(false);
     if (isError(r)) return setError(r.error);
-    toast(r.program.contract.version !== program.contract.version ? `Programa salvo. Contrato na versão ${r.program.contract.version}: as revendedoras aceitam a versão nova no próximo convite.` : 'Programa salvo.', { tone: 'success', duration: 8000 });
+    toast(r.program.contract.version !== program.contract.version ? `Programa salvo. Contrato na versão ${r.program.contract.version}: cada revendedora aceita a versão nova no painel dela antes de registrar vendas.` : 'Programa salvo.', { tone: 'success', duration: 8000 });
     onSaved();
   }
 

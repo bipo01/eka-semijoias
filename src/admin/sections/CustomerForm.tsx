@@ -91,7 +91,6 @@ export function CustomerFields({ draft, errors, onChange, short }: { draft: Cust
             autoComplete="off"
             autoCapitalize="characters"
             maxLength={2}
-            placeholder="MS"
             value={draft.uf}
             error={errors.uf}
             onChange={(e) => set('uf', e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase())}

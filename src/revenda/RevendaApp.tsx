@@ -26,7 +26,7 @@ import { maskPhone } from '../lib/lead';
 import { whatsappUrl } from '../lib/whatsapp';
 import { useCatalog } from '../store/catalog';
 import { toast } from '../store/ui';
-import { acceptInvite, cancelSale, fetchInvite, fetchMe, login, logout, registerSale, type InviteView, type Me } from './api';
+import { acceptContract, acceptInvite, cancelSale, fetchInvite, fetchMe, login, logout, registerSale, type InviteView, type Me } from './api';
 
 /*
  * /revenda — the reseller's own panel (docs/revenda/PLAN.md §3): login with
@@ -187,35 +187,17 @@ function InvitePage() {
       </div>
       <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-5">
         {c && (
-          <section aria-labelledby="contract-title" className="flex flex-col gap-3 rounded-[14px] bg-white p-5 shadow-[var(--shadow-1)]">
-            <h2 id="contract-title" className="font-display text-title">
-              1. {c.title}
-            </h2>
-            {c.mode === 'aceite' ? (
-              <>
-                <div tabIndex={0} aria-label="Texto do contrato" className="max-h-80 overflow-y-auto rounded-[10px] border border-line bg-ivory p-4 text-sm leading-relaxed whitespace-pre-line focus-visible:outline-2 focus-visible:outline-copper">
-                  {c.text}
-                </div>
-                <TextField label="Seu nome completo" autoComplete="name" value={typedName} onChange={(e) => setTypedName(e.target.value)} hint={`Como no cadastro: ${view.name}`} />
-                <label className="flex min-h-11 items-start gap-3 text-sm">
-                  <input type="checkbox" className="mt-1 size-5 accent-[var(--color-copper)]" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-                  <span>Li e aceito o contrato (versão {c.version}).</span>
-                </label>
-              </>
-            ) : (
-              <>
-                {c.url && (
-                  <ButtonAnchor href={c.url} target="_blank" rel="noopener noreferrer" variant="secondary" block>
-                    <ExternalLink size={18} strokeWidth={1.5} /> Abrir e assinar o contrato
-                  </ButtonAnchor>
-                )}
-                <label className="flex min-h-11 items-start gap-3 text-sm">
-                  <input type="checkbox" className="mt-1 size-5 accent-[var(--color-copper)]" checked={signed} onChange={(e) => setSigned(e.target.checked)} />
-                  <span>Já assinei o contrato.</span>
-                </label>
-              </>
-            )}
-          </section>
+          <ContractFields
+            contract={c}
+            heading={`1. ${c.title}`}
+            name={view.name}
+            typedName={typedName}
+            onTypedName={setTypedName}
+            agree={agree}
+            onAgree={setAgree}
+            signed={signed}
+            onSigned={setSigned}
+          />
         )}
         <section aria-labelledby="pin-title" className="flex flex-col gap-3 rounded-[14px] bg-white p-5 shadow-[var(--shadow-1)]">
           <h2 id="pin-title" className="font-display text-title">
@@ -231,6 +213,118 @@ function InvitePage() {
         </Button>
       </form>
     </Shell>
+  );
+}
+
+type ContractView = NonNullable<InviteView['contract']>;
+
+/** The contract to accept: the text, typed name and "li e aceito" (mode aceite), or the external link (mode link). */
+function ContractFields({
+  contract: c,
+  heading,
+  name,
+  typedName,
+  onTypedName,
+  agree,
+  onAgree,
+  signed,
+  onSigned,
+}: {
+  contract: ContractView;
+  heading: string;
+  name: string;
+  typedName: string;
+  onTypedName: (v: string) => void;
+  agree: boolean;
+  onAgree: (v: boolean) => void;
+  signed: boolean;
+  onSigned: (v: boolean) => void;
+}) {
+  return (
+    <section aria-labelledby="contract-title" className="flex flex-col gap-3 rounded-[14px] bg-white p-5 shadow-[var(--shadow-1)]">
+      <h2 id="contract-title" className="font-display text-title">
+        {heading}
+      </h2>
+      {c.mode === 'aceite' ? (
+        <>
+          <div tabIndex={0} aria-label="Texto do contrato" className="max-h-80 overflow-y-auto rounded-[10px] border border-line bg-ivory p-4 text-sm leading-relaxed whitespace-pre-line focus-visible:outline-2 focus-visible:outline-copper">
+            {c.text}
+          </div>
+          <TextField label="Seu nome completo" autoComplete="name" value={typedName} onChange={(e) => onTypedName(e.target.value)} hint={`Como no cadastro: ${name}`} />
+          <label className="flex min-h-11 items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-1 size-5 accent-[var(--color-copper)]" checked={agree} onChange={(e) => onAgree(e.target.checked)} />
+            <span>Li e aceito o contrato (versão {c.version}).</span>
+          </label>
+        </>
+      ) : (
+        <>
+          {c.url && (
+            <ButtonAnchor href={c.url} target="_blank" rel="noopener noreferrer" variant="secondary" block>
+              <ExternalLink size={18} strokeWidth={1.5} /> Abrir e assinar o contrato
+            </ButtonAnchor>
+          )}
+          <label className="flex min-h-11 items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-1 size-5 accent-[var(--color-copper)]" checked={signed} onChange={(e) => onSigned(e.target.checked)} />
+            <span>Já assinei o contrato.</span>
+          </label>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** An updated contract from the panel: sales wait until she accepts it. */
+function ContractUpdate({ me, onAccepted }: { me: Me; onAccepted: () => void }) {
+  const c = me.contractDue;
+  const [typedName, setTypedName] = useState('');
+  const [agree, setAgree] = useState(false);
+  const [signed, setSigned] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!c) return null;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (busy || !c) return;
+    setError(null);
+    if (c.mode === 'aceite' && (!agree || typedName.trim().split(/\s+/).length < 2)) return setError('Digite seu nome completo e marque que leu e aceita o contrato.');
+    if (c.mode === 'link' && !signed) return setError('Assine o contrato no link e confirme.');
+    setBusy(true);
+    try {
+      await acceptContract({ version: c.version, ...(c.mode === 'aceite' ? { typedName } : { signedExternal: true as const }) });
+      toast('Contrato aceito. Obrigada!', { tone: 'success' });
+      onAccepted();
+    } catch (err) {
+      setError(errorMessage(err));
+      // A newer version may have been published meanwhile: show it.
+      if (err instanceof ApiError && err.code === 'conflict') onAccepted();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-3 rounded-[14px] border border-copper bg-champagne/40 p-4">
+      <div>
+        <p className="font-medium">A ÉKA atualizou o contrato</p>
+        <p className="text-sm text-ink-muted">Leia e aceite a versão nova para continuar registrando vendas.</p>
+      </div>
+      <ContractFields
+        contract={c}
+        heading={c.title}
+        name={me.reseller.name}
+        typedName={typedName}
+        onTypedName={setTypedName}
+        agree={agree}
+        onAgree={setAgree}
+        signed={signed}
+        onSigned={setSigned}
+      />
+      {error && <ErrorText>{error}</ErrorText>}
+      <Button type="submit" block disabled={busy} aria-busy={busy}>
+        {busy ? 'Salvando…' : 'Aceitar contrato'}
+      </Button>
+    </form>
   );
 }
 
@@ -601,8 +695,9 @@ function PanelPage() {
         <p className="eyebrow text-ink-muted">Olá, {me.reseller.firstName}!</p>
         <h1 className="font-display text-display-m">Seu painel</h1>
       </div>
+      <ContractUpdate key={me.contractDue?.version ?? 0} me={me} onAccepted={load} />
       <Summary me={me} />
-      {me.kit && me.kit.lines.some((l) => l.available > 0) && (
+      {!me.contractDue && me.kit && me.kit.lines.some((l) => l.available > 0) && (
         <Button size="lg" block onClick={() => setSelling(true)}>
           <ShoppingBag size={19} strokeWidth={1.5} /> Registrar venda
         </Button>

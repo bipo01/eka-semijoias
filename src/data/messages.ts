@@ -185,7 +185,7 @@ export const MESSAGE_TYPE_INFO: Record<MessageType, MessageTypeInfo> = {
   },
   mostruario: {
     label: 'Pedido pelo mostruário',
-    description: 'A cliente toca em “Pedir” no mostruário digital de uma revendedora.',
+    description: 'A cliente toca em “Quero esta” no mostruário digital de uma revendedora.',
     group: 'revenda',
     vars: ['revendedora', 'peca', 'link_peca', 'loja'],
     sample: { peca: 'Brinco Gota Cristal (Dourado)' },

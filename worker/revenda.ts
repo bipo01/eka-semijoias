@@ -4,6 +4,7 @@ import { findVariant, galleryFor } from '../src/data/catalog';
 import type { Catalog } from '../src/data/schema';
 import {
   commissionFor,
+  type Program,
   earnings,
   kitState,
   kitValueCents,
@@ -124,14 +125,12 @@ async function readInvite(db: D1Database, token: string) {
 /** GET /api/revenda/invite/:token — what the first-access page shows. */
 export async function handleGetInvite(ctx: Context): Promise<Response> {
   const { reseller, program } = await readInvite(ctx.env.DB, ctx.params.token ?? '');
-  const c = program.contract;
-  const accepted = reseller.contract && reseller.contract.version >= c.version && reseller.contract.mode === c.mode;
   return json(
     {
       firstName: reseller.name.split(/\s+/)[0],
       name: reseller.name,
       hasPin: reseller.hasPin,
-      contract: accepted ? null : { mode: c.mode, title: c.title, version: c.version, ...(c.mode === 'aceite' ? { text: c.text } : { url: reseller.contractUrl ?? c.url }) },
+      contract: contractDue(reseller, program) ? contractView(reseller, program) : null,
     },
     { headers: { 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' } },
   );
@@ -161,32 +160,14 @@ export async function handleAcceptInvite(ctx: Context): Promise<Response> {
   if (problem) throw new HttpError('bad_request', problem, [{ path: 'pin', message: problem }]);
 
   const c = program.contract;
-  const due = !(reseller.contract && reseller.contract.version >= c.version && reseller.contract.mode === c.mode);
+  const due = contractDue(reseller, program);
   const at = nextStamp(stamp);
   const statements: D1PreparedStatement[] = [];
   const next: Reseller = { ...reseller, hasPin: true, updatedAt: at };
   if (due) {
-    const accept = input.data.contract;
-    if (!accept || accept.version !== c.version) throw new HttpError('conflict', 'O contrato foi atualizado. Leia a versão nova e aceite de novo.');
-    let typedName = '';
-    if (c.mode === 'aceite') {
-      typedName = (accept.typedName ?? '').replace(/\s+/g, ' ').trim();
-      const first = normalize(reseller.name).split(' ')[0] ?? '';
-      if (typedName.split(' ').length < 2 || !normalize(typedName).includes(first)) throw new HttpError('bad_request', 'Digite seu nome completo, como no cadastro, para aceitar o contrato.', [{ path: 'typedName', message: 'Nome completo' }]);
-    } else if (!accept.signedExternal) {
-      throw new HttpError('bad_request', 'Assine o contrato no link e confirme.');
-    }
-    const textHash = await sha256Hex(c.mode === 'aceite' ? `${c.title}\n${c.text}` : (reseller.contractUrl ?? c.url ?? ''));
-    next.contract = { acceptedAt: at, version: c.version, mode: c.mode };
-    statements.push(
-      // The exact text of every accepted version is kept, so the hash can always be checked later.
-      db
-        .prepare('INSERT OR IGNORE INTO contract_versions (version, title, mode, body, sha256, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
-        .bind(c.version, c.title, c.mode, c.mode === 'aceite' ? c.text : (reseller.contractUrl ?? c.url ?? ''), textHash, at),
-      db
-        .prepare('INSERT INTO contract_acceptances (id, reseller_id, accepted_at, version, text_sha256, typed_name, ip_hash, user_agent, mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)')
-        .bind(`acc_${randomToken().slice(0, 16)}`, reseller.id, at, c.version, textHash, typedName || reseller.name, ip, (ctx.request.headers.get('User-Agent') ?? '').slice(0, 300), c.mode),
-    );
+    const accepted = await acceptanceStatements(db, reseller, program, input.data.contract, at, ip, ctx.request.headers.get('User-Agent') ?? '');
+    next.contract = accepted.contract;
+    statements.push(...accepted.statements);
   }
   const salt = toHex(randomBytes(16));
   const session = await sessionStatements(db, reseller.id, now);
@@ -221,6 +202,83 @@ export async function handleAcceptInvite(ctx: Context): Promise<Response> {
   if (due) ctx.waitUntil(notifyOwner(env, ctx.url.origin, { title: 'Contrato de revendedora aceito', body: `${reseller.name.split(/\s+/)[0]} aceitou o contrato e já pode usar o painel.`, url: '/admin/revendedoras', tag: `rev-${reseller.id}` }));
   ctx.waitUntil(notifyLeads(env));
   return json({ ok: true }, { headers: { 'Set-Cookie': sessionCookie(env, session.token, SESSION_MS / 1000) } });
+}
+
+/** True when the reseller still has to accept the program's current contract. */
+export const contractDue = (reseller: Reseller, program: Program) =>
+  !(reseller.contract && reseller.contract.version >= program.contract.version && reseller.contract.mode === program.contract.mode);
+
+/** The contract as the reseller must see it (her own link in mode 'link'). */
+const contractView = (reseller: Reseller, program: Program) => {
+  const c = program.contract;
+  return { mode: c.mode, title: c.title, version: c.version, ...(c.mode === 'aceite' ? { text: c.text } : { url: reseller.contractUrl ?? c.url }) };
+};
+
+/**
+ * Validates an acceptance of the current contract and returns the evidence rows (the version's
+ * exact text, and the acceptance with typed name, network hash and browser) plus her new contract state.
+ */
+async function acceptanceStatements(
+  db: D1Database,
+  reseller: Reseller,
+  program: Program,
+  accept: { version: number; typedName?: string | undefined; signedExternal?: true | undefined } | undefined,
+  at: string,
+  ip: string,
+  userAgent: string,
+): Promise<{ statements: D1PreparedStatement[]; contract: NonNullable<Reseller['contract']> }> {
+  const c = program.contract;
+  if (!accept || accept.version !== c.version) throw new HttpError('conflict', 'O contrato foi atualizado. Leia a versão nova e aceite de novo.');
+  let typedName = '';
+  if (c.mode === 'aceite') {
+    typedName = (accept.typedName ?? '').replace(/\s+/g, ' ').trim();
+    const first = normalize(reseller.name).split(' ')[0] ?? '';
+    if (typedName.split(' ').length < 2 || !normalize(typedName).includes(first)) throw new HttpError('bad_request', 'Digite seu nome completo, como no cadastro, para aceitar o contrato.', [{ path: 'typedName', message: 'Nome completo' }]);
+  } else if (!accept.signedExternal) {
+    throw new HttpError('bad_request', 'Assine o contrato no link e confirme.');
+  }
+  const body = c.mode === 'aceite' ? c.text : (reseller.contractUrl ?? c.url ?? '');
+  const textHash = await sha256Hex(c.mode === 'aceite' ? `${c.title}\n${c.text}` : body);
+  return {
+    contract: { acceptedAt: at, version: c.version, mode: c.mode },
+    statements: [
+      // The exact text of every accepted version is kept, so the hash can always be checked later.
+      db.prepare('INSERT OR IGNORE INTO contract_versions (version, title, mode, body, sha256, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)').bind(c.version, c.title, c.mode, body, textHash, at),
+      db
+        .prepare('INSERT INTO contract_acceptances (id, reseller_id, accepted_at, version, text_sha256, typed_name, ip_hash, user_agent, mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)')
+        .bind(`acc_${randomToken().slice(0, 16)}`, reseller.id, at, c.version, textHash, typedName || reseller.name, ip, userAgent.slice(0, 300), c.mode),
+    ],
+  };
+}
+
+const contractAcceptSchema = z.object({ version: z.number().int(), typedName: z.string().max(120).optional(), signedExternal: z.literal(true).optional() });
+
+/** POST /api/revenda/contract { version, typedName | signedExternal } — accepts an updated contract from her panel. */
+export async function handleAcceptContract(ctx: Context): Promise<Response> {
+  const { reseller, stamp } = await requireReseller(ctx);
+  const db = ctx.env.DB;
+  const input = contractAcceptSchema.safeParse(await readJson(ctx.request, 2048));
+  if (!input.success) throw new HttpError('bad_request', 'Dados inválidos.');
+  const program = parseProgram((await withReadRetry(() => programStatement(db).first<{ data: string }>())) ?? undefined);
+  if (!contractDue(reseller, program)) return json({ ok: true });
+  const at = nextStamp(stamp);
+  const ip = await ipKey(pepper(ctx.env), ctx.request);
+  const accepted = await acceptanceStatements(db, reseller, program, input.data, at, ip, ctx.request.headers.get('User-Agent') ?? '');
+  const next: Reseller = { ...reseller, contract: accepted.contract, updatedAt: at };
+  try {
+    await db.batch([
+      resellerUnchanged(db, reseller.id, stamp),
+      ...accepted.statements,
+      db.prepare('UPDATE resellers SET updated_at = ?2, data = ?3 WHERE id = ?1').bind(reseller.id, at, JSON.stringify(next)),
+      db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'reseller.contract', `Contrato v${program.contract.version} aceito por ${reseller.id}`),
+    ]);
+  } catch (error) {
+    if (isGuardMiss(error)) throw new HttpError('conflict', 'Seus dados foram atualizados pela ÉKA neste instante. Tente de novo.');
+    throw toHttpError(error);
+  }
+  ctx.waitUntil(notifyLeads(ctx.env));
+  ctx.waitUntil(notifyOwner(ctx.env, ctx.url.origin, { title: 'Contrato de revendedora aceito', body: `${reseller.name.split(/\s+/)[0]} aceitou a versão ${program.contract.version} do contrato.`, url: '/admin/revendedoras', tag: `rev-${reseller.id}` }));
+  return json({ ok: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -294,10 +352,12 @@ export async function handleResellerMe(ctx: Context): Promise<Response> {
       db.prepare(`SELECT id, status, data FROM reseller_sales WHERE kit_id = (SELECT id FROM kits WHERE reseller_id = ?1 AND status = 'aberta') ORDER BY created_at DESC`).bind(reseller.id),
       db.prepare(`SELECT COALESCE(SUM(json_extract(data, '$.settlement.commissionCents')), 0) AS received FROM kits WHERE reseller_id = ?1 AND status = 'fechada'`).bind(reseller.id),
       db.prepare('SELECT body FROM catalog_snapshot WHERE id = 1'),
+      programStatement(db),
     ]),
   );
   const kits = ((results[0]?.results ?? []) as unknown as KitRow[]).map(toKit);
   const open = kits.find((k) => k.status === 'aberta') ?? null;
+  const program = parseProgram(results[4]?.results[0] as { data?: string } | undefined);
   const sales = ((results[1]?.results ?? []) as unknown as SaleRow[]).map(toSale);
   const closed = kits.filter((k) => k.status === 'fechada' && k.settlement);
   const soldCents = salesTotalCents(sales);
@@ -314,6 +374,8 @@ export async function handleResellerMe(ctx: Context): Promise<Response> {
   return json(
     {
       reseller: publicSelf(reseller),
+      // An updated contract waits for her acceptance (sales are refused until then).
+      contractDue: contractDue(reseller, program) ? contractView(reseller, program) : null,
       kit: open ? { ...open, lines: kitState(open, sales), valueCents: kitValueCents(open.items) } : null,
       sales,
       commission: open ? commissionFor(soldCents, open.tiers) : null,
@@ -347,12 +409,16 @@ export async function handleResellerSale(ctx: Context): Promise<Response> {
         db.prepare('SELECT request_hash, response FROM idempotency WHERE key = ?1').bind(idemKey),
         db.prepare(`SELECT ${KIT_COLUMNS} FROM kits WHERE reseller_id = ?1 AND status = 'aberta'`).bind(reseller.id),
         db.prepare(`SELECT id, status, data FROM reseller_sales WHERE kit_id = (SELECT id FROM kits WHERE reseller_id = ?1 AND status = 'aberta')`).bind(reseller.id),
+        programStatement(db),
       ]),
     );
     const replay = results[0]?.results[0] as { request_hash: string; response: string } | undefined;
     if (replay) {
       if (replay.request_hash !== requestHash) throw new HttpError('bad_request', 'Esta chave de envio já foi usada para outra venda.');
       return json(JSON.parse(replay.response), { status: 201 });
+    }
+    if (contractDue(reseller, parseProgram(results[3]?.results[0] as { data?: string } | undefined))) {
+      throw new HttpError('conflict', 'A ÉKA atualizou o contrato. Leia e aceite a versão nova no seu painel para registrar vendas.');
     }
     const kitRow = results[1]?.results[0] as KitRow | undefined;
     if (!kitRow) throw new HttpError('conflict', 'Você não tem uma maleta aberta agora. Fale com a ÉKA.');
