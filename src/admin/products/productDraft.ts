@@ -177,8 +177,8 @@ export function buildProduct(draft: ProductDraft, data: Catalog, now: string): B
   if (!name) errors.name = 'Informe o nome da peça.';
 
   const slug = effectiveSlug(draft, taken);
-  if (!slug) errors.slug = 'Informe o endereço da peça (letras, números e hífens).';
-  else if (taken.includes(slug)) errors.slug = 'Já existe outra peça com este endereço.';
+  if (!slug) errors.slug = 'Informe o link da peça (letras, números e hífens).';
+  else if (taken.includes(slug)) errors.slug = 'Já existe outra peça com este link.';
 
   if (!data.categories.some((c) => c.id === draft.categoryId)) errors.categoryId = 'Escolha uma categoria.';
 

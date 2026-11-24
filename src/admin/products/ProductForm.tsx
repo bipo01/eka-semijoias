@@ -13,6 +13,7 @@ import { slugify, uniqueSlug } from '../../lib/slug';
 import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
 import { FormSection, SwitchRow } from '../FormBits';
+import { LinkField } from '../LinkField';
 import { adminPath } from '../lib/paths';
 import { save } from '../lib/persist';
 import { PhotoManager } from './PhotoManager';
@@ -206,6 +207,7 @@ export function ProductForm({ source }: { source: FormSource }) {
           label="Nome da peça"
           required
           maxLength={120}
+          autoComplete="off"
           value={draft.name}
           onChange={(e) => {
             set('name', e.target.value);
@@ -213,20 +215,23 @@ export function ProductForm({ source }: { source: FormSource }) {
           }}
           error={errors.name}
         />
-        <TextField
-          label="Endereço da peça"
-          required
-          maxLength={80}
+        <LinkField
+          base="/produto/"
+          noun="peça"
+          slug={slug}
           value={draft.slugEdited ? draft.slug : slug}
-          onChange={(e) => {
-            update((d) => ({ ...d, slug: e.target.value.toLowerCase(), slugEdited: true }));
+          edited={draft.slugEdited}
+          isNew={draft.isNew}
+          error={errors.slug}
+          onChange={(value) => {
+            update((d) => ({ ...d, slug: value, slugEdited: true }));
             clearError('slug');
           }}
           onBlur={() => draft.slugEdited && set('slug', slugify(draft.slug))}
-          error={errors.slug}
-          hint={`Aparece no link: …/produto/${slug || 'nome-da-peca'}`}
-          autoCapitalize="none"
-          spellCheck={false}
+          onFollowName={() => {
+            update((d) => ({ ...d, slug: '', slugEdited: false }));
+            clearError('slug');
+          }}
         />
         {categories.length ? (
           <SelectField label="Categoria" required value={draft.categoryId} onChange={(e) => set('categoryId', e.target.value)} error={errors.categoryId}>

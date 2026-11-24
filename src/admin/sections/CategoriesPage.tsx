@@ -10,6 +10,7 @@ import type { Catalog, Category } from '../../data/schema';
 import { productImageSources } from '../../lib/assets';
 import { newId } from '../../lib/id';
 import { slugify, uniqueSlug } from '../../lib/slug';
+import { LinkField } from '../LinkField';
 import { useCatalog } from '../../store/catalog';
 import { EmptyState, RowActions } from '../FormBits';
 import { save } from '../lib/persist';
@@ -49,8 +50,8 @@ function CategoryEditor({ editing, onClose }: { editing: Editing; onClose: () =>
     if (busy) return;
     const next: typeof errors = {};
     if (!name.trim()) next.name = 'Informe o nome da categoria.';
-    if (!effectiveSlug) next.slug = 'Informe o endereço (letras, números e hífens).';
-    else if (taken.includes(effectiveSlug)) next.slug = 'Já existe outra categoria com este endereço.';
+    if (!effectiveSlug) next.slug = 'Informe o link (letras, números e hífens).';
+    else if (taken.includes(effectiveSlug)) next.slug = 'Já existe outra categoria com este link.';
     setErrors(next);
     if (Object.keys(next).length) return;
     const category: Category = { id: editing.category.id, slug: effectiveSlug, name: name.trim(), order: editing.category.order, ...(imageId ? { imageId } : {}) };
@@ -87,21 +88,26 @@ function CategoryEditor({ editing, onClose }: { editing: Editing; onClose: () =>
       }
     >
       <div className="flex flex-col gap-4 pt-1">
-        <TextField label="Nome" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
-        <TextField
-          label="Endereço"
-          required
-          maxLength={80}
+        <TextField label="Nome" required maxLength={60} autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
+        <LinkField
+          base="/catalogo/"
+          noun="categoria"
+          slug={effectiveSlug}
           value={slugEdited ? slug : effectiveSlug}
-          onChange={(e) => {
-            setSlug(e.target.value.toLowerCase());
+          edited={slugEdited}
+          isNew={editing.isNew}
+          error={errors.slug}
+          onChange={(value) => {
+            setSlug(value);
             setSlugEdited(true);
+            setErrors((e) => ({ ...e, slug: undefined }));
           }}
           onBlur={() => slugEdited && setSlug(slugify(slug))}
-          error={errors.slug}
-          hint={`Aparece no link: …/catalogo/${effectiveSlug || 'nome'}`}
-          autoCapitalize="none"
-          spellCheck={false}
+          onFollowName={() => {
+            setSlug('');
+            setSlugEdited(false);
+            setErrors((e) => ({ ...e, slug: undefined }));
+          }}
         />
         <PhotoPicker
           label="Foto da categoria"

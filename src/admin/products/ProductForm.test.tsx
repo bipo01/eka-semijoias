@@ -63,7 +63,7 @@ describe('buildProduct', () => {
     const data = createSeed();
     const draft = { ...draftFromProduct(data.products[1]!), slug: data.products[0]!.slug };
     const result = buildProduct(draft, data, NOW);
-    expect(!result.ok && result.errors.slug).toBe('Já existe outra peça com este endereço.');
+    expect(!result.ok && result.errors.slug).toBe('Já existe outra peça com este link.');
   });
 
   it('duplicates with new ids and keeps finish photos linked', () => {
