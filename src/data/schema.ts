@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { imageSrc } from './imageSrc';
+import { siteContentSchema } from './content';
 import { normalizePixKey, pixKeyKind } from '../lib/pix';
 import { messageSettingsSchema } from './messages';
 
@@ -22,23 +24,7 @@ const shortText = (max: number) => z.string().max(max);
 const isoDate = z.string().max(40).refine((v) => !Number.isNaN(Date.parse(v)), 'Data inválida');
 const cents = z.number().int().nonnegative().max(100_000_000);
 
-/** Uploaded photo stored by the backend, addressed by the SHA-256 of its bytes. */
-export const MEDIA_KEY_PATTERN = /^media\/[a-f0-9]{64}\.(webp|jpg|png)$/;
-const ASSET_STEM_PATTERN = /^images\/[a-z0-9/_-]+$/;
-const DATA_URL_PATTERN = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
-
-export const isDataUrl = (src: string) => src.startsWith('data:');
-
-/**
- * Image sources are a public asset stem shipped with the site
- * ("images/products/p01-brinco-gota-cristal" → -480/-960.webp), an uploaded
- * photo ("media/<sha256>.webp"), or — only in the admin before saving — a data
- * URL produced by the photo pipeline. The server refuses data URLs.
- */
-export const imageSrc = z
-  .string()
-  .max(1_500_000)
-  .refine((v) => ASSET_STEM_PATTERN.test(v) || MEDIA_KEY_PATTERN.test(v) || DATA_URL_PATTERN.test(v), 'Imagem inválida');
+export { ASSET_STEM_PATTERN, DATA_URL_PATTERN, imageSrc, isDataUrl, MEDIA_KEY_PATTERN } from './imageSrc';
 
 export const productImageSchema = z.object({
   id,
@@ -174,6 +160,8 @@ export const catalogSchema = z.object({
   collections: z.array(collectionSchema).max(MAX_COLLECTIONS),
   settings: settingsSchema,
   stock: stockMapSchema.optional(),
+  /** Site texts and images the owner edited (missing sections show the built-in text, see src/content/defaults.ts). */
+  content: siteContentSchema.optional(),
 });
 
 /** Full backup: the catalog plus reseller leads. */

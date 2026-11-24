@@ -1,4 +1,5 @@
 import { jsonEqual, type Change, type EntityKind } from '../src/data/changes';
+import { SECTION_LABEL, type SectionId } from '../src/data/content';
 import type { Catalog } from '../src/data/schema';
 
 /* Per-entity conflict detection for admin writes (pure; unit-tested). */
@@ -14,10 +15,12 @@ export interface ConflictState {
   /** entityKey → catalog version of its deletion */
   tombstones: Map<string, number>;
   settingsVersion: number;
+  /** section id → catalog version of its last save or restore (rows `site:<id>` in app_config) */
+  contentVersions: Map<SectionId, number>;
 }
 
 interface Conflict {
-  kind: EntityKind | 'settings';
+  kind: EntityKind | 'settings' | 'content';
   id?: string;
   name?: string;
   reason: 'changed' | 'deleted';
@@ -35,6 +38,15 @@ export function findConflicts(state: ConflictState, changes: Change[], baseVersi
   for (const change of changes) {
     if (change.kind === 'settings') {
       if (state.settingsVersion > baseVersion && !jsonEqual(state.catalog.settings, change.data)) conflicts.push({ kind: 'settings', reason: 'changed' });
+      continue;
+    }
+    if (change.kind === 'content') {
+      // A section changed (or was restored to the built-in text) after the client loaded it.
+      const rowVersion = state.contentVersions.get(change.id);
+      if (rowVersion === undefined || rowVersion <= baseVersion) continue;
+      const current = state.catalog.content?.[change.id];
+      const same = change.op === 'delete' ? current === undefined : jsonEqual(current, change.data);
+      if (!same) conflicts.push({ kind: 'content', id: change.id, name: SECTION_LABEL[change.id], reason: 'changed' });
       continue;
     }
     const key = entityKey(change.kind, change.id);
@@ -56,7 +68,7 @@ export function findConflicts(state: ConflictState, changes: Change[], baseVersi
 
 export function conflictMessage(conflicts: Conflict[]): string {
   const first = conflicts[0]!;
-  const what = first.kind === 'settings' ? 'as informações da loja' : first.name ? `“${first.name}”` : 'um item que você editou';
+  const what = first.kind === 'settings' ? 'as informações da loja' : first.kind === 'content' ? `a seção “${first.name}”` : first.name ? `“${first.name}”` : 'um item que você editou';
   const verb = first.reason === 'deleted' ? 'excluiu' : 'alterou';
   const more = conflicts.length > 1 ? ` e mais ${conflicts.length - 1} ${conflicts.length === 2 ? 'item' : 'itens'}` : '';
   return `Outro aparelho ${verb} ${what}${more} depois que você abriu esta tela. Recarregue para ver a versão atual e refaça a alteração.`;

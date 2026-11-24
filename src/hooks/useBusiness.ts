@@ -1,4 +1,5 @@
 import { business } from '../config/business';
+import { factsOf } from '../content/defaults';
 import { useCatalog } from '../store/catalog';
 
 export interface ResolvedBusiness {
@@ -14,14 +15,18 @@ export interface ResolvedBusiness {
   hypoallergenic: boolean | null;
   shipsNationwide: boolean | null;
   installments: number | null;
+  /** Plating as the owner describes it (e.g. "banho de ouro 18k"), null when not informed. */
+  plating: string | null;
   resellerProgram: typeof business.resellerProgram;
 }
 
 const orNull = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
 
-/** Business facts with the admin-editable settings layered over src/config/business.ts. */
+/** Business facts: the admin-editable settings and "O que a loja oferece" (content section loja) over src/config/business.ts. */
 export function useBusiness(): ResolvedBusiness {
   const settings = useCatalog((s) => s.data.settings);
+  const content = useCatalog((s) => s.data.content);
+  const facts = factsOf(settings, content);
   const instagram = orNull(settings.instagram);
   return {
     whatsapp: orNull(settings.whatsapp),
@@ -32,10 +37,11 @@ export function useBusiness(): ResolvedBusiness {
     openingHours: orNull(settings.openingHours),
     warrantyMonths: settings.warrantyMonths > 0 ? settings.warrantyMonths : null,
     warrantyTerms: orNull(settings.warrantyTerms),
-    hypoallergenic: business.hypoallergenic,
-    shipsNationwide: business.shipsNationwide,
-    installments: business.installments,
-    resellerProgram: business.resellerProgram,
+    hypoallergenic: facts.hypoallergenic,
+    shipsNationwide: facts.shipsNationwide,
+    installments: facts.installments,
+    plating: facts.plating,
+    resellerProgram: { ...business.resellerProgram, consignment: facts.consignment, noUpfrontInvestment: facts.noUpfrontInvestment },
   };
 }
 

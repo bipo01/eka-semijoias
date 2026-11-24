@@ -90,6 +90,7 @@ describe('conflict detection', () => {
     versions: new Map([[`product:${p.id}`, 5]]),
     tombstones: new Map([['product:gone', 7]]),
     settingsVersion: 3,
+    contentVersions: new Map(),
     ...overrides,
   });
   const upsert = (data = { ...p, price: p.price + 1 }): Change => ({ kind: 'product', op: 'upsert', id: data.id, data });

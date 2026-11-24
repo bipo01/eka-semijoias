@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { contentImageSources, SECTION_IDS, sectionSchemas, type SectionId, type Sections, type SiteContent } from './content';
 import { categorySchema, collectionSchema, MAX_CATEGORIES, MAX_COLLECTIONS, MAX_PRODUCTS, productSchema, settingsSchema, type Catalog, type Category, type Collection, type Product, type Settings } from './schema';
 
 /*
@@ -15,7 +16,9 @@ export type Change =
   | { kind: 'category'; op: 'upsert'; id: string; data: Category }
   | { kind: 'collection'; op: 'upsert'; id: string; data: Collection }
   | { kind: EntityKind; op: 'delete'; id: string }
-  | { kind: 'settings'; op: 'upsert'; data: Settings };
+  | { kind: 'settings'; op: 'upsert'; data: Settings }
+  | { kind: 'content'; op: 'upsert'; id: SectionId; data: Sections[SectionId] }
+  | { kind: 'content'; op: 'delete'; id: SectionId };
 
 export interface ChangeSet {
   baseVersion: number;
@@ -26,7 +29,7 @@ export interface ChangeSet {
  * Upper bound per request: a whole catalog (every product, category and
  * collection plus settings), so imports and restores are one atomic change set.
  */
-export const MAX_CHANGES = MAX_PRODUCTS + MAX_CATEGORIES + MAX_COLLECTIONS + 1;
+export const MAX_CHANGES = MAX_PRODUCTS + MAX_CATEGORIES + MAX_COLLECTIONS + 1 + SECTION_IDS.length;
 
 const id = z.string().min(1).max(64);
 const changeSchema = z.discriminatedUnion('kind', [
@@ -36,11 +39,36 @@ const changeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('settings'), op: z.literal('upsert'), data: settingsSchema }),
 ]);
 const deleteSchema = z.object({ kind: z.enum(['product', 'category', 'collection']), op: z.literal('delete'), id });
+const sectionId = z.enum(SECTION_IDS);
+/** A content section, validated with the schema of its id (unknown ids are refused). */
+const contentUpsertSchema = z
+  .object({ kind: z.literal('content'), op: z.literal('upsert'), id: sectionId, data: z.unknown() })
+  .transform((change, ctx) => {
+    const parsed = sectionSchemas[change.id].safeParse(change.data);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: ['data', ...issue.path.map((p) => (typeof p === 'symbol' ? String(p) : p))] });
+      return z.NEVER;
+    }
+    return { kind: 'content' as const, op: 'upsert' as const, id: change.id, data: parsed.data as Sections[SectionId] };
+  });
+const contentDeleteSchema = z.object({ kind: z.literal('content'), op: z.literal('delete'), id: sectionId });
+const catalogChangeSchema = z.union([deleteSchema, changeSchema]);
+/** Routes each change to its schema by kind/op, so a content problem reports the field (not "invalid union"). */
+const changeItemSchema = z.unknown().transform((value, ctx): Change => {
+  const v = (value ?? {}) as { kind?: unknown; op?: unknown };
+  const schema = v.kind === 'content' ? (v.op === 'delete' ? contentDeleteSchema : contentUpsertSchema) : catalogChangeSchema;
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path.map((p) => (typeof p === 'symbol' ? String(p) : p)) });
+    return z.NEVER;
+  }
+  return parsed.data as Change;
+});
 
 export const changeSetSchema = z.object({
   baseVersion: z.number().int().min(0),
   changes: z
-    .array(z.union([deleteSchema, changeSchema]))
+    .array(changeItemSchema)
     .min(1)
     .max(MAX_CHANGES),
 });
@@ -81,6 +109,12 @@ export function diffCatalog(prev: Catalog, next: Catalog): Change[] {
     ...diffList('product', prev.products, next.products),
   ];
   if (!jsonEqual(prev.settings, next.settings)) changes.push({ kind: 'settings', op: 'upsert', data: next.settings });
+  for (const sid of SECTION_IDS) {
+    const before = prev.content?.[sid];
+    const after = next.content?.[sid];
+    if (after !== undefined && !jsonEqual(before, after)) changes.push({ kind: 'content', op: 'upsert', id: sid, data: after });
+    else if (after === undefined && before !== undefined) changes.push({ kind: 'content', op: 'delete', id: sid });
+  }
   return changes;
 }
 
@@ -102,6 +136,13 @@ export function applyChanges(catalog: Catalog, changes: Change[]): Catalog {
       next.settings = change.data;
       continue;
     }
+    if (change.kind === 'content') {
+      const content: SiteContent = { ...next.content };
+      if (change.op === 'delete') delete content[change.id];
+      else (content as Record<SectionId, unknown>)[change.id] = change.data;
+      next.content = content;
+      continue;
+    }
     const list = next[listKey[change.kind]] as { id: string }[];
     const index = list.findIndex((e) => e.id === change.id);
     if (change.op === 'delete') {
@@ -117,16 +158,16 @@ export function applyChanges(catalog: Catalog, changes: Change[]): Catalog {
 
 /** Orders changes parents-first and splits them into request-sized chunks (normally one). */
 export function chunkChanges(changes: Change[], size = MAX_CHANGES): Change[][] {
-  const rank = (c: Change) => (c.op === 'delete' ? (c.kind === 'product' ? 3 : 4) : c.kind === 'product' ? 2 : c.kind === 'settings' ? 0 : 1);
+  const rank = (c: Change) => (c.kind === 'settings' || c.kind === 'content' ? 0 : c.op === 'delete' ? (c.kind === 'product' ? 3 : 4) : c.kind === 'product' ? 2 : 1);
   const ordered = [...changes].sort((a, b) => rank(a) - rank(b));
   const chunks: Change[][] = [];
   for (let i = 0; i < ordered.length; i += size) chunks.push(ordered.slice(i, i + size));
   return chunks;
 }
 
-/** Every image source referenced by a catalog (products and collection heroes). */
-export function imageSourcesOf(catalog: Pick<Catalog, 'products' | 'collections'>): string[] {
-  const out: string[] = [];
+/** Every image source referenced by a catalog (products, collection heroes and site content). */
+export function imageSourcesOf(catalog: Pick<Catalog, 'products' | 'collections'> & { content?: SiteContent | undefined }): string[] {
+  const out: string[] = [...contentImageSources(catalog.content)];
   for (const p of catalog.products) for (const img of p.images) out.push(img.src, ...(img.thumb ? [img.thumb] : []));
   for (const c of catalog.collections) if (c.heroImage) out.push(c.heroImage);
   return out;

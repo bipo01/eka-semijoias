@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { contentImageSources, mapSectionImages, SECTION_IDS, type SectionId, type SiteContent } from '../data/content';
 import { business } from '../config/business';
 import { chunkChanges, diffCatalog, type Change } from '../data/changes';
 import { validateCatalog } from '../data/integrity';
@@ -141,6 +142,7 @@ async function uploadPhotos(catalog: Catalog, onProgress?: (message: string) => 
   const pending = new Set<string>();
   for (const p of catalog.products) for (const img of p.images) for (const src of [img.src, img.thumb]) if (src && isDataUrl(src)) pending.add(src);
   for (const c of catalog.collections) if (c.heroImage && isDataUrl(c.heroImage)) pending.add(c.heroImage);
+  for (const src of contentImageSources(catalog.content)) if (isDataUrl(src)) pending.add(src);
   if (!pending.size) return catalog;
   const uploaded = new Map<string, string>();
   let done = 0;
@@ -160,7 +162,19 @@ async function uploadPhotos(catalog: Catalog, onProgress?: (message: string) => 
         : p,
     ),
     collections: catalog.collections.map((c) => (c.heroImage && uploaded.has(c.heroImage) ? { ...c, heroImage: swap(c.heroImage) } : c)),
+    ...(catalog.content ? { content: swapContentImages(catalog.content, swap) } : {}),
   };
+}
+
+/** The site content with uploaded photos in place of their data URLs. */
+function swapContentImages(content: SiteContent, swap: (src: string) => string): SiteContent {
+  const out: SiteContent = {};
+  for (const sid of SECTION_IDS) {
+    const data = content[sid];
+    if (data === undefined) continue;
+    (out as Record<SectionId, unknown>)[sid] = mapSectionImages(sid, data, (img) => ({ ...img, src: swap(img.src), ...(img.thumb ? { thumb: swap(img.thumb) } : {}) }));
+  }
+  return out;
 }
 
 /**
