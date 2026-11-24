@@ -63,11 +63,14 @@ export function ShowcasePage() {
   const ask = (item?: ShowcaseItem) =>
     whatsappUrl(
       contact,
-      compose('mostruario', {
-        revendedora: view?.whatsapp ? view.firstName : '',
-        peca: item ? `${item.name} (${FINISH_LABEL[item.finish]}${item.size ? `, ${sizeLabel(item.size)}` : ''})` : 'uma peça do mostruário',
-        link_peca: item ? `${window.location.origin}/produto/${item.slug}` : '',
-      }),
+      item
+        ? compose('mostruario', {
+            revendedora: view?.whatsapp ? view.firstName : '',
+            peca: `${item.name} (${FINISH_LABEL[item.finish]}${item.size ? `, ${sizeLabel(item.size)}` : ''})`,
+            link_peca: `${window.location.origin}/produto/${item.slug}`,
+          })
+        : // No piece chosen: the site's general contact message.
+          compose('contato', {}),
     );
 
   return (

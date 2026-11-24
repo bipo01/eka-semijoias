@@ -247,7 +247,7 @@ function ContractFields({
       </h2>
       {c.mode === 'aceite' ? (
         <>
-          <div tabIndex={0} aria-label="Texto do contrato" className="max-h-80 overflow-y-auto rounded-[10px] border border-line bg-ivory p-4 text-sm leading-relaxed whitespace-pre-line focus-visible:outline-2 focus-visible:outline-copper">
+          <div tabIndex={0} aria-label="Texto do contrato" className="max-h-80 overflow-y-auto rounded-[10px] border border-line bg-ivory p-4 text-sm leading-relaxed whitespace-pre-line [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-copper">
             {c.text}
           </div>
           <TextField label="Seu nome completo" autoComplete="name" value={typedName} onChange={(e) => onTypedName(e.target.value)} hint={`Como no cadastro: ${name}`} />
@@ -428,7 +428,7 @@ function SaleMessage({ sale, me }: { sale: ResellerSale; me: Me }) {
   const number = sale.customer?.whatsapp ? `55${sale.customer.whatsapp}` : null;
   return (
     <div className="flex flex-col gap-3">
-      <pre className="max-h-64 overflow-auto rounded-[12px] border border-line bg-white p-4 text-sm leading-relaxed whitespace-pre-wrap">{text}</pre>
+      <pre className="max-h-64 overflow-auto rounded-[12px] border border-line bg-white p-4 text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{text}</pre>
       <ButtonAnchor href={whatsappUrl(number, text)} block>
         <WhatsAppIcon size={19} /> {number ? 'Enviar para a cliente' : 'Enviar no WhatsApp'}
       </ButtonAnchor>
