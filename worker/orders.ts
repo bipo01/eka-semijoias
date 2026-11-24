@@ -19,7 +19,6 @@ import {
   type OrderItem,
   type OrderStatus,
   type PricingProblem,
-  type StockMove,
 } from '../src/data/orders';
 import { hitStatement, ipKey, pruneThrottle, requireSession, retryAfter } from './auth';
 import { ensureSeeded, IDEMPOTENCY_TTL_MS, parseSnapshotBody, WRITE_ATTEMPTS } from './catalog';
@@ -31,9 +30,8 @@ import { notifyOwner, orderNotice } from './push';
 import { cancelMpPix, mpEnabled } from './mercadopago';
 import type { Context } from './router';
 import { publishStatements, rowKey, type StockState } from './stock';
-import { combosOf, type StockRow } from '../src/data/stock';
-import { sizeLabel } from '../src/data/catalog';
-import { FINISH_LABEL, type Finish } from '../src/data/schema';
+import { planStock } from './stockPlan';
+import type { StockRow } from '../src/data/stock';
 
 /*
  * Orders. Public: POST /api/orders registers what the bag holds, priced by
@@ -262,95 +260,7 @@ async function readOrderAndStock(db: D1Database, id: string): Promise<{ order: O
 
 export const unchanged = (db: D1Database, id: string, stamp: string) => guard(db, '(SELECT updated_at FROM orders WHERE id = ?1) = ?2', id, stamp);
 
-/** True when a stock move applies: the product is tracked and the finish/size still exists. */
-function counted(state: StockState, move: StockMove): boolean {
-  if (!state.tracked.has(move.productId)) return false;
-  const product = state.catalog.products.find((p) => p.id === move.productId);
-  return !!product && combosOf(product).some((c) => c.variantId === move.variantId && c.size === move.size);
-}
-
 const statusSchema = z.object({ from: z.enum(ORDER_STATUSES), to: z.enum(ORDER_STATUSES) });
-
-/** "Anel Solitário, Dourado, aro 16" for stock messages (labels, never internal ids). */
-const describe = (m: { name: string; size: string }, finish: Finish) => [m.name, FINISH_LABEL[finish], m.size && sizeLabel(m.size)].filter(Boolean).join(', ');
-
-/** A stock movement tied to an order by id (the number is read in the same batch, so a new order's works too). */
-function orderMovement(db: D1Database, at: string, move: { productId: string; variantId: string; size: string }, delta: number, orderId: string): D1PreparedStatement {
-  return db
-    .prepare(
-      `INSERT INTO stock_movements (at, product_id, variant_id, size, delta, qty_after, reason, order_number)
-       SELECT ?1, ?2, ?3, ?4, ?5, qty, ?6, (SELECT number FROM orders WHERE id = ?7) FROM stock_levels WHERE product_id = ?2 AND variant_id = ?3 AND size = ?4`,
-    )
-    .bind(at, move.productId, move.variantId, move.size, delta, delta < 0 ? 'pedido' : 'devolucao', orderId);
-}
-
-interface StockPlan {
-  /** Guarded updates and movements, net per combination. Empty when nothing moves. */
-  statements: D1PreparedStatement[];
-  /** Every stock row after the change (for the snapshot). */
-  rows: StockRow[];
-  /** What the order holds afterwards (its new `stockMoves`). */
-  taken: StockMove[];
-  /** pt-BR lines for combinations without enough units. */
-  problems: string[];
-}
-
-/**
- * Gives back `give` and takes `take` (only combinations still under stock control), netted per
- * combination: swapping a piece in a confirmed order moves only the difference, and every decrease
- * is guarded (`qty >= n`) besides the CHECK on the table and the catalog-version guard.
- */
-function planStock(db: D1Database, state: StockState, at: string, orderId: string, give: StockMove[], take: StockMove[], items: OrderItem[]): StockPlan {
-  const before = new Map(state.rows.map((r) => [rowKey(r.product_id, r.variant_id, r.size), r.qty]));
-  const qty = new Map(before);
-  const touched = new Map<string, StockMove>();
-  for (const move of give) {
-    if (!counted(state, move)) continue;
-    const key = rowKey(move.productId, move.variantId, move.size);
-    qty.set(key, (qty.get(key) ?? 0) + move.qty);
-    touched.set(key, move);
-  }
-  const taken: StockMove[] = [];
-  const problems: string[] = [];
-  for (const move of take) {
-    if (!counted(state, move)) continue;
-    const key = rowKey(move.productId, move.variantId, move.size);
-    const have = qty.get(key) ?? 0;
-    if (have < move.qty) {
-      const item = items.find((i) => i.productId === move.productId && i.variantId === move.variantId && (i.size ?? '') === move.size);
-      problems.push(`${item ? describe({ name: item.name, size: move.size }, item.finish) : 'Peça'}: pedido ${move.qty}, disponível ${have}`);
-      continue;
-    }
-    qty.set(key, have - move.qty);
-    taken.push(move);
-    touched.set(key, move);
-  }
-  const rows = new Map(state.rows.map((r) => [rowKey(r.product_id, r.variant_id, r.size), r]));
-  const statements: D1PreparedStatement[] = [];
-  for (const [key, move] of touched) {
-    const after = qty.get(key) ?? 0;
-    const delta = after - (before.get(key) ?? 0);
-    if (!delta) continue;
-    rows.set(key, { product_id: move.productId, variant_id: move.variantId, size: move.size, qty: after });
-    if (delta < 0) {
-      statements.push(
-        guard(db, '(SELECT qty FROM stock_levels WHERE product_id = ?1 AND variant_id = ?2 AND size = ?3) >= ?4', move.productId, move.variantId, move.size, -delta),
-        db.prepare('UPDATE stock_levels SET qty = qty + ?4, updated_at = ?5 WHERE product_id = ?1 AND variant_id = ?2 AND size = ?3').bind(move.productId, move.variantId, move.size, delta, at),
-      );
-    } else {
-      statements.push(
-        db
-          .prepare(
-            `INSERT INTO stock_levels (product_id, variant_id, size, qty, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT (product_id, variant_id, size) DO UPDATE SET qty = qty + excluded.qty, updated_at = excluded.updated_at`,
-          )
-          .bind(move.productId, move.variantId, move.size, delta, at),
-      );
-    }
-    statements.push(orderMovement(db, at, move, delta, orderId));
-  }
-  return { statements, rows: [...rows.values()], taken, problems };
-}
 
 /** pt-BR sentence for pricing problems of an order the owner registers or edits. */
 function ownerPricingMessage(problems: PricingProblem[]): string {
@@ -395,7 +305,7 @@ export async function handleOrderStatus(ctx: Context): Promise<Response> {
 
     if (taking || giving) {
       const state = stock();
-      const plan = planStock(db, state, at, order.id, giving ? (order.stockMoves ?? []) : [], taking ? movesOf(order.items) : [], order.items);
+      const plan = planStock(db, state, at, { orderId: order.id }, giving ? (order.stockMoves ?? []) : [], taking ? movesOf(order.items) : [], order.items);
       if (plan.problems.length) {
         throw new HttpError('conflict', `Estoque insuficiente para confirmar: ${plan.problems.join('; ')}. Ajuste o estoque ou o pedido.`, { stock: plan.problems });
       }
@@ -563,7 +473,7 @@ export async function handleCreateManualOrder(ctx: Context): Promise<Response> {
     const stockStatements: D1PreparedStatement[] = [];
     let publish: ReturnType<typeof publishStatements> | null = null;
     if (confirmed) {
-      const plan = planStock(db, state, at, order.id, [], movesOf(order.items), order.items);
+      const plan = planStock(db, state, at, { orderId: order.id }, [], movesOf(order.items), order.items);
       if (plan.problems.length) throw new HttpError('conflict', `Estoque insuficiente: ${plan.problems.join('; ')}. Ajuste o estoque ou registre como “Em negociação”.`, { stock: plan.problems });
       order.stockMoves = plan.taken;
       if (plan.statements.length) {
@@ -700,7 +610,7 @@ export async function handleEditOrderItems(ctx: Context): Promise<Response> {
         const extra = m.qty - before.get(key)!;
         return extra > 0 ? [{ ...m, qty: extra }] : [];
       });
-      const plan = planStock(db, state, at, order.id, order.stockMoves ?? [], take, items);
+      const plan = planStock(db, state, at, { orderId: order.id }, order.stockMoves ?? [], take, items);
       if (plan.problems.length) throw new HttpError('conflict', `Estoque insuficiente: ${plan.problems.join('; ')}. Ajuste o estoque ou o pedido.`, { stock: plan.problems });
       next.stockMoves = plan.taken;
       if (plan.statements.length) {

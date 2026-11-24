@@ -16,6 +16,7 @@ import { PinGate } from './PinGate';
 import { ProductsPage } from './products/ProductsPage';
 import { ProductFormRoute } from './products/ProductFormRoute';
 import { CategoriesPage } from './sections/CategoriesPage';
+import { CustomersPage } from './sections/CustomersPage';
 import { LeadsPage } from './sections/LeadsPage';
 import { OrdersPage } from './sections/OrdersPage';
 import { MessagesPage } from './sections/MessagesPage';
@@ -118,6 +119,7 @@ export default function AdminApp() {
         <Route element={<AdminShell />}>
           <Route index element={<Navigate to={`${ADMIN_BASE}/pedidos`} replace />} />
           <Route path="pedidos" element={<OrdersPage />} />
+          <Route path="clientes" element={<CustomersPage />} />
           <Route path="estoque" element={<StockPage />} />
           <Route path="relatorio" element={<ReportPage />} />
           <Route path="mensagens" element={<MessagesPage />} />

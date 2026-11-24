@@ -76,7 +76,7 @@ function Bubble({ text, side, clamp }: { text: string; side: 'cliente' | 'loja';
   );
 }
 
-const typesOf = (group: 'cliente' | 'loja') => MESSAGE_TYPES.filter((t) => MESSAGE_TYPE_INFO[t].group === group);
+const typesOf = (group: 'cliente' | 'loja' | 'revenda') => MESSAGE_TYPES.filter((t) => MESSAGE_TYPE_INFO[t].group === group);
 
 function MessageCard({ type, settings, onEdit }: { type: MessageType; settings: MessageSettings; onEdit: () => void }) {
   const info = MESSAGE_TYPE_INFO[type];
@@ -92,7 +92,7 @@ function MessageCard({ type, settings, onEdit }: { type: MessageType; settings: 
         <span className="shrink-0 rounded-full bg-champagne px-2.5 py-1 text-xs whitespace-nowrap text-ink">{active.name}</span>
       </div>
       <div className="rounded-[12px] bg-[#efe7df] p-3">
-        <Bubble text={renderTemplate(active.text, sampleVars(type))} side={info.group === 'loja' ? 'loja' : 'cliente'} clamp />
+        <Bubble text={renderTemplate(active.text, sampleVars(type))} side={info.group === 'cliente' || type === 'mostruario' ? 'cliente' : 'loja'} clamp />
       </div>
       <Button variant="secondary" onClick={onEdit} className="self-start" size="sm">
         <Sparkles size={16} strokeWidth={1.5} /> Personalizar · {count} {count === 1 ? 'variação' : 'variações'}
@@ -297,7 +297,7 @@ function TemplateEditor({ type, settings, onClose }: { type: MessageType; settin
       <div>
         <p className="mb-2 text-sm font-medium">Prévia com dados de exemplo</p>
         <div className="rounded-[14px] bg-[#efe7df] p-3">
-          <Bubble text={preview} side={info.group === 'loja' ? 'loja' : 'cliente'} />
+          <Bubble text={preview} side={info.group === 'cliente' || type === 'mostruario' ? 'cliente' : 'loja'} />
         </div>
       </div>
 
@@ -372,8 +372,13 @@ export function MessagesPage() {
           <MessageCard key={t} type={t} settings={settings} onEdit={() => setEditing(t)} />
         ))}
       </Group>
-      <Group title="Suas mensagens" intro="Saem prontas no painel (nos pedidos e nos pré-cadastros) para você copiar ou abrir no WhatsApp.">
+      <Group title="Suas mensagens" intro="Saem prontas no painel (nos pedidos, nas clientes e nas revendedoras) para você copiar ou abrir no WhatsApp.">
         {typesOf('loja').map((t) => (
+          <MessageCard key={t} type={t} settings={settings} onEdit={() => setEditing(t)} />
+        ))}
+      </Group>
+      <Group title="Revendedoras" intro="Usadas no painel das revendedoras e no mostruário digital de cada uma.">
+        {typesOf('revenda').map((t) => (
           <MessageCard key={t} type={t} settings={settings} onEdit={() => setEditing(t)} />
         ))}
       </Group>

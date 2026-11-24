@@ -14,12 +14,13 @@ import { ADMIN_BASE } from './lib/paths';
 
 export const SECTIONS = [
   { path: 'pedidos', label: 'Pedidos' },
+  { path: 'clientes', label: 'Clientes' },
+  { path: 'revendedoras', label: 'Revendedoras' },
   { path: 'produtos', label: 'Produtos' },
   { path: 'estoque', label: 'Estoque' },
   { path: 'relatorio', label: 'Relatório' },
   { path: 'mensagens', label: 'Mensagens' },
   { path: 'categorias', label: 'Categorias' },
-  { path: 'revendedoras', label: 'Revendedoras' },
   { path: 'configuracoes', label: 'Configurações' },
   { path: 'backup', label: 'Backup' },
 ] as const;

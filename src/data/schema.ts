@@ -127,6 +127,8 @@ export const settingsSchema = z.object({
   showroom: shortText(200).optional(),
   openingHours: shortText(120).optional(),
   warrantyMonths: z.number().int().min(0).max(60),
+  /** What the warranty covers and how an exchange works (page /garantia and the purchase messages). */
+  warrantyTerms: shortText(600).optional(),
   /** Static Pix shown after an order is registered. Absent until the owner fills it in. */
   pix: z
     .object({

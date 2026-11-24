@@ -13,6 +13,18 @@ import type { Product, StockMap, Variant } from './schema';
  *   so the exact inventory stays in the admin.
  */
 
+export const MOVEMENT_REASONS = ['ajuste', 'pedido', 'devolucao', 'entrada', 'saida', 'maleta', 'retorno_maleta'] as const;
+export type MovementReason = (typeof MOVEMENT_REASONS)[number];
+export const MOVEMENT_REASON_LABEL: Record<MovementReason, string> = {
+  ajuste: 'Ajuste',
+  pedido: 'Pedido',
+  devolucao: 'Devolução',
+  entrada: 'Entrada',
+  saida: 'Saída',
+  maleta: 'Maleta',
+  retorno_maleta: 'Volta da maleta',
+};
+
 export const STOCK_PUBLIC_CAP = 20;
 export const DEFAULT_LOW_STOCK = 2;
 export const MAX_STOCK_QTY = 100_000;

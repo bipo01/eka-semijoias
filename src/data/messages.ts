@@ -13,7 +13,24 @@ import { z } from 'zod';
  * owner changed (edited texts, her own variations, the active choice).
  */
 
-export const MESSAGE_TYPES = ['pedido', 'duvida', 'aviseme', 'contato', 'comprovante', 'revendedora', 'cobranca', 'lembrete', 'pago', 'enviado', 'posvenda', 'boasvindas'] as const;
+export const MESSAGE_TYPES = [
+  'pedido',
+  'duvida',
+  'aviseme',
+  'contato',
+  'comprovante',
+  'revendedora',
+  'cobranca',
+  'lembrete',
+  'pago',
+  'enviado',
+  'posvenda',
+  'boasvindas',
+  'compra',
+  'convite_revendedora',
+  'venda_revendedora',
+  'mostruario',
+] as const;
 export type MessageType = (typeof MESSAGE_TYPES)[number];
 
 export const VARIABLES = {
@@ -37,6 +54,12 @@ export const VARIABLES = {
   ja_revende: { label: 'Já revende', example: 'Sim' },
   origem: { label: 'Como conheceu', example: 'Instagram' },
   rastreio: { label: 'Código de rastreio', example: 'AB123456789BR' },
+  garantia: { label: 'Prazo da garantia', example: '6 meses' },
+  garantia_ate: { label: 'Garantia até', example: '23/05/2027' },
+  garantia_regras: { label: 'Regras da garantia', example: 'Cobre defeitos de fabricação e do banho. Não cobre peças amassadas, arranhadas ou em contato com produtos químicos.' },
+  link_convite: { label: 'Link do primeiro acesso', example: 'https://eka.com.br/revenda/convite/aB12cD34' },
+  link_mostruario: { label: 'Link do mostruário', example: 'https://eka.com.br/r/ana' },
+  revendedora: { label: 'Nome da revendedora', example: 'Ana' },
 } as const;
 export type VariableName = keyof typeof VARIABLES;
 export type MessageVars = Partial<Record<VariableName, string | null | undefined>>;
@@ -45,8 +68,11 @@ export interface MessageTypeInfo {
   label: string;
   /** When and where it is used (shown in the admin). */
   description: string;
-  /** "cliente": the customer sends it to the store (site buttons); "loja": the owner sends it (admin). */
-  group: 'cliente' | 'loja';
+  /**
+   * "cliente": the customer sends it to the store (site buttons); "loja": the owner sends it (admin);
+   * "revenda": used in the reseller program (the reseller's panel and showcase).
+   */
+  group: 'cliente' | 'loja' | 'revenda';
   vars: readonly VariableName[];
   /** The message cannot do its job without these (saving is refused). */
   required?: readonly VariableName[];
@@ -133,6 +159,36 @@ export const MESSAGE_TYPE_INFO: Record<MessageType, MessageTypeInfo> = {
     description: 'Botão “Chamar no WhatsApp” de um pré-cadastro.',
     group: 'loja',
     vars: ['primeiro_nome', 'loja'],
+  },
+  compra: {
+    label: 'Compra registrada',
+    description: 'Abre sozinha na conversa da cliente quando você registra uma venda ou marca um pedido como pago: as peças, o total e a garantia.',
+    group: 'loja',
+    vars: ['primeiro_nome', 'pedido', 'itens', 'total', 'garantia', 'garantia_ate', 'garantia_regras', 'loja'],
+    required: ['itens'],
+    itemsStyle: 'bullets',
+  },
+  convite_revendedora: {
+    label: 'Convite de revendedora',
+    description: 'Quando você efetiva uma revendedora: o link do primeiro acesso (contrato e PIN) e o do mostruário dela.',
+    group: 'loja',
+    vars: ['primeiro_nome', 'link_convite', 'link_mostruario', 'loja'],
+    required: ['link_convite'],
+  },
+  venda_revendedora: {
+    label: 'Venda da revendedora',
+    description: 'A revendedora registra uma venda no painel dela e envia o resumo para a cliente: peças, total e garantia.',
+    group: 'revenda',
+    vars: ['primeiro_nome', 'revendedora', 'itens', 'total', 'garantia', 'garantia_ate', 'garantia_regras', 'loja'],
+    required: ['itens'],
+    itemsStyle: 'bullets',
+  },
+  mostruario: {
+    label: 'Pedido pelo mostruário',
+    description: 'A cliente toca em “Pedir” no mostruário digital de uma revendedora.',
+    group: 'revenda',
+    vars: ['revendedora', 'peca', 'link_peca', 'loja'],
+    sample: { peca: 'Brinco Gota Cristal (Dourado)' },
   },
 };
 
@@ -226,6 +282,71 @@ export const PRESET_TEMPLATES: readonly PresetTemplate[] = [
   { id: 'boasvindas.classica', type: 'boasvindas', name: 'Clássica', text: 'Olá[, {primeiro_nome}]! Aqui é da ÉKA Semijoias. Recebemos seu cadastro para revender nossas peças e queremos conversar com você.' },
   { id: 'boasvindas.carinhosa', type: 'boasvindas', name: 'Carinhosa', text: 'Oi[, {primeiro_nome}]! 💛 Que bom ter você com a gente! Vi seu cadastro para revender as peças da {loja}. Posso te contar como funciona?' },
   { id: 'boasvindas.direta', type: 'boasvindas', name: 'Direta', text: 'Olá[, {primeiro_nome}]! Recebemos seu pré-cadastro de revendedora. Quando podemos conversar?' },
+
+  // Compra registrada (loja → cliente)
+  {
+    id: 'compra.classica',
+    type: 'compra',
+    name: 'Clássica',
+    text: 'Oi[, {primeiro_nome}]! Sua compra[ (pedido nº {pedido})] está registrada:\n\n{itens}\n*Total: {total}*\n\n[Garantia: {garantia}, até {garantia_ate}.]\n[{garantia_regras}]\n\nObrigada por escolher a {loja}! 💛',
+  },
+  {
+    id: 'compra.carinhosa',
+    type: 'compra',
+    name: 'Carinhosa',
+    text: 'Oi[, {primeiro_nome}]! 💛 Que alegria ter você com a gente. Suas peças:\n\n{itens}\n*Total: {total}*\n\n✨ [Elas têm garantia de {garantia} (até {garantia_ate}).] Guarde esta mensagem: ela é o seu comprovante.\n[{garantia_regras}]',
+  },
+  {
+    id: 'compra.cuidados',
+    type: 'compra',
+    name: 'Com cuidados',
+    text: 'Oi[, {primeiro_nome}]! Compra registrada[ (pedido nº {pedido})]:\n{itens}\nTotal: {total}\n\n[Garantia até {garantia_ate}.] Para durar mais: coloque depois do perfume e do creme, tire para tomar banho e guarde separada, longe da umidade.',
+  },
+
+  // Convite de revendedora (loja → revendedora)
+  {
+    id: 'convite_revendedora.classica',
+    type: 'convite_revendedora',
+    name: 'Clássica',
+    text: 'Oi[, {primeiro_nome}]! Seu cadastro de revendedora {loja} foi aprovado. 🎉\n\n1. Leia e aceite o contrato e crie seu PIN de acesso:\n{link_convite}\n\n[2. Este é o seu mostruário digital, para enviar às suas clientes:\n{link_mostruario}]\n\nO link de acesso vale por 7 dias.',
+  },
+  {
+    id: 'convite_revendedora.carinhosa',
+    type: 'convite_revendedora',
+    name: 'Carinhosa',
+    text: 'Oi[, {primeiro_nome}]! 💛 Agora é oficial: você é revendedora {loja}!\n\nPara começar, é só abrir este link, aceitar o contrato e criar seu PIN:\n{link_convite}\n\n[Seu mostruário digital (pode compartilhar à vontade): {link_mostruario}]',
+  },
+  {
+    id: 'convite_revendedora.direta',
+    type: 'convite_revendedora',
+    name: 'Direta',
+    text: 'Primeiro acesso (contrato + PIN): {link_convite}\n[Mostruário: {link_mostruario}]',
+  },
+
+  // Venda da revendedora (revendedora → cliente)
+  {
+    id: 'venda_revendedora.classica',
+    type: 'venda_revendedora',
+    name: 'Clássica',
+    text: 'Oi[, {primeiro_nome}]! Sua compra de semijoias {loja} está registrada:\n\n{itens}\n*Total: {total}*\n\n[Garantia: {garantia}, até {garantia_ate}.]\n[{garantia_regras}]\n\nObrigada! [{revendedora}]',
+  },
+  {
+    id: 'venda_revendedora.carinhosa',
+    type: 'venda_revendedora',
+    name: 'Carinhosa',
+    text: 'Oi[, {primeiro_nome}]! 💛 Obrigada pela compra! Suas peças {loja}:\n\n{itens}\n*Total: {total}*\n\n✨ [Garantia até {garantia_ate}.] Guarde esta mensagem: ela é o seu comprovante.',
+  },
+  {
+    id: 'venda_revendedora.curta',
+    type: 'venda_revendedora',
+    name: 'Curta',
+    text: 'Compra registrada:\n{itens}\nTotal: {total}\n[Garantia até {garantia_ate}.]',
+  },
+
+  // Pedido pelo mostruário (cliente → revendedora)
+  { id: 'mostruario.classica', type: 'mostruario', name: 'Clássica', text: 'Oi[, {revendedora}]! Vi no seu mostruário e quero esta peça: {peca}.' },
+  { id: 'mostruario.com_link', type: 'mostruario', name: 'Com o link da peça', text: 'Oi[, {revendedora}]! Gostei desta peça do seu mostruário {loja}:\n*{peca}*\n[{link_peca}]\nAinda tem?' },
+  { id: 'mostruario.carinhosa', type: 'mostruario', name: 'Carinhosa', text: 'Oi[, {revendedora}]! 💛 Me apaixonei pela peça {peca} do seu mostruário. Como faço para comprar?' },
 ];
 
 export const MAX_TEMPLATE_CHARS = 1500;

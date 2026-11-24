@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Catalog } from '../src/data/schema';
-import { comboKey, combosOf, materializeStock, MAX_STOCK_QTY, type StockRow } from '../src/data/stock';
+import { comboKey, combosOf, materializeStock, MAX_STOCK_QTY, type MovementReason, type StockRow } from '../src/data/stock';
 import { requireSession } from './auth';
 import { IDEMPOTENCY_TTL_MS, nextVersion, parseSnapshotBody, snapshotBody, SNAPSHOT_MAX_BYTES, WRITE_ATTEMPTS } from './catalog';
 import { guard, isGuardMiss, toHttpError, withReadRetry } from './db';
@@ -60,13 +60,23 @@ export function publishStatements(db: D1Database, state: StockState, rows: Stock
 }
 
 /** Inserts a movement whose `qty_after` is read from the row just updated (same batch, so it is exact). */
-export function movementStatement(db: D1Database, at: string, productId: string, variantId: string, size: string, delta: number, reason: 'ajuste' | 'pedido' | 'devolucao', orderNumber: number | null): D1PreparedStatement {
+export function movementStatement(
+  db: D1Database,
+  at: string,
+  productId: string,
+  variantId: string,
+  size: string,
+  delta: number,
+  reason: MovementReason,
+  orderNumber: number | null,
+  extra: { note?: string; kitId?: string } = {},
+): D1PreparedStatement {
   return db
     .prepare(
-      `INSERT INTO stock_movements (at, product_id, variant_id, size, delta, qty_after, reason, order_number)
-       SELECT ?1, ?2, ?3, ?4, ?5, qty, ?6, ?7 FROM stock_levels WHERE product_id = ?2 AND variant_id = ?3 AND size = ?4`,
+      `INSERT INTO stock_movements (at, product_id, variant_id, size, delta, qty_after, reason, order_number, note, kit_id)
+       SELECT ?1, ?2, ?3, ?4, ?5, qty, ?6, ?7, ?8, ?9 FROM stock_levels WHERE product_id = ?2 AND variant_id = ?3 AND size = ?4`,
     )
-    .bind(at, productId, variantId, size, delta, reason, orderNumber);
+    .bind(at, productId, variantId, size, delta, reason, orderNumber, extra.note ?? null, extra.kitId ?? null);
 }
 
 // ---------------------------------------------------------------------------
