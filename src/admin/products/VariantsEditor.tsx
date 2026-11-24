@@ -66,7 +66,7 @@ export function VariantsEditor({ draft, update, errors }: VariantsEditorProps) {
             </p>
             {draft.images.length ? (
               <>
-                <ul aria-labelledby={`photos-${v.id}`} className="no-scrollbar mt-1.5 flex gap-2 overflow-x-auto py-1">
+                <ul aria-labelledby={`photos-${v.id}`} className="no-scrollbar -mx-1 mt-1.5 flex gap-2 overflow-x-auto p-1">
                   {draft.images.map((img, i) => {
                     const on = v.imageIds.includes(img.id);
                     return (
