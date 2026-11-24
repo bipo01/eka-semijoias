@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { isPurchasable } from '../../data/catalog';
+import { useSection } from '../../hooks/useSection';
 import { useCatalog } from '../../store/catalog';
 import { ProductCard } from '../product/ProductCard';
 import { IconButton } from '../ui/Button';
@@ -9,6 +10,7 @@ import { SectionHeading } from '../ui/Misc';
 export function NewArrivals() {
   const products = useCatalog((s) => s.data.products);
   const stock = useCatalog((s) => s.data.stock);
+  const { titles } = useSection('inicio');
   const newest = products
     .filter((p) => isPurchasable(p, stock))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -21,7 +23,7 @@ export function NewArrivals() {
       <div className="container-x">
         <SectionHeading
           id="home-novidades"
-          title="Novidades"
+          title={titles.newArrivals}
           action={
             <div className="hidden gap-1 lg:flex">
               <IconButton label="Ver anteriores" onClick={() => scroll(-1)} className="border border-line">

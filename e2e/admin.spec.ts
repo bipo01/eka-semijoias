@@ -59,7 +59,7 @@ test('admin: usable at 360px without horizontal overflow', async ({ browser }) =
   await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': `10.250.${Math.floor(Math.random() * 250)}.1` });
   await page.goto('/admin');
   await unlock(page);
-  for (const section of ['pedidos', 'clientes', 'produtos', 'estoque', 'relatorio', 'mensagens', 'categorias', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
+  for (const section of ['pedidos', 'clientes', 'produtos', 'estoque', 'relatorio', 'mensagens', 'site', 'site?secao=inicio', 'site?secao=depoimentos', 'categorias', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
     await page.goto(`/admin/${section}`);
     await page.waitForLoadState('networkidle');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -74,7 +74,7 @@ test('admin: no serious accessibility violations', async ({ page }) => {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   expect(await axe(page)).toEqual([]);
   await unlock(page);
-  for (const section of ['pedidos', 'clientes', 'produtos', 'estoque', 'relatorio', 'mensagens', 'categorias', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
+  for (const section of ['pedidos', 'clientes', 'produtos', 'estoque', 'relatorio', 'mensagens', 'site', 'site?secao=inicio', 'site?secao=depoimentos', 'categorias', 'revendedoras', 'configuracoes', 'backup', 'produtos/prod-p01']) {
     await page.goto(`/admin/${section}`);
     await page.waitForLoadState('networkidle');
     expect(await axe(page), section).toEqual([]);

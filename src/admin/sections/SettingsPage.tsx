@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { SelectField, TextArea, TextField } from '../../components/ui/Field';
 import { cx } from '../../components/ui/cx';
 import { business, pendingChecklist } from '../../config/business';
+import type { SiteContent } from '../../data/content';
 import type { Settings } from '../../data/schema';
 import { DEFAULT_LOW_STOCK } from '../../data/stock';
 import { formatPixKey, normalizePixKey, PIX_KEY_KIND_LABEL, pixKeyKind, pixText, type PixKeyKind } from '../../lib/pix';
@@ -13,20 +15,29 @@ import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
 import { useAdminSession } from '../AdminContext';
 import { maskPhone, parseInstagram, parsePhone } from '../lib/contact';
+import { adminPath } from '../lib/paths';
 import { save } from '../lib/persist';
+import { LojaSettings } from './LojaSettings';
 import { PushSettings } from './PushSettings';
 import { changePin, signalSessionLost } from '../lib/session';
 
-/** Checklist items completed by a settings field; the others stay open. */
+/** Checklist items completed by a settings field or a site section; the others stay open. */
 // Instagram and warranty start with unconfirmed values from business.ts, so they only
-// count as done once they differ from those starting values.
-const DONE_WHEN: Partial<Record<string, (s: Settings) => boolean>> = {
+// count as done once they differ from those starting values. The store facts start from
+// business.ts too, so they count only once she answered them ("O que a loja oferece" saved).
+export const DONE_WHEN: Partial<Record<string, (s: Settings, content: SiteContent | undefined) => boolean>> = {
   whatsapp: (s) => !!s.whatsapp,
   instagram: (s) => !!s.instagram && s.instagram !== business.instagram,
   city: (s) => !!s.city.trim(),
   showroom: (s) => !!s.showroom?.trim(),
   warrantyMonths: (s) => s.warrantyMonths > 0 && s.warrantyMonths !== business.warrantyMonths,
   pix: (s) => !!s.pix,
+  shipping: (_s, c) => c?.loja != null && c.loja.shipsNationwide !== null,
+  plating: (_s, c) => !!c?.loja?.plating.trim(),
+  hypoallergenic: (_s, c) => c?.loja != null && c.loja.hypoallergenic !== null,
+  reseller: (_s, c) => c?.loja != null && c.loja.consignment !== null && c.loja.noUpfrontInvestment !== null,
+  about: (_s, c) => c?.sobre !== undefined,
+  testimonials: (_s, c) => !!c?.depoimentos?.items.some((t) => t.visible),
 };
 
 interface StoreForm {
@@ -375,9 +386,13 @@ function PinSettings() {
   );
 }
 
+/** Checklist items filled in on the Site tab: a link opens that editor. */
+const EDITED_IN_SITE: Partial<Record<string, string>> = { about: 'sobre', testimonials: 'depoimentos' };
+
 function StoreChecklist() {
   const settings = useCatalog((s) => s.data.settings);
-  const items = pendingChecklist.map((item) => ({ ...item, done: DONE_WHEN[item.key]?.(settings) ?? false }));
+  const content = useCatalog((s) => s.data.content);
+  const items = pendingChecklist.map((item) => ({ ...item, done: DONE_WHEN[item.key]?.(settings, content) ?? false }));
   const done = items.filter((i) => i.done).length;
   return (
     <section aria-labelledby="checklist-title" className="rounded-[12px] border border-line bg-champagne/50 p-4">
@@ -385,7 +400,7 @@ function StoreChecklist() {
         Complete as informações da loja
       </h2>
       <p className="mt-1 text-sm text-ink-muted">
-        {done} de {items.length} concluídos. Os itens ligados aos campos abaixo são marcados quando você os preenche.
+        {done} de {items.length} concluídos. Os itens são marcados sozinhos quando você preenche os campos abaixo ou a aba Site (Sobre e Depoimentos).
       </p>
       <ul className="mt-3 flex flex-col gap-2">
         {items.map((item) => (
@@ -398,6 +413,14 @@ function StoreChecklist() {
             <span className={cx(item.done && 'text-ink-muted')}>
               <span className="sr-only">{item.done ? 'Feito: ' : 'A fazer: '}</span>
               {item.label}
+              {!item.done && EDITED_IN_SITE[item.key] && (
+                <>
+                  {' · '}
+                  <Link to={`${adminPath('site')}?secao=${EDITED_IN_SITE[item.key]}`} className="text-copper underline underline-offset-4">
+                    Preencher na aba Site
+                  </Link>
+                </>
+              )}
             </span>
           </li>
         ))}
@@ -411,6 +434,7 @@ export function SettingsPage() {
     <div className="flex flex-col gap-4">
       <StoreChecklist />
       <StoreSettings />
+      <LojaSettings />
       <PixSettings />
       <PushSettings />
       <StockSettings />

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Clock, MapPin } from 'lucide-react';
-import { PageHeader } from '../components/layout/PageHeader';
+import { ContentPageHeader } from '../components/layout/PageHeader';
 import { ButtonAnchor } from '../components/ui/Button';
 import { TextArea } from '../components/ui/Field';
 import { InstagramIcon, WhatsAppIcon } from '../components/ui/Icons';
 import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMessages } from '../hooks/useMessages';
+import { useSection } from '../hooks/useSection';
 import { whatsappUrl } from '../lib/whatsapp';
 
 export function ContactPage() {
@@ -14,9 +15,10 @@ export function ContactPage() {
   const biz = useBusiness();
   const contactMessage = useMessages()('contato');
   const [message, setMessage] = useState('');
+  const contact = useSection('contato');
   return (
     <div className="pb-16">
-      <PageHeader eyebrow="Contato" title={<>Fale com a <em className="font-medium italic">gente</em></>} intro="Tire dúvidas, peça ajuda para escolher ou faça seu pedido. A gente responde pelo WhatsApp." />
+      <ContentPageHeader header={contact.header} />
       <div className="container-x grid gap-6 lg:grid-cols-2 lg:gap-10">
         <div className="flex flex-col gap-4">
           <ButtonAnchor href={whatsappUrl(biz.whatsapp, contactMessage)} size="lg" className="w-full sm:w-fit">
@@ -45,7 +47,7 @@ export function ContactPage() {
             window.open(whatsappUrl(biz.whatsapp, message.trim() || contactMessage), '_blank', 'noopener,noreferrer');
           }}
         >
-          <h2 className="font-display text-display-m">Mensagem rápida</h2>
+          <h2 className="font-display text-display-m break-words">{contact.quickTitle}</h2>
           <TextArea label="Sua mensagem" rows={4} maxLength={600} placeholder="Olá! Queria saber…" value={message} onChange={(e) => setMessage(e.target.value)} />
           <button type="submit" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-copper px-6 font-medium text-white hover:bg-copper-dark">
             <WhatsAppIcon size={20} /> Enviar pelo WhatsApp

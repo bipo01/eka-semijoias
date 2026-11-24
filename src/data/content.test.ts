@@ -148,3 +148,26 @@ describe('paragraphs', () => {
     expect(paragraphs('Um\nlinha\n\n\nDois\n  \nTrês ')).toEqual(['Um\nlinha', 'Dois', 'Três']);
   });
 });
+
+describe('validateCatalog with content', () => {
+  it('refuses an invalid section before saving (visitors would silently get the built-in text)', async () => {
+    const { validateCatalog } = await import('./integrity');
+    const seed = createCatalogSeed();
+    expect(validateCatalog({ ...seed, content: { geral: defaultSections(none).geral } })).toBeNull();
+    const bad = validateCatalog({ ...seed, content: { geral: { ...defaultSections(none).geral, bagEmptyTitle: '' } } } as never);
+    expect(bad).toContain('Preencha este campo.');
+    expect(bad).toContain('Textos gerais');
+  });
+});
+
+describe('backup import with content', () => {
+  it('refuses a file whose site section cannot be read, naming it', async () => {
+    const { migrateCatalog } = await import('./integrity');
+    const seed = createCatalogSeed();
+    const ok = migrateCatalog({ ...seed, leads: [], content: { contato: defaultSections(none).contato } });
+    expect(ok.ok).toBe(true);
+    const bad = migrateCatalog({ ...seed, leads: [], content: { contato: { ...defaultSections(none).contato, quickTitle: '' } } });
+    expect(bad).toMatchObject({ ok: false });
+    expect(!bad.ok && bad.error).toContain('Contato');
+  });
+});

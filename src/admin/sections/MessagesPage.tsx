@@ -184,9 +184,8 @@ function TemplateEditor({ type, settings, onClose }: { type: MessageType; settin
           ...draft.custom.filter((c) => c.type === type).map((c) => ({ ...c, name: c.name.trim() || 'Sem nome' })),
         ];
         const next: MessageSettings = { active, edited, custom };
-        const { messages: _messages, ...rest } = d.settings;
-        const empty = !Object.keys(active).length && !Object.keys(edited).length && !custom.length;
-        return { ...d, settings: empty ? rest : { ...rest, messages: next } };
+        // Cleared explicitly (an empty object): a missing field means "keep" for the server (worker/catalog.ts).
+        return { ...d, settings: { ...d.settings, messages: next } };
       },
       'Mensagens salvas. O site já usa o texto novo.',
     );

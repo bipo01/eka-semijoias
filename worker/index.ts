@@ -1,5 +1,7 @@
 import { handleChangePin, handleLogin, handleLogout, handleSessionStatus } from './auth';
-import { handleBackup, handleCatalog, handleChanges } from './catalog';
+import { handleBackup, handleCatalog, handleChanges, parseSnapshotBody, readSnapshot } from './catalog';
+import type { Catalog } from '../src/data/schema';
+import { isPrivatePath, pageMeta, type PageMeta } from './seo';
 import { handleCreateCustomer, handleDeleteCustomer, handleGetCustomer, handleLinkOrderCustomer, handleListCustomers, handleUpdateCustomer } from './customers';
 import { toHttpError } from './db';
 import type { Env } from './env';
@@ -129,14 +131,72 @@ async function serveDocument(request: Request, env: Env, url: URL): Promise<Resp
   // A real file at this path is served as is; any other page route gets the SPA document. (Assets use
   // not_found_handling "none": a missing /assets/*.js must be a 404, never index.html cached as
   // immutable JavaScript by the browser — an old tab after a deploy would stay blank.)
-  let asset = await env.ASSETS.fetch(request);
-  if (asset.status === 404) asset = await env.ASSETS.fetch(new Request(new URL('/', url), { method: request.method, headers: request.headers }));
+  // The page tags depend on the catalog, not on the static file: no conditional request to the
+  // assets (a 304 would keep old titles), and no static validators on the rewritten document.
+  const headers = new Headers(request.headers);
+  headers.delete('If-None-Match');
+  headers.delete('If-Modified-Since');
+  const plain = new Request(request.url, { method: request.method, headers });
+  let asset = await env.ASSETS.fetch(plain);
+  if (asset.status === 404) asset = await env.ASSETS.fetch(new Request(new URL('/', url), { method: request.method, headers }));
   const response = new Response(asset.body, asset);
-  if ((response.headers.get('Content-Type') ?? '').includes('text/html')) {
-    response.headers.set('Content-Security-Policy', documentCsp(url));
-    response.headers.set('Cache-Control', 'no-cache');
+  if (!(response.headers.get('Content-Type') ?? '').includes('text/html')) return response;
+  response.headers.set('Content-Security-Policy', documentCsp(url));
+  response.headers.set('Cache-Control', 'no-cache');
+  response.headers.delete('ETag');
+  response.headers.delete('Last-Modified');
+  if (request.method !== 'GET' || !response.ok) return response;
+  return withPageMeta(response, pageMeta(url, isPrivatePath(url.pathname) ? null : await catalogForMeta(env)));
+}
+
+/**
+ * The published catalog for the page tags, kept per isolate for a minute (tags may lag an edit by up
+ * to 60 s; the page itself always loads the live catalog). Any failure falls back to the built-in tags.
+ */
+let metaCache: { at: number; catalog: Catalog | null } | null = null;
+const META_TTL_MS = 60_000;
+async function catalogForMeta(env: Env): Promise<Catalog | null> {
+  if (metaCache && Date.now() - metaCache.at < META_TTL_MS) return metaCache.catalog;
+  try {
+    const snapshot = await readSnapshot(env.DB);
+    const catalog = snapshot ? parseSnapshotBody(snapshot.body) : null;
+    metaCache = { at: Date.now(), catalog };
+    return catalog;
+  } catch (error) {
+    log({ event: 'meta_fallback', message: error instanceof Error ? error.message : String(error) });
+    return null;
   }
-  return response;
+}
+
+const escapeAttr = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** Writes the page's title, description, share picture and robots rule into the SPA document. */
+function withPageMeta(response: Response, meta: PageMeta): Response {
+  const set = (value: string) => ({ element: (el: Element) => void el.setAttribute('content', value) });
+  return new HTMLRewriter()
+    .on('title', { element: (el) => void el.setInnerContent(meta.title) })
+    .on('meta[name="description"]', set(meta.description))
+    .on('meta[property="og:title"]', set(meta.title))
+    .on('meta[property="og:description"]', set(meta.description))
+    .on('meta[property="og:image"]', set(meta.image))
+    .on('meta[property="og:type"]', set(meta.type))
+    // The built-in hero picture is preloaded only where it is the first thing on screen.
+    .on('link[rel="preload"][as="image"]', { element: (el) => void (meta.preloadHero ? undefined : el.remove()) })
+    .on('head', {
+      element: (el) =>
+        void el.append(
+          [
+            `<meta property="og:url" content="${escapeAttr(meta.url)}" />`,
+            `<meta name="twitter:title" content="${escapeAttr(meta.title)}" />`,
+            `<meta name="twitter:description" content="${escapeAttr(meta.description)}" />`,
+            `<meta name="twitter:image" content="${escapeAttr(meta.image)}" />`,
+            `<link rel="canonical" href="${escapeAttr(meta.url)}" />`,
+            ...(meta.noindex ? ['<meta name="robots" content="noindex, nofollow" />'] : []),
+          ].join(''),
+          { html: true },
+        ),
+    })
+    .transform(response);
 }
 
 function log(entry: Record<string, unknown>): void {

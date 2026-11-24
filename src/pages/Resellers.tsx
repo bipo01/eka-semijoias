@@ -1,5 +1,7 @@
-import { useRef, useState, type FormEvent } from 'react';
-import { CheckCircle2, ChevronRight, Headset, MapPin, PiggyBank, Sparkles, User, Wallet } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
+import { CheckCircle2, ChevronRight, Gem, Headset, MapPin, PiggyBank, Sparkles, User, Wallet } from 'lucide-react';
+import { Highlighted } from '../components/layout/PageHeader';
 import { AccordionItem } from '../components/ui/Accordion';
 import { ButtonAnchor, Button } from '../components/ui/Button';
 import { SelectField, TextArea, TextField } from '../components/ui/Field';
@@ -7,31 +9,26 @@ import { InstagramIcon, WhatsAppIcon } from '../components/ui/Icons';
 import { cx } from '../components/ui/cx';
 import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { bannerSources } from '../lib/assets';
+import { useSection } from '../hooks/useSection';
+import { siteImageSources } from '../lib/assets';
 import { apiUrl } from '../lib/api';
 import { leadFormSchema, leadVars, maskPhone, UFS, type LeadForm } from '../lib/lead';
 import { useMessages } from '../hooks/useMessages';
 import { whatsappUrl } from '../lib/whatsapp';
 
-const STEPS = [
-  { title: 'Cadastro', text: 'Preencha o pré-cadastro aqui embaixo, de forma rápida e simples.' },
-  { title: 'Conversa e aprovação', text: 'A gente entra em contato pelo WhatsApp, tira suas dúvidas e aprova o seu cadastro.' },
-  { title: 'Receba seu mostruário', text: 'Você recebe um mostruário ÉKA com as nossas principais peças e coleções.' },
-  { title: 'Venda e ganhe', text: 'Apresente as semijoias, faça suas vendas e receba a sua comissão.' },
-];
+/** Icons of the built-in benefits (by id, so they keep their icon when one is left out by the facts); others by position. */
+const BENEFIT_ICON: Record<string, typeof Wallet> = { 'b-investimento': PiggyBank, 'b-comissao': Wallet, 'b-suporte': Headset, 'b-pecas': Sparkles };
+const BENEFIT_ICONS = [Wallet, Headset, Sparkles];
+const benefitIcon = (id: string, i: number) => BENEFIT_ICON[id] ?? BENEFIT_ICONS[i] ?? Gem;
+const ownerText = 'whitespace-pre-line [overflow-wrap:anywhere]';
 
 type Errors = Partial<Record<keyof LeadForm, string>>;
 
 export function ResellersPage() {
   useDocumentTitle('Seja revendedora');
   const biz = useBusiness();
-  const hero = bannerSources('images/lifestyle/l02-mostruario-revendedora');
-  const benefits = [
-    ...(biz.resellerProgram.noUpfrontInvestment ? [{ icon: PiggyBank, title: 'Sem investimento inicial', text: 'Comece sem precisar comprar estoque.' }] : []),
-    { icon: Wallet, title: 'Comissão atrativa', text: 'Ganhe em cada venda que você fizer.' },
-    { icon: Headset, title: 'Suporte e materiais', text: 'Orientação, catálogo e materiais de divulgação.' },
-    { icon: Sparkles, title: 'Peças que encantam', text: 'Acabamento impecável que as clientes notam de longe.' },
-  ].slice(0, 3);
+  const page = useSection('revendedoras');
+  const hero = siteImageSources(page.hero.image, 'banner');
   const tiers = biz.resellerProgram.commissionTiers;
 
   return (
@@ -39,51 +36,60 @@ export function ResellersPage() {
       <section aria-labelledby="rev-title" className="lg:container-x lg:grid lg:grid-cols-2 lg:items-center lg:gap-12 lg:pt-10">
         <div className="relative lg:order-2">
           <div className="aspect-[4/3] overflow-hidden bg-champagne lg:rounded-[12px]">
-            <img src={hero.src} srcSet={hero.srcSet} sizes="(min-width: 1024px) 50vw, 100vw" alt="Mostruário de semijoias ÉKA aberto, com brincos, colares, anéis e pulseiras" width={1536} height={1024} fetchPriority="high" className="h-full w-full object-cover" />
+            <img src={hero.src} srcSet={hero.srcSet} sizes="(min-width: 1024px) 50vw, 100vw" alt={page.hero.image.alt} width={1536} height={1024} fetchPriority="high" className="h-full w-full object-cover" />
           </div>
         </div>
         <div className="container-x pt-6 lg:order-1 lg:px-0 lg:pt-0">
-          <p className="eyebrow mb-2 text-ink-muted">Seja revendedora</p>
-          <h1 id="rev-title" className="font-display text-display-l lg:text-display-xl">
-            Renda extra com semijoias que <em className="font-medium italic">encantam</em>
+          {page.hero.eyebrow && <p className="eyebrow mb-2 text-ink-muted">{page.hero.eyebrow}</p>}
+          <h1 id="rev-title" className="font-display text-display-l break-words lg:text-display-xl">
+            <Highlighted title={page.hero.title} highlight={page.hero.highlight} />
           </h1>
-          <p className="mt-4 max-w-lg text-lg text-ink">Torne-se uma revendedora ÉKA e conquiste mais liberdade financeira com peças de alta qualidade.</p>
+          {page.hero.text && <p className={`mt-4 max-w-lg text-lg text-ink ${ownerText}`}>{page.hero.text}</p>}
           <a href="#pre-cadastro" className="mt-6 inline-flex min-h-13 w-full items-center justify-center gap-2 rounded-full bg-copper px-7 text-[1.0625rem] font-medium text-white hover:bg-copper-dark sm:w-auto">
-            Quero ser revendedora <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" />
+            {page.hero.cta} <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" />
           </a>
         </div>
       </section>
 
-      <div className="container-x mt-12 grid gap-12 lg:mt-20 lg:grid-cols-2 lg:gap-16">
-        <section aria-labelledby="como-funciona">
-          <h2 id="como-funciona" className="font-display text-display-m md:text-display-l">Como funciona</h2>
-          <ol className="relative mt-6 flex flex-col gap-6 before:absolute before:top-4 before:bottom-4 before:left-[15px] before:w-px before:bg-rose">
-            {STEPS.map((s, i) => (
-              <li key={s.title} className="relative flex gap-4">
-                <span className="price relative z-10 inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-rose bg-ivory text-sm text-copper">{i + 1}</span>
-                <div>
-                  <h3 className="font-sans text-base font-medium text-copper">{s.title}</h3>
-                  <p className="text-ink-muted">{s.text}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-        <section aria-labelledby="beneficios">
-          <h2 id="beneficios" className="font-display text-display-m md:text-display-l">Por que revender ÉKA</h2>
-          <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            {benefits.map(({ icon: Icon, title, text }) => (
-              <li key={title} className="flex items-start gap-4 rounded-[12px] bg-champagne/70 p-5 sm:flex-col sm:items-center sm:text-center lg:flex-row lg:items-start lg:text-left">
-                <Icon size={28} strokeWidth={1.25} className="shrink-0 text-copper" aria-hidden="true" />
-                <div>
-                  <h3 className="font-display text-title leading-tight">{title}</h3>
-                  <p className="mt-1 text-sm text-ink-muted">{text}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
+      {(page.steps.length > 0 || page.benefits.length > 0) && (
+        <div className="container-x mt-12 grid gap-12 lg:mt-20 lg:grid-cols-2 lg:gap-16">
+          {page.steps.length > 0 && (
+            <section aria-labelledby="como-funciona" className="min-w-0">
+              <h2 id="como-funciona" className="font-display text-display-m break-words md:text-display-l">{page.stepsTitle}</h2>
+              <ol className="relative mt-6 flex flex-col gap-6 before:absolute before:top-4 before:bottom-4 before:left-[15px] before:w-px before:bg-rose">
+                {page.steps.map((s, i) => (
+                  <li key={s.id} className="relative flex gap-4">
+                    <span className="price relative z-10 inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-rose bg-ivory text-sm text-copper">{i + 1}</span>
+                    <div className="min-w-0">
+                      <h3 className="font-sans text-base font-medium break-words text-copper">{s.title}</h3>
+                      {s.text && <p className={`text-ink-muted ${ownerText}`}>{s.text}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+          {page.benefits.length > 0 && (
+            <section aria-labelledby="beneficios" className="min-w-0">
+              <h2 id="beneficios" className="font-display text-display-m break-words md:text-display-l">{page.benefitsTitle}</h2>
+              <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                {page.benefits.map((b, i) => {
+                  const Icon = benefitIcon(b.id, i);
+                  return (
+                    <li key={b.id} className="flex items-start gap-4 rounded-[12px] bg-champagne/70 p-5 sm:flex-col sm:items-center sm:text-center lg:flex-row lg:items-start lg:text-left">
+                      <Icon size={28} strokeWidth={1.25} className="shrink-0 text-copper" aria-hidden="true" />
+                      <div className="min-w-0">
+                        <h3 className="font-display text-title leading-tight break-words">{b.title}</h3>
+                        {b.text && <p className={`mt-1 text-sm text-ink-muted ${ownerText}`}>{b.text}</p>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+        </div>
+      )}
 
       {tiers.length > 0 && (
         <section aria-labelledby="comissao" className="container-x mt-12">
@@ -95,27 +101,20 @@ export function ResellersPage() {
         </section>
       )}
 
-      <div className="container-x mt-12 grid gap-12 lg:mt-20 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
-        <section aria-labelledby="rev-faq">
-          <h2 id="rev-faq" className="mb-4 font-display text-display-m md:text-display-l">Dúvidas</h2>
-          <div className="flex flex-col gap-2">
-            <AccordionItem title="Preciso investir para começar?">
-              <p>{biz.resellerProgram.noUpfrontInvestment ? 'Não. Você começa sem precisar comprar estoque.' : 'As condições para começar são explicadas na conversa de aprovação, sem compromisso.'}</p>
-            </AccordionItem>
-            <AccordionItem title="Como funciona o mostruário?">
-              <p>{biz.resellerProgram.consignment ? 'Você recebe as peças em consignado e acerta só o que vender.' : 'Depois da aprovação, a gente combina com você o mostruário ideal para começar, com prazos e condições claros.'}</p>
-            </AccordionItem>
-            <AccordionItem title="Quanto eu ganho?">
-              <p>{tiers.length ? 'Sua comissão aumenta conforme as suas vendas no mês. Veja a tabela acima.' : 'Você ganha uma comissão em cada venda. A gente apresenta os valores na conversa de aprovação.'}</p>
-            </AccordionItem>
-            {biz.shipsNationwide && (
-              <AccordionItem title="Vocês atendem a minha cidade?">
-                <p>Enviamos para todo o Brasil. Preencha o pré-cadastro que a gente confirma os detalhes para a sua região.</p>
-              </AccordionItem>
-            )}
-          </div>
-        </section>
-        <LeadFormSection whatsapp={biz.whatsapp} />
+      <div className={cx('container-x mt-12 grid gap-12 lg:mt-20 lg:gap-16', page.faq.length ? 'lg:grid-cols-[1fr_1.1fr]' : 'lg:grid-cols-[minmax(0,42rem)] lg:justify-center')}>
+        {page.faq.length > 0 && (
+          <section aria-labelledby="rev-faq" className="min-w-0">
+            <h2 id="rev-faq" className="mb-4 font-display text-display-m break-words md:text-display-l">{page.faqTitle}</h2>
+            <div className="flex flex-col gap-2">
+              {page.faq.map((item) => (
+                <AccordionItem key={item.id} title={item.question}>
+                  <p className={ownerText}>{item.answer}</p>
+                </AccordionItem>
+              ))}
+            </div>
+          </section>
+        )}
+        <LeadFormSection whatsapp={biz.whatsapp} title={page.formTitle} intro={page.formIntro} />
       </div>
     </div>
   );
@@ -138,9 +137,19 @@ function sendLead(form: Record<string, unknown>): Promise<boolean> {
   );
 }
 
-function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
+const EMPTY_LEAD = { name: '', whatsapp: '', city: '', uf: '', instagram: '', alreadySells: null as boolean | null, source: '', consent: false };
+/**
+ * What she typed, kept in memory while she reads the privacy policy (same tab) and comes back.
+ * In memory only: a reload or a new visit starts empty, nothing personal is stored in the browser.
+ */
+let leadDraft: typeof EMPTY_LEAD | null = null;
+
+function LeadFormSection({ whatsapp, title, intro }: { whatsapp: string | null; title: string; intro: string }) {
   const message = useMessages();
-  const [form, setForm] = useState({ name: '', whatsapp: '', city: '', uf: '', instagram: '', alreadySells: null as boolean | null, source: '', consent: false });
+  const [form, setForm] = useState(() => leadDraft ?? EMPTY_LEAD);
+  useEffect(() => {
+    leadDraft = form;
+  }, [form]);
   const [errors, setErrors] = useState<Errors>({});
   const [sentUrl, setSentUrl] = useState<string | null>(null);
   /** null while the registration is in flight; false when it could not be stored (the WhatsApp message still has everything). */
@@ -173,6 +182,7 @@ function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
     void sendLead({ ...form, alreadySells: lead.alreadySells, website: honeypot.current?.value ?? '' }).then(setStored);
     const url = whatsappUrl(whatsapp, message('revendedora', leadVars(lead)));
     window.open(url, '_blank', 'noopener,noreferrer');
+    leadDraft = null;
     setSentUrl(url);
   };
 
@@ -194,8 +204,8 @@ function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
 
   return (
     <section id="pre-cadastro" aria-labelledby="pre-cadastro-title" className="scroll-mt-24 rounded-[12px] border border-line bg-white p-5 lg:p-8">
-      <h2 id="pre-cadastro-title" className="font-display text-display-m md:text-display-l">Pré-cadastro</h2>
-      <p className="mt-1 text-ink-muted">Preencha seus dados e dê o primeiro passo para se tornar revendedora ÉKA.</p>
+      <h2 id="pre-cadastro-title" className="font-display text-display-m break-words md:text-display-l">{title}</h2>
+      {intro && <p className={`mt-1 text-ink-muted ${ownerText}`}>{intro}</p>}
       <form ref={formRef} noValidate onSubmit={submit} className="mt-6 flex flex-col gap-4">
         <TextField label="Nome completo" required autoComplete="name" icon={<User size={18} strokeWidth={1.5} />} value={form.name} error={errors.name} onChange={(e) => set('name', e.target.value)} />
         <TextField label="WhatsApp (com DDD)" required type="tel" inputMode="tel" autoComplete="tel-national" placeholder="(65) 99999-9999" icon={<WhatsAppIcon size={18} />} value={form.whatsapp} error={errors.whatsapp} onChange={(e) => set('whatsapp', maskPhone(e.target.value))} />
@@ -222,7 +232,16 @@ function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
         <div>
           <label className="flex cursor-pointer items-start gap-3">
             <input type="checkbox" checked={form.consent} onChange={(e) => set('consent', e.target.checked)} aria-invalid={errors.consent ? true : undefined} aria-describedby={errors.consent ? 'consent-error' : undefined} className="mt-0.5 size-5 shrink-0 accent-copper" />
-            <span className="text-sm">Autorizo a ÉKA a entrar em contato comigo pelo WhatsApp sobre a revenda.<span aria-hidden="true" className="text-copper"> *</span></span>
+            <span className="text-sm">
+              Autorizo a ÉKA a entrar em contato comigo pelo WhatsApp sobre a revenda.<span aria-hidden="true" className="text-copper"> *</span>{' '}
+              <span className="text-ink-muted">
+                Veja a nossa{' '}
+                <Link to="/privacidade" className="text-copper underline underline-offset-4 hover:text-copper-dark">
+                  política de privacidade
+                </Link>
+                .
+              </span>
+            </span>
           </label>
           {errors.consent && <p id="consent-error" role="alert" className="mt-1.5 text-sm text-danger">{errors.consent}</p>}
         </div>

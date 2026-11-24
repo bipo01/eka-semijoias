@@ -20,6 +20,8 @@ export const MESSAGE_TYPES = [
   'contato',
   'comprovante',
   'revendedora',
+  'garantia',
+  'procura',
   'cobranca',
   'lembrete',
   'pago',
@@ -60,6 +62,7 @@ export const VARIABLES = {
   link_convite: { label: 'Link do primeiro acesso', example: 'https://eka.com.br/revenda/convite/aB12cD34' },
   link_mostruario: { label: 'Link do mostruário', example: 'https://eka.com.br/r/ana' },
   revendedora: { label: 'Nome da revendedora', example: 'Ana' },
+  busca: { label: 'O que ela procura', example: '"argola dourada"' },
 } as const;
 export type VariableName = keyof typeof VARIABLES;
 export type MessageVars = Partial<Record<VariableName, string | null | undefined>>;
@@ -121,6 +124,18 @@ export const MESSAGE_TYPE_INFO: Record<MessageType, MessageTypeInfo> = {
     group: 'cliente',
     vars: ['nome', 'whatsapp', 'cidade', 'uf', 'instagram', 'ja_revende', 'origem', 'loja'],
     required: ['nome'],
+  },
+  garantia: {
+    label: 'Garantia e trocas',
+    description: 'Botão “Falar sobre garantia” na página Garantia e trocas.',
+    group: 'cliente',
+    vars: ['loja'],
+  },
+  procura: {
+    label: 'Procurando algo específico',
+    description: 'Botão “Fale com a gente” do catálogo quando a busca ou o filtro não encontra peças. {busca} é o que ela digitou na busca, entre aspas, ou “uma peça”.',
+    group: 'cliente',
+    vars: ['busca', 'loja'],
   },
   cobranca: {
     label: 'Cobrança Pix',
@@ -236,6 +251,16 @@ export const PRESET_TEMPLATES: readonly PresetTemplate[] = [
   },
   { id: 'revendedora.carinhosa', type: 'revendedora', name: 'Carinhosa', text: 'Oi, ÉKA! 💛 Acabei de fazer meu pré-cadastro e quero muito revender as peças de vocês.\n\nSou {nome}, de {cidade}/{uf}.\n[Meu Instagram: @{instagram}]\nJá revendo: {ja_revende}' },
   { id: 'revendedora.direta', type: 'revendedora', name: 'Direta', text: 'Pré-cadastro de revendedora: {nome} — {cidade}/{uf} — {whatsapp}[ — @{instagram}]' },
+
+  // Garantia e trocas
+  { id: 'garantia.classica', type: 'garantia', name: 'Clássica', text: 'Olá! Preciso de ajuda com a garantia ou a troca de uma peça.' },
+  { id: 'garantia.com_foto', type: 'garantia', name: 'Com foto da peça', text: 'Olá! Uma peça minha apresentou um problema e quero acionar a garantia. Posso enviar uma foto por aqui?' },
+  { id: 'garantia.troca', type: 'garantia', name: 'Troca', text: 'Oi! Quero trocar o tamanho ou o acabamento de uma peça que ainda não usei. Como funciona?' },
+
+  // Procurando algo específico
+  { id: 'procura.classica', type: 'procura', name: 'Clássica', text: 'Olá! Estou procurando {busca} e não encontrei no site. Vocês têm?' },
+  { id: 'procura.encomenda', type: 'procura', name: 'Encomenda', text: 'Oi! Procurei {busca} no site e não achei. Vocês têm ou conseguem encomendar?' },
+  { id: 'procura.carinhosa', type: 'procura', name: 'Carinhosa', text: 'Oi, ÉKA! 💛 Estou procurando {busca}. Vocês podem me ajudar a encontrar?' },
 
   // Cobrança Pix
   {

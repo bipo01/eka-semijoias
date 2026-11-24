@@ -25,6 +25,23 @@ describe('encodeSteps', () => {
     ]);
     expect(encodeSteps('image/jpeg')[0]).toEqual({ maxSide: 1200, quality: 0.82 });
   });
+
+  it('keeps product photos on exactly the 1200 px plan by default', () => {
+    expect(encodeSteps('image/webp', 'product')).toEqual(encodeSteps('image/webp'));
+    expect(encodeSteps('image/jpeg', 'product')).toEqual(encodeSteps('image/jpeg'));
+    expect(Math.max(...encodeSteps('image/webp').map((s) => s.maxSide))).toBe(1200);
+  });
+
+  it('gives banners (wide profile) a 1600 px long side with the same quality steps', () => {
+    expect(encodeSteps('image/webp', 'wide')).toEqual([
+      { maxSide: 1600, quality: 0.8 },
+      { maxSide: 1600, quality: 0.7 },
+      { maxSide: 1600, quality: 0.6 },
+      { maxSide: 1300, quality: 0.6 },
+      { maxSide: 1000, quality: 0.6 },
+    ]);
+    expect(encodeSteps('image/jpeg', 'wide')[0]).toEqual({ maxSide: 1600, quality: 0.82 });
+  });
 });
 
 describe('fitWithin', () => {
@@ -61,6 +78,20 @@ describe('encodeWithinBudget', () => {
     expect(calls).toHaveLength(5);
     expect(result.step).toEqual({ maxSide: 800, quality: 0.6 });
     expect(result.blob.size).toBe(200 * KB);
+  });
+
+  it('runs the wide plan within the same 180 KB budget', async () => {
+    const { encode, calls } = fakeEncoder((s) => (s.maxSide >= 1600 ? 260 * KB : 160 * KB));
+    const result = await encodeWithinBudget(encode, IMAGE_BUDGET_BYTES, 'image/webp', 'wide');
+    expect(calls.map((c) => `${c.step.maxSide}:${c.step.quality}`)).toEqual(['1600:0.8', '1600:0.7', '1600:0.6', '1300:0.6']);
+    expect(result.blob.size).toBeLessThanOrEqual(IMAGE_BUDGET_BYTES);
+  });
+
+  it('keeps the wide plan when falling back to JPEG', async () => {
+    const { encode, calls } = fakeEncoder(() => 100 * KB, false);
+    const result = await encodeWithinBudget(encode, IMAGE_BUDGET_BYTES, 'image/webp', 'wide');
+    expect(calls[1]).toEqual({ step: { maxSide: 1600, quality: 0.82 }, mime: 'image/jpeg' });
+    expect(result.mime).toBe('image/jpeg');
   });
 
   it('falls back to JPEG when the browser cannot encode WebP', async () => {

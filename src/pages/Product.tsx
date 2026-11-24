@@ -19,6 +19,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { formatBRL } from '../lib/format';
 import { whatsappUrl } from '../lib/whatsapp';
 import { useMessages } from '../hooks/useMessages';
+import { useSection } from '../hooks/useSection';
 import { cartKey, MAX_QTY, useCart } from '../store/cart';
 import { useCatalog } from '../store/catalog';
 import { useUi } from '../store/ui';
@@ -36,7 +37,8 @@ const DETAIL_LABELS: [keyof Product['details'], string][] = [
 export function ProductPage() {
   const { slug } = useParams();
   const product = useCatalog((s) => s.data.products.find((p) => p.slug === slug));
-  useDocumentTitle(product?.name ?? 'Peça não encontrada');
+  const { notFoundTitle } = useSection('geral');
+  useDocumentTitle(product?.name ?? notFoundTitle);
   if (!product) return <NotFoundPage />;
   return <ProductView key={product.id} product={product} />;
 }
@@ -56,6 +58,8 @@ function ProductView({ product }: { product: Product }) {
   const [sizeError, setSizeError] = useState(false);
   const [qtyChoice, setQty] = useState(1);
   const trust = useTrustItems('product');
+  const { productTips } = useSection('cuidados');
+  const { productText: warrantyText } = useSection('garantia');
 
   const gallery = galleryFor(product, variant);
   const category = data.categories.find((c) => c.id === product.categoryId);
@@ -272,16 +276,18 @@ function ProductView({ product }: { product: Product }) {
               </AccordionItem>
             )}
             <AccordionItem title="Cuidados">
-              <ul className="list-disc space-y-1 pl-5 text-sm">
-                <li>Coloque a peça depois do perfume, do creme e da maquiagem.</li>
-                <li>Tire para tomar banho, nadar, ir à praia e treinar.</li>
-                <li>Limpe com flanela seca e guarde separada, longe da umidade.</li>
-              </ul>
+              {productTips.length > 0 && (
+                <ul className="list-disc space-y-1 pl-5 text-sm">
+                  {productTips.map((tip) => (
+                    <li key={tip.id} className="[overflow-wrap:anywhere]">{tip.text}</li>
+                  ))}
+                </ul>
+              )}
               <Link to="/como-cuidar" className="mt-2 inline-flex min-h-11 items-center text-sm text-copper underline underline-offset-4">Ver todos os cuidados</Link>
             </AccordionItem>
             {biz.warrantyMonths && (
               <AccordionItem title={warrantyLabel(biz.warrantyMonths)}>
-                <p className="text-sm">Cobre defeitos no banho com uso normal. Para acionar, é só chamar a gente no WhatsApp com uma foto da peça.</p>
+                {warrantyText && <p className="text-sm whitespace-pre-line [overflow-wrap:anywhere]">{warrantyText}</p>}
                 <Link to="/garantia" className="mt-2 inline-flex min-h-11 items-center text-sm text-copper underline underline-offset-4">Garantia e trocas</Link>
               </AccordionItem>
             )}

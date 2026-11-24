@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { sortedCategories } from '../../data/catalog';
 import { useBusiness } from '../../hooks/useBusiness';
 import { useMessages } from '../../hooks/useMessages';
+import { useSection } from '../../hooks/useSection';
 import { whatsappUrl } from '../../lib/whatsapp';
 import { useCatalog } from '../../store/catalog';
 import { useUi } from '../../store/ui';
@@ -18,6 +19,7 @@ export function MenuDrawer() {
   const data = useCatalog((s) => s.data);
   const biz = useBusiness();
   const contactMessage = useMessages()('contato');
+  const { menuText } = useSection('revendedoras');
 
   return (
     <Sheet open={open} onClose={close} title="Menu" side="left" hideTitle>
@@ -42,9 +44,9 @@ export function MenuDrawer() {
           </ul>
         </section>
         <Link to="/revendedoras" onClick={close} className="flex min-h-14 items-center justify-between rounded-[12px] bg-champagne px-4 text-ink">
-          <span>
+          <span className="min-w-0">
             <span className="block font-display text-title">Seja revendedora</span>
-            <span className="text-sm text-ink-muted">Renda extra com as nossas peças</span>
+            {menuText && <span className="text-sm [overflow-wrap:anywhere] text-ink-muted">{menuText}</span>}
           </span>
           <ChevronRight size={20} strokeWidth={1.5} className="text-copper" aria-hidden="true" />
         </Link>

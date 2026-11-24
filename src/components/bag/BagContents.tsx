@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, PencilLine, ShoppingBag, Trash2, User } from 'lucide-react';
 import { useBusiness } from '../../hooks/useBusiness';
+import { useSection } from '../../hooks/useSection';
 import { productImageSources } from '../../lib/assets';
 import { formatBRL } from '../../lib/format';
 import { lineTotal, orderTotal, resolveCart, whatsappUrl, type OrderLine } from '../../lib/whatsapp';
@@ -48,6 +49,7 @@ function RegisteredView({ order, onNavigate }: { order: RegisteredOrder; onNavig
   const { sent, markSent, reset } = useCheckout();
   const clearCart = useCart((s) => s.clear);
   const compose = useMessages();
+  const { afterOrderText } = useSection('geral');
   const message = compose(
     'pedido',
     { pedido: String(order.number), total: formatBRL(order.totalCents), nome: order.name, cidade: order.city, obs: order.note },
@@ -67,8 +69,8 @@ function RegisteredView({ order, onNavigate }: { order: RegisteredOrder; onNavig
         <h3 ref={heading} tabIndex={-1} className="font-display text-display-m focus:outline-none">
           Pedido nº {order.number} registrado
         </h3>
-        <p className="max-w-sm text-ink-muted">
-          {sent ? 'Pronto! Se o WhatsApp não abriu, toque no botão de novo.' : 'Agora envie o pedido pelo WhatsApp. A gente confirma a disponibilidade e te manda por lá o link para pagar com Pix.'}
+        <p className="max-w-sm whitespace-pre-line [overflow-wrap:anywhere] text-ink-muted">
+          {sent ? 'Pronto! Se o WhatsApp não abriu, toque no botão de novo.' : afterOrderText}
         </p>
       </div>
 
@@ -127,6 +129,7 @@ export function BagContents({ onNavigate, variant }: { onNavigate?: () => void; 
   const biz = useBusiness();
   const compose = useMessages();
   const { order, sent, setOrder, reset } = useCheckout();
+  const { bagEmptyTitle, bagEmptyText } = useSection('geral');
   const registeredFrom = useCheckout((s) => s.cartSignature);
   const [phase, setPhase] = useState<Phase>({ state: 'edit' });
   const [errors, setErrors] = useState<{ name?: string; city?: string }>({});
@@ -170,8 +173,8 @@ export function BagContents({ onNavigate, variant }: { onNavigate?: () => void; 
         <span className="inline-flex size-16 items-center justify-center rounded-full bg-champagne text-copper">
           <ShoppingBag size={28} strokeWidth={1.5} />
         </span>
-        <p className="font-display text-title">Sua sacola está vazia</p>
-        <p className="max-w-xs text-ink-muted">Escolha suas peças preferidas e envie o pedido pelo WhatsApp em poucos toques.</p>
+        <p className="max-w-full font-display text-title break-words">{bagEmptyTitle}</p>
+        {bagEmptyText && <p className="max-w-xs whitespace-pre-line [overflow-wrap:anywhere] text-ink-muted">{bagEmptyText}</p>}
         <ButtonLink to="/catalogo" onClick={onNavigate}>
           Ver catálogo
         </ButtonLink>
@@ -377,7 +380,12 @@ export function BagContents({ onNavigate, variant }: { onNavigate?: () => void; 
             {sending ? 'Registrando pedido…' : 'Finalizar pedido'}
           </Button>
         )}
-        <p className="text-center text-sm text-ink-muted">Usamos seu nome e cidade só para acompanhar o seu pedido.</p>
+        <p className="text-center text-sm text-ink-muted">
+          Usamos seu nome e cidade só para acompanhar o seu pedido.{' '}
+          <Link to="/privacidade" onClick={onNavigate} className="text-copper underline underline-offset-4 hover:text-copper-dark">
+            Privacidade
+          </Link>
+        </p>
       </form>
     </div>
   );

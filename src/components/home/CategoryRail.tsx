@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { categoryFromPrice, categoryImage, sortedCategories } from '../../data/catalog';
 import { productImageSources } from '../../lib/assets';
 import { formatBRL } from '../../lib/format';
+import { useSection } from '../../hooks/useSection';
 import { useCatalog } from '../../store/catalog';
 import { Img } from '../ui/Img';
 import { SectionHeading } from '../ui/Misc';
@@ -18,6 +19,7 @@ export function SeeAll({ to, label = 'Ver todas' }: { to: string; label?: string
 
 export function CategoryRail() {
   const data = useCatalog((s) => s.data);
+  const { titles } = useSection('inicio');
   const tiles = sortedCategories(data)
     .map((c) => ({ category: c, image: categoryImage(data, c), from: categoryFromPrice(data, c.id) }))
     .filter((t) => t.image && t.from != null);
@@ -25,7 +27,7 @@ export function CategoryRail() {
   return (
     <section aria-labelledby="home-categorias" className="pt-10 lg:pt-16">
       <div className="container-x">
-        <SectionHeading id="home-categorias" title="Categorias" action={<SeeAll to="/catalogo" />} />
+        <SectionHeading id="home-categorias" title={titles.categories} action={<SeeAll to="/catalogo" />} />
       </div>
       <ul className="no-scrollbar flex snap-x snap-mandatory scroll-px-[var(--gutter)] gap-3 overflow-x-auto px-[var(--gutter)] lg:container-x lg:grid lg:snap-none lg:gap-5 lg:overflow-visible" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
         {tiles.map(({ category, image, from }) => {

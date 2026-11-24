@@ -6,7 +6,7 @@ import { migrateCatalog } from '../../data/integrity';
 import { mockServer } from '../../test/mockApi';
 import { useCatalog } from '../../store/catalog';
 import { polyfillDialog, renderAdmin, resetStores, unlockSession } from '../testUtils';
-import { backupFilename, catalogOf, exportCatalog, mediaOf, parseBackup, summarize, withEmbeddedMedia } from './BackupPage';
+import { backupFilename, catalogOf, contentSummary, exportCatalog, mediaOf, parseBackup, summarize, withEmbeddedMedia } from './BackupPage';
 
 polyfillDialog();
 resetStores();
@@ -69,6 +69,34 @@ describe('backup', () => {
     expect(mediaOf(null)).toEqual({});
   });
 
+  it('carries the uploaded photos of the site texts and points them back on import', () => {
+    const hero = `media/${'a'.repeat(64)}.webp`;
+    const thumb = `media/${'b'.repeat(64)}.webp`;
+    const state = createSeed();
+    state.content = {
+      sobre: {
+        header: { eyebrow: '', title: 'Brilho com', highlight: 'história', intro: '' },
+        story: 'Minha história.',
+        signature: 'Érika',
+        image: { src: hero, thumb, alt: 'Érika no ateliê' },
+        valuesTitle: 'Valores',
+        values: [],
+      },
+    };
+    const parsed = parseBackup(exportCatalog(state, { [hero]: UPLOADED, [thumb]: UPLOADED }));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.state.content?.sobre?.image).toEqual({ src: hero, thumb, alt: 'Érika no ateliê' });
+    const restored = withEmbeddedMedia(catalogOf(parsed.state), parsed.media);
+    expect(restored.content?.sobre?.image).toEqual({ src: UPLOADED, thumb: UPLOADED, alt: 'Érika no ateliê' });
+    expect(withEmbeddedMedia(catalogOf(parsed.state), parsed.media, new Set([hero, thumb])).content?.sobre?.image?.src).toBe(hero);
+  });
+
+  it('says what a backup does to the site texts', () => {
+    expect(contentSummary(createSeed())).toBe('textos originais do site');
+    expect(contentSummary({ content: { depoimentos: { items: [] } } })).toBe('1 parte do site com texto editado');
+  });
+
   it('imports only the catalog part (leads stay as they are)', () => {
     expect(catalogOf(catalogWithUpload())).not.toHaveProperty('leads');
   });
@@ -96,11 +124,27 @@ describe('backup page', { timeout: 20_000 }, () => {
     await user.upload(await screen.findByLabelText(/Escolher arquivo de backup/), new File([exportCatalog(backup)], 'eka.json', { type: 'application/json' }));
     const dialog = await screen.findByRole('dialog', { name: 'Substituir o catálogo?' });
     expect(dialog).toHaveTextContent('6 categorias');
+    // A backup without site texts takes the site back to the original texts; the confirmation says so.
+    expect(dialog).toHaveTextContent('Este backup não tem textos do site editados, então o site volta aos textos originais.');
     await user.click(screen.getByRole('button', { name: 'Substituir' }));
     expect(await screen.findByText(/Backup restaurado/)).toBeInTheDocument();
     const uploaded = useCatalog.getState().data.products[0]!.images.find((i) => i.id === 'img-upload');
     expect(uploaded?.src).toMatch(/^media\//); // the embedded photo was uploaded first
     expect(mockServer.catalog.products[0]!.images.some((i) => i.id === 'img-upload')).toBe(true);
     expect(mockServer.leads).toHaveLength(0);
+  });
+
+  it('restoring a backup without site texts takes the site back to the original texts', async () => {
+    unlockSession();
+    const live = { ...createSeed(), content: { contato: { header: { eyebrow: '', title: 'Fale com a', highlight: 'gente', intro: '' }, quickTitle: 'Oi', updatedAt: '2026-11-24T10:00:00.000Z' } } };
+    mockServer.catalog = live;
+    useCatalog.setState({ data: live, version: 1, status: 'ready' });
+    const user = userEvent.setup();
+    renderAdmin('/admin/backup');
+    await user.upload(await screen.findByLabelText(/Escolher arquivo de backup/), new File([exportCatalog(createSeed())], 'antigo.json', { type: 'application/json' }));
+    await screen.findByRole('dialog', { name: 'Substituir o catálogo?' });
+    await user.click(screen.getByRole('button', { name: 'Substituir' }));
+    expect(await screen.findByText(/Backup restaurado/)).toBeInTheDocument();
+    expect(mockServer.catalog.content ?? {}).not.toHaveProperty('contato');
   });
 });

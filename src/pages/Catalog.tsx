@@ -12,6 +12,7 @@ import { sortedCategories } from '../data/catalog';
 import { FINISHES, FINISH_LABEL, type Finish } from '../data/schema';
 import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useMessages } from '../hooks/useMessages';
 import {
   activeFilterCount,
   filterProducts,
@@ -32,6 +33,7 @@ export function CatalogPage() {
   const [params, setParams] = useSearchParams();
   const data = useCatalog((s) => s.data);
   const biz = useBusiness();
+  const message = useMessages();
   const filters = useMemo(() => parseFilters(params), [params]);
   const category = categoria ? data.categories.find((c) => c.slug === categoria) : null;
   const [filterOpen, setFilterOpen] = useState(false);
@@ -162,7 +164,7 @@ export function CatalogPage() {
           )}
           <div className="mt-6 w-full rounded-[12px] bg-champagne p-5">
             <p className="font-display text-title">Procurando algo específico?</p>
-            <ButtonAnchor href={whatsappUrl(biz.whatsapp, `Olá! Estou procurando ${filters.q ? `"${filters.q}"` : 'uma peça'} e não encontrei no site. Vocês têm?`)} className="mt-3" block>
+            <ButtonAnchor href={whatsappUrl(biz.whatsapp, message('procura', { busca: filters.q ? `"${filters.q}"` : 'uma peça' }))} className="mt-3" block>
               <WhatsAppIcon size={20} /> Fale com a gente
             </ButtonAnchor>
           </div>

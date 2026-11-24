@@ -1,4 +1,5 @@
 import { catalogSchema, catalogStateSchema, SCHEMA_VERSION, type Catalog, type CatalogState, type ResellerLead } from './schema';
+import { parseSection, SECTION_IDS, SECTION_LABEL } from './content';
 
 /*
  * Pure catalog checks shared by the browser and the Worker: versioned
@@ -46,6 +47,16 @@ export function migrateCatalog(input: unknown, migrations: Record<number, Migrat
     version++;
   }
   if (!Array.isArray(data.leads)) data = { ...data, leads: [] };
+  // Site sections are checked strictly: the lenient catalog schema would drop an unreadable one,
+  // and restoring the file would then silently put that live page back to the built-in text.
+  const content = data.content;
+  if (content !== undefined && (typeof content !== 'object' || content === null || Array.isArray(content))) return { ok: false, error: 'Os textos do site no arquivo estão em um formato inesperado.' };
+  for (const sid of SECTION_IDS) {
+    const section = (content as Record<string, unknown> | undefined)?.[sid];
+    if (section === undefined) continue;
+    const r = parseSection(sid, section);
+    if (!r.ok) return { ok: false, error: `A parte “${SECTION_LABEL[sid]}” dos textos do site não pôde ser lida (${r.error}${r.path ? ` em ${r.path}` : ''}).` };
+  }
   const parsed = catalogStateSchema.safeParse(data);
   if (!parsed.success) return { ok: false, error: describeIssue(parsed.error.issues[0]) };
   const integrity = checkIntegrity(parsed.data);
@@ -91,6 +102,14 @@ export function checkIntegrity(state: IntegrityInput): string | null {
 
 /** Validates a public catalog: schema plus integrity. Returns a pt-BR problem or null. */
 export function validateCatalog(catalog: Catalog): string | null {
+  // The catalog schema lets an unreadable section fall back to the built-in text (for visitors);
+  // a save must instead refuse it, with the field, before the server does.
+  for (const sid of SECTION_IDS) {
+    const data = (catalog.content as Record<string, unknown> | undefined)?.[sid];
+    if (data === undefined) continue;
+    const r = parseSection(sid, data);
+    if (!r.ok) return `${r.error} (${SECTION_LABEL[sid]}${r.path ? `: ${r.path}` : ''})`;
+  }
   const parsed = catalogSchema.safeParse(catalog);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];

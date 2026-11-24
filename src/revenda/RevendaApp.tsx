@@ -211,6 +211,13 @@ function InvitePage() {
         <Button type="submit" size="lg" block disabled={busy} aria-busy={busy}>
           {busy ? 'Salvando…' : c ? 'Aceitar e entrar' : 'Salvar PIN e entrar'}
         </Button>
+        {/* New tab: leaving this page would lose what she typed (contract name, PIN). */}
+        <p className="-mt-2 text-center text-xs text-ink-muted">
+          Como a ÉKA cuida dos seus dados:{' '}
+          <a href="/privacidade" target="_blank" rel="noopener" className="inline-flex min-h-6 items-center underline underline-offset-4 hover:text-copper">
+            política de privacidade
+          </a>
+        </p>
       </form>
     </Shell>
   );

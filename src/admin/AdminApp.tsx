@@ -24,6 +24,7 @@ import { ReportPage } from './sections/ReportPage';
 import { StockPage } from './sections/StockPage';
 import { SettingsPage } from './sections/SettingsPage';
 import { BackupPage } from './sections/BackupPage';
+import { SitePage } from './sections/site/SitePage';
 
 /** `expired`: the session ended while the panel was open; the keypad shows over it so no edit is lost. */
 type Gate = { state: 'checking' } | { state: 'locked'; pinLength: number } | { state: 'open'; pinLength: number; expired?: boolean } | { state: 'error'; message: string };
@@ -123,6 +124,7 @@ export default function AdminApp() {
           <Route path="estoque" element={<StockPage />} />
           <Route path="relatorio" element={<ReportPage />} />
           <Route path="mensagens" element={<MessagesPage />} />
+          <Route path="site" element={<SitePage />} />
           <Route path="produtos" element={<ProductsPage />}>
             <Route path=":productId" element={<ProductFormRoute />} />
           </Route>

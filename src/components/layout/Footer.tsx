@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useBusiness } from '../../hooks/useBusiness';
 import { asset } from '../../lib/assets';
 import { useMessages } from '../../hooks/useMessages';
+import { useSection } from '../../hooks/useSection';
 import { whatsappUrl } from '../../lib/whatsapp';
 import { InstallAppButton } from '../install/InstallAppButton';
 import { InstagramIcon, WhatsAppIcon } from '../ui/Icons';
@@ -22,6 +23,7 @@ const COLUMNS = [
       ['/garantia', 'Garantia e trocas'],
       ['/contato', 'Contato'],
       ['/sobre', 'Sobre a ÉKA'],
+      ['/privacidade', 'Privacidade'],
     ],
   },
 ] as const;
@@ -29,12 +31,13 @@ const COLUMNS = [
 export function Footer() {
   const biz = useBusiness();
   const contactMessage = useMessages()('contato');
+  const { footerTagline } = useSection('geral');
   return (
     <footer className="on-dark bg-ink pb-[calc(88px+var(--safe-bottom))] text-on-dark lg:pb-12">
       <div className="container-x grid grid-cols-2 gap-x-6 gap-y-10 pt-12 md:grid-cols-[1.2fr_1fr_1fr_1fr] md:gap-8 lg:pt-16">
         <div className="col-span-2 flex flex-col items-start gap-4 md:col-span-1">
           <img src={asset('brand/eka-emblem-rosegold-240.webp')} alt="ÉKA Semijoias" width={112} height={112} loading="lazy" decoding="async" className="size-28" />
-          <p className="max-w-xs font-display text-title text-on-dark">Peças que acompanham você todos os dias, com brilho que dura.</p>
+          {footerTagline && <p className="max-w-xs font-display text-title [overflow-wrap:anywhere] text-on-dark">{footerTagline}</p>}
         </div>
         {COLUMNS.map((col) => (
           <nav key={col.title} aria-label={col.title}>

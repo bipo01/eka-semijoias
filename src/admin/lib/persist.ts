@@ -23,10 +23,15 @@ export function reportSaveError(result: Extract<SaveResult, { ok: false }>): voi
  * server confirmed it; on failure shows the error and resolves to false, so
  * the caller keeps its local state (a form stays open with its edits).
  */
-export async function save(update: (data: Catalog) => Catalog, success?: Success, opts?: { onProgress?: (message: string) => void }): Promise<boolean> {
-  const result = await useCatalog.getState().commit(update, opts);
+export async function save(
+  update: (data: Catalog) => Catalog,
+  success?: Success,
+  opts?: { onProgress?: (message: string) => void; onError?: (result: Extract<SaveResult, { ok: false }>) => void },
+): Promise<boolean> {
+  const result = await useCatalog.getState().commit(update, opts?.onProgress ? { onProgress: opts.onProgress } : {});
   if (!result.ok) {
     reportSaveError(result);
+    opts?.onError?.(result); // e.g. a form that keeps the server's message on screen
     return false;
   }
   if (typeof success === 'string') toast(success, { tone: 'success' });

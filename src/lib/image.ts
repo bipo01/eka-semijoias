@@ -12,10 +12,19 @@ export interface EncodeStep {
   quality: number;
 }
 
+/**
+ * Size profile of a photo: `product` (product photos and most site images,
+ * long side up to 1200 px) or `wide` (site banners, long side up to 1600 px).
+ * Both share the same byte budget, hard limit and thumbnail.
+ */
+export type ImageProfile = 'product' | 'wide';
+
 /** Target size of one stored photo. */
 export const IMAGE_BUDGET_BYTES = 180 * 1024;
 /** Above this, even the smallest step is refused (it would not fit the catalog). */
 export const IMAGE_HARD_LIMIT_BYTES = 320 * 1024;
+/** Banners fill the screen width: a textured photo keeps 1300 px instead of falling to 1000 px. */
+export const WIDE_IMAGE_BUDGET_BYTES = 280 * 1024;
 /** Files bigger than this are refused before decoding (protects memory on phones). */
 export const MAX_INPUT_BYTES = 40 * 1024 * 1024;
 /** Decoded images above this pixel count are refused (a 48 MP phone photo is ~48 M). */
@@ -27,14 +36,18 @@ export const THUMB_STEP: Record<ImageMime, EncodeStep> = {
 
 const FIRST_QUALITY: Record<ImageMime, number> = { 'image/webp': 0.8, 'image/jpeg': 0.82 };
 
-/** Encode attempts in order: quality first (start, 0.7, 0.6), then size (1000, 800). */
-export function encodeSteps(mime: ImageMime): EncodeStep[] {
+/**
+ * Encode attempts in order: quality first (start, 0.7, 0.6), then size.
+ * Product: 1200 → 1000 → 800. Wide: 1600 → 1300 → 1000.
+ */
+export function encodeSteps(mime: ImageMime, profile: ImageProfile = 'product'): EncodeStep[] {
+  const [full, smaller, smallest] = profile === 'wide' ? [1600, 1300, 1000] : [1200, 1000, 800];
   return [
-    { maxSide: 1200, quality: FIRST_QUALITY[mime] },
-    { maxSide: 1200, quality: 0.7 },
-    { maxSide: 1200, quality: 0.6 },
-    { maxSide: 1000, quality: 0.6 },
-    { maxSide: 800, quality: 0.6 },
+    { maxSide: full, quality: FIRST_QUALITY[mime] },
+    { maxSide: full, quality: 0.7 },
+    { maxSide: full, quality: 0.6 },
+    { maxSide: smaller, quality: 0.6 },
+    { maxSide: smallest, quality: 0.6 },
   ];
 }
 
@@ -59,16 +72,16 @@ export interface EncodedImage {
  * (or the last, smallest attempt). If the browser answers a WebP request with
  * another type (Safari without a WebP encoder), it switches to the JPEG plan.
  */
-export async function encodeWithinBudget(encode: Encoder, budget = IMAGE_BUDGET_BYTES, startMime: ImageMime = 'image/webp'): Promise<EncodedImage> {
+export async function encodeWithinBudget(encode: Encoder, budget = IMAGE_BUDGET_BYTES, startMime: ImageMime = 'image/webp', profile: ImageProfile = 'product'): Promise<EncodedImage> {
   let mime: ImageMime = startMime;
-  let steps = encodeSteps(mime);
+  let steps = encodeSteps(mime, profile);
   let last: EncodedImage | null = null;
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i]!;
     const blob = await encode(step, mime);
     if (mime === 'image/webp' && blob.type !== 'image/webp') {
       mime = 'image/jpeg';
-      steps = encodeSteps(mime);
+      steps = encodeSteps(mime, profile);
       i = -1;
       continue;
     }
@@ -165,8 +178,12 @@ function canEncodeWebp(): Promise<boolean> {
   return webpSupport;
 }
 
-/** Turns a picked photo into a compact data URL plus a 480 px thumbnail. */
-export async function processImage(file: File): Promise<ProcessedImage> {
+/**
+ * Turns a picked photo into a compact data URL plus a 480 px thumbnail.
+ * `profile: 'wide'` keeps banners sharper (long side up to 1600 px) within the same byte budget.
+ */
+export async function processImage(file: File, opts: { profile?: ImageProfile } = {}): Promise<ProcessedImage> {
+  const profile = opts.profile ?? 'product';
   if (file.size > MAX_INPUT_BYTES) return fail('too-large');
   // HEIC decodes only in a few browsers (Safari); elsewhere decoding fails and is reported as unsupported.
   const decoded = await decode(file);
@@ -178,7 +195,7 @@ export async function processImage(file: File): Promise<ProcessedImage> {
   const canvas = document.createElement('canvas');
   try {
     const encode = canvasEncoder(decoded, canvas);
-    const main = await encodeWithinBudget(encode, IMAGE_BUDGET_BYTES, (await canEncodeWebp()) ? 'image/webp' : 'image/jpeg');
+    const main = await encodeWithinBudget(encode, profile === 'wide' ? WIDE_IMAGE_BUDGET_BYTES : IMAGE_BUDGET_BYTES, (await canEncodeWebp()) ? 'image/webp' : 'image/jpeg', profile);
     if (main.blob.size > IMAGE_HARD_LIMIT_BYTES) return fail('too-large');
     const thumbBlob = await encode(THUMB_STEP[main.mime], main.mime);
     const [src, thumb] = await Promise.all([toDataUrl(main.blob), toDataUrl(thumbBlob)]);

@@ -20,6 +20,7 @@ export const SECTIONS = [
   { path: 'estoque', label: 'Estoque' },
   { path: 'relatorio', label: 'Relatório' },
   { path: 'mensagens', label: 'Mensagens' },
+  { path: 'site', label: 'Site' },
   { path: 'categorias', label: 'Categorias' },
   { path: 'configuracoes', label: 'Configurações' },
   { path: 'backup', label: 'Backup' },

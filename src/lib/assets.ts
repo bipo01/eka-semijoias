@@ -46,3 +46,28 @@ export function bannerSources(src: string): ImageSources {
 export function productImageSources(image: ProductImage, small = false): ImageSources {
   return imageSources(image.src, { thumb: image.thumb, small });
 }
+
+/** Where a site content image is shown (Painel → Site): it picks the sizes the browser may choose from. */
+export type SiteImageUsage = 'hero' | 'banner' | 'tile';
+
+/** Built-in hero photos that also ship a 720 px width (the hero's middle size). */
+const HERO_STEMS = new Set(['images/lifestyle/l01-hero-pescoco']);
+
+/**
+ * Sources for a site content image ({src, thumb?}): a built-in asset stem keeps
+ * exactly the sizes the page used before the content became editable; an
+ * uploaded photo ("media/…") has its main size plus the optional 480 px thumb.
+ * - hero: the home hero (480/720/960 for the built-in hero photo);
+ * - banner: wide photos (reseller band and page heroes; 1440 px when the asset has it);
+ * - tile: small squares (Instagram strip), the smallest size.
+ */
+export function siteImageSources(image: { src: string; thumb?: string | undefined }, usage: SiteImageUsage): ImageSources {
+  const { src, thumb } = image;
+  if (usage === 'tile') return imageSources(src, { thumb, small: true });
+  const stem = src.startsWith('images/');
+  if (usage === 'hero' && HERO_STEMS.has(src)) {
+    const base = asset(src);
+    return { src: `${base}-720.webp`, srcSet: `${base}-480.webp 480w, ${base}-720.webp 720w, ${base}-960.webp 960w` };
+  }
+  return stem ? bannerSources(src) : imageSources(src, { thumb });
+}

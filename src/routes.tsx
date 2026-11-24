@@ -11,6 +11,7 @@ import { CarePage } from './pages/Care';
 import { WarrantyPage } from './pages/Warranty';
 import { AboutPage } from './pages/About';
 import { ContactPage } from './pages/Contact';
+import { PrivacyPage } from './pages/Privacy';
 import { NotFoundPage } from './pages/NotFound';
 
 // Clean paths (/catalogo, /produto/<slug>, /admin): the Worker serves index.html for every page route.
@@ -64,6 +65,7 @@ export const router = createBrowserRouter([
           { path: 'garantia', element: <WarrantyPage /> },
           { path: 'sobre', element: <AboutPage /> },
           { path: 'contato', element: <ContactPage /> },
+          { path: 'privacidade', element: <PrivacyPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

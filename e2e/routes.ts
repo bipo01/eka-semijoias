@@ -15,5 +15,6 @@ export const PUBLIC_ROUTES = [
   '/garantia',
   '/sobre',
   '/contato',
+  '/privacidade',
   '/pagina-que-nao-existe',
 ];

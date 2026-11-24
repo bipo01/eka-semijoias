@@ -209,7 +209,6 @@ interface ReadState {
 
 async function readState(db: D1Database, changes: Change[], mediaKeys: string[], idempotencyKey: string | null): Promise<ReadState> {
   const ids = (kind: EntityKind) => JSON.stringify(changes.filter((c) => c.kind === kind).map((c) => (c as { id: string }).id));
-  const sectionIds = JSON.stringify(changes.filter((c) => c.kind === 'content').map((c) => (c as { id: string }).id));
   const results = await withReadRetry(() =>
     db.batch<Record<string, unknown>>([
       db.prepare('SELECT version, body FROM catalog_snapshot WHERE id = 1'),
@@ -228,14 +227,23 @@ async function readState(db: D1Database, changes: Change[], mediaKeys: string[],
       db.prepare('SELECT product_id, variant_id, size, qty FROM stock_levels'),
       db.prepare('SELECT product_id FROM stock_tracked'),
       // Site sections: one app_config row per section ever saved ("site:<id>", data {version, content|null}).
-      db.prepare(`SELECT key, data FROM app_config WHERE key IN (SELECT 'site:' || value FROM json_each(?1))`).bind(sectionIds),
+      // At most 12 small rows; they are the truth the snapshot's `content` is rebuilt from.
+      db.prepare(`SELECT key, data FROM app_config WHERE key LIKE 'site:%'`),
     ]),
   );
   const snapshot = results[0]?.results[0] as Snapshot | undefined;
   if (!snapshot) throw new HttpError('internal');
   const parsed = JSON.parse(snapshot.body) as Catalog;
+  const siteRows = (results[8]?.results ?? []).flatMap((r) => {
+    const sid = String(r.key).slice('site:'.length);
+    const data = JSON.parse(String(r.data)) as { version?: unknown; content?: unknown };
+    return isSectionId(sid) && typeof data.version === 'number' ? [{ sid, version: data.version, content: data.content ?? null }] : [];
+  });
+  // The rows are the source of the site content: a snapshot written without it (e.g. by a Worker
+  // rolled back to before the content existed) gets it back on the next catalog save.
+  const content = Object.fromEntries(siteRows.filter((r) => r.content !== null).map((r) => [r.sid, r.content])) as Catalog['content'];
   return {
-    catalog: { ...parsed, version: snapshot.version },
+    catalog: { ...parsed, content, version: snapshot.version },
     versions: new Map((results[1]?.results ?? []).map((r) => [entityKey(r.kind as EntityKind, r.id as string), r.version as number])),
     tombstones: new Map((results[2]?.results ?? []).map((r) => [entityKey(r.kind as EntityKind, r.id as string), r.version as number])),
     settingsVersion: (results[3]?.results[0]?.version as number | undefined) ?? 0,
@@ -243,13 +251,7 @@ async function readState(db: D1Database, changes: Change[], mediaKeys: string[],
     replay: (results[5]?.results[0] as ReadState['replay']) ?? null,
     stockRows: (results[6]?.results ?? []) as unknown as StockRow[],
     tracked: (results[7]?.results ?? []).map((r) => r.product_id as string),
-    contentVersions: new Map(
-      (results[8]?.results ?? []).flatMap((r) => {
-        const sid = String(r.key).slice('site:'.length);
-        const version = (JSON.parse(String(r.data)) as { version?: unknown }).version;
-        return isSectionId(sid) && typeof version === 'number' ? [[sid, version] as const] : [];
-      }),
-    ),
+    contentVersions: new Map(siteRows.map((r) => [r.sid, r.version] as const)),
   };
 }
 
@@ -311,25 +313,29 @@ export async function handleChanges(ctx: Context): Promise<Response> {
   const parsed = changeSetSchema.safeParse(input);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    throw new HttpError('bad_request', `Dados inválidos: ${issue?.message ?? 'formato inesperado'}.`, zodDetails(parsed.error.issues));
+    throw new HttpError('bad_request', `Dados inválidos: ${(issue?.message ?? 'formato inesperado').replace(/\.$/, '')}.`, zodDetails(parsed.error.issues));
   }
   const { baseVersion } = parsed.data;
-  const changes = parsed.data.changes as Change[];
+  const sent = parsed.data.changes as Change[];
   const idempotencyKey = ctx.request.headers.get('Idempotency-Key');
   if (idempotencyKey !== null && !/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey)) throw new HttpError('bad_request', 'Chave de envio inválida.');
   const requestHash = await sha256Hex(bytes);
-  const mediaKeys = referencedMedia(changes);
+  const mediaKeys = referencedMedia(sent);
   await ensureSeeded(db);
 
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
     // Lost a compare-and-swap race: back off with jitter so contending writers spread out.
     if (attempt > 0) await new Promise((r) => setTimeout(r, Math.random() * 25 * Math.min(attempt, 4)));
-    const state = await readState(db, changes, mediaKeys, idempotencyKey);
+    const state = await readState(db, sent, mediaKeys, idempotencyKey);
     if (state.replay) {
       if (state.replay.request_hash !== requestHash) throw new HttpError('bad_request', 'Esta chave de envio já foi usada para outros dados.');
       return json(JSON.parse(state.replay.response));
     }
     if (baseVersion > state.catalog.version) throw new HttpError('conflict', 'Seu painel está à frente do servidor. Recarregue a página.');
+    // Settings without `messages` keep the stored templates: an admin tab from an older build drops
+    // message types it does not know and would otherwise erase all of them when saving anything
+    // (clearing the templates sends an explicit empty object).
+    const changes = sent.map((c): Change => (c.kind === 'settings' && c.data.messages === undefined && state.catalog.settings.messages !== undefined ? { ...c, data: { ...c.data, messages: state.catalog.settings.messages } } : c));
 
     const conflicts = findConflicts(state, changes, baseVersion);
     if (conflicts.length) throw new HttpError('conflict', conflictMessage(conflicts), { conflicts, version: state.catalog.version });

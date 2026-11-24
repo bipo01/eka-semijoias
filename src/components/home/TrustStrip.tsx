@@ -11,12 +11,13 @@ export interface TrustItem {
 
 export function useTrustItems(context: 'home' | 'product'): TrustItem[] {
   const biz = useBusiness();
+  // What the owner confirmed comes first; the WhatsApp line only fills a free slot (at most 4 items).
   const items: TrustItem[] = [];
   if (biz.warrantyMonths) items.push({ icon: <ShieldCheck size={26} strokeWidth={1.25} />, label: warrantyLabel(biz.warrantyMonths) });
-  if (context === 'home') items.push({ icon: <WhatsAppIcon size={26} strokeWidth={1.25} />, label: 'Pedido pelo WhatsApp' });
   if (biz.shipsNationwide) items.push({ icon: <Truck size={26} strokeWidth={1.25} />, label: 'Envio para todo o Brasil' });
   if (biz.hypoallergenic) items.push({ icon: <Leaf size={26} strokeWidth={1.25} />, label: 'Peças antialérgicas' });
   if (biz.installments) items.push({ icon: <CreditCard size={26} strokeWidth={1.25} />, label: `Parcelamento em até ${biz.installments}x` });
+  if (context === 'home' && items.length < 4) items.splice(biz.warrantyMonths ? 1 : 0, 0, { icon: <WhatsAppIcon size={26} strokeWidth={1.25} />, label: 'Pedido pelo WhatsApp' });
   if (context === 'product' && items.length < 3) items.push({ icon: <WhatsAppIcon size={26} strokeWidth={1.25} />, label: 'Atendimento pelo WhatsApp' });
   return items.slice(0, 4);
 }

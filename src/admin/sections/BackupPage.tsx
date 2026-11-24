@@ -3,6 +3,7 @@ import { Download, RotateCcw, Upload } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { imageSourcesOf } from '../../data/changes';
+import { mapSectionImages, SECTION_IDS, type SectionId, type SiteContent } from '../../data/content';
 import { migrateCatalog } from '../../data/integrity';
 import { MEDIA_KEY_PATTERN, type Catalog, type CatalogState } from '../../data/schema';
 import { createCatalogSeed } from '../../data/seed';
@@ -53,7 +54,25 @@ export function withEmbeddedMedia(catalog: Catalog, media: MediaMap, alreadyStor
     ...catalog,
     products: catalog.products.map((p) => ({ ...p, images: p.images.map((i) => ({ ...i, src: swap(i.src), ...(i.thumb ? { thumb: swap(i.thumb) } : {}) })) })),
     collections: catalog.collections.map((c) => (c.heroImage ? { ...c, heroImage: swap(c.heroImage) } : c)),
+    ...(catalog.content ? { content: swapContent(catalog.content, swap) } : {}),
   };
+}
+
+/** The site content with every image source passed through `swap`. */
+function swapContent(content: SiteContent, swap: (src: string) => string): SiteContent {
+  const out: SiteContent = {};
+  for (const sid of SECTION_IDS) {
+    const data = content[sid];
+    if (data === undefined) continue;
+    (out as Record<SectionId, unknown>)[sid] = mapSectionImages(sid, data, (img) => ({ ...img, src: swap(img.src), ...(img.thumb ? { thumb: swap(img.thumb) } : {}) }));
+  }
+  return out;
+}
+
+/** What a backup holds of the site texts ("3 partes do site com texto editado" / "textos originais do site"). */
+export function contentSummary(catalog: Pick<Catalog, 'content'>): string {
+  const edited = Object.keys(catalog.content ?? {}).length;
+  return edited === 0 ? 'textos originais do site' : edited === 1 ? '1 parte do site com texto editado' : `${edited} partes do site com texto editado`;
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -184,7 +203,7 @@ export function BackupPage() {
       <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4">
         <h2 className="font-display text-title">Exportar</h2>
         <p className="text-sm text-ink-muted">
-          Baixa um arquivo com o catálogo do site (peças, fotos enviadas, categorias, coleções e informações da loja) e os cadastros de revendedoras. Atualmente:{' '}
+          Baixa um arquivo com o catálogo do site (peças, fotos enviadas, categorias, coleções, textos do site e informações da loja) e os cadastros de revendedoras. Atualmente:{' '}
           {summarize(data)}.
         </p>
         <Button
@@ -203,7 +222,7 @@ export function BackupPage() {
 
       <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4">
         <h2 className="font-display text-title">Importar</h2>
-        <p className="text-sm text-ink-muted">Substitui o catálogo do site pelo de um backup, para todas as clientes. O PIN e os cadastros de revendedoras não mudam.</p>
+        <p className="text-sm text-ink-muted">Substitui o catálogo e os textos do site pelos de um backup, para todas as clientes. O PIN e os cadastros de revendedoras não mudam.</p>
         <label className="inline-flex min-h-12 cursor-pointer items-center gap-2 self-start rounded-full border border-copper px-6 font-medium text-copper hover:bg-champagne focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-copper">
           <input type="file" accept="application/json,.json" className="sr-only" onChange={pickFile} disabled={!!progress} />
           <Upload size={18} strokeWidth={1.5} aria-hidden="true" /> Escolher arquivo de backup
@@ -217,7 +236,7 @@ export function BackupPage() {
 
       <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4">
         <h2 className="font-display text-title">Restaurar catálogo inicial</h2>
-        <p className="text-sm text-ink-muted">Volta às peças, categorias e coleções originais do site. O PIN e os cadastros de revendedoras continuam os mesmos.</p>
+        <p className="text-sm text-ink-muted">Volta às peças, categorias, coleções e textos originais do site. O PIN e os cadastros de revendedoras continuam os mesmos.</p>
         <Button variant="danger" onClick={() => setConfirmReset(true)} className="self-start" disabled={!!progress}>
           <RotateCcw size={18} strokeWidth={1.5} /> Restaurar catálogo inicial
         </Button>
@@ -287,9 +306,13 @@ export function BackupPage() {
         {pending && (
           <div className="flex flex-col gap-2">
             <p>
-              <span className="font-medium break-all text-ink">{pending.fileName}</span>: {summarize(catalogOf(pending.state))}.
+              <span className="font-medium break-all text-ink">{pending.fileName}</span>: {summarize(catalogOf(pending.state))}, {contentSummary(pending.state)}.
             </p>
             <p>O catálogo atual do site ({summarize(data)}) será substituído para todas as clientes. Se quiser guardá-lo, exporte um backup antes.</p>
+            <p>
+              Os textos e as fotos do site (aba Site) e o que a loja oferece também ficam iguais aos do backup.
+              {!Object.keys(pending.state.content ?? {}).length && ' Este backup não tem textos do site editados, então o site volta aos textos originais.'}
+            </p>
           </div>
         )}
       </ConfirmDialog>
@@ -303,7 +326,7 @@ export function BackupPage() {
         onCancel={() => !progress && setConfirmReset(false)}
       >
         <div className="flex flex-col gap-3">
-          <p>Peças, categorias, coleções e informações da loja voltam ao início, para todas as clientes. O PIN e as revendedoras continuam os mesmos.</p>
+          <p>Peças, categorias, coleções, informações da loja e textos do site voltam ao início, para todas as clientes. O PIN e as revendedoras continuam os mesmos.</p>
           <Button variant="secondary" size="sm" onClick={() => void exportNow()} className="self-start">
             <Download size={16} strokeWidth={1.5} /> Exportar backup antes
           </Button>

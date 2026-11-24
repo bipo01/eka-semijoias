@@ -167,4 +167,19 @@ describe('site content', () => {
     // Not signed in: no writes.
     expect((await send(new Client(), c.version, [upsert('geral', defaults.geral)])).status).toBe(401);
   });
+
+  it('an old admin saving settings without the message templates does not erase them; clearing them is explicit', async () => {
+    const a = await admin();
+    let c = await catalog();
+    const messages = { active: { contato: 'contato.curta' }, edited: {}, custom: [] };
+    expect((await send(a, c.version, [{ kind: 'settings', op: 'upsert', data: { ...c.settings, messages } }])).status).toBe(200);
+    c = await catalog();
+    const { messages: _dropped, ...withoutMessages } = c.settings;
+    expect((await send(a, c.version, [{ kind: 'settings', op: 'upsert', data: { ...withoutMessages, announcement: `Aviso ${randomUUID().slice(0, 4)}` } }])).status).toBe(200);
+    c = await catalog();
+    expect(c.settings.messages).toEqual(messages);
+    const empty = { active: {}, edited: {}, custom: [] };
+    expect((await send(a, c.version, [{ kind: 'settings', op: 'upsert', data: { ...c.settings, messages: empty } }])).status).toBe(200);
+    expect((await catalog()).settings.messages).toEqual(empty);
+  });
 });

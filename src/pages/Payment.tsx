@@ -405,6 +405,11 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
       <p className="flex items-center justify-center gap-1.5 text-center text-xs text-ink-muted">
         <LockKeyhole size={13} strokeWidth={1.5} aria-hidden="true" /> Só a ÉKA vê o seu comprovante. Pedido nº {number}.
       </p>
+      <p className="-mt-3 text-center text-xs text-ink-muted">
+        <a href="/privacidade" target="_blank" rel="noopener" className="inline-flex min-h-6 items-center underline underline-offset-4 hover:text-copper">
+          Política de privacidade
+        </a>
+      </p>
     </section>
   );
 }

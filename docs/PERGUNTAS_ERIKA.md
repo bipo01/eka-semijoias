@@ -1,5 +1,7 @@
 # Perguntas para a Érika
 
+> 24/11/2026: várias respostas agora ela mesma preenche no painel, sem programador: Configurações (WhatsApp, Instagram, cidade, showroom, horário, garantia, Pix) e "O que a loja oferece" (antialérgicas, envio, parcelamento, banho, consignado, investimento); Painel → Site (história do Sobre, depoimentos reais com autorização, perguntas, textos de todas as páginas, fotos dos banners, texto do Google/WhatsApp).
+
 O site já funciona com informações e fotos provisórias. Cada resposta abaixo substitui uma delas (`src/config/business.ts` e Admin → Configurações).
 
 ## Essenciais (para o site ir ao ar no endereço definitivo)

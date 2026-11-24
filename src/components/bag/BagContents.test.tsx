@@ -67,7 +67,8 @@ describe('bag checkout', () => {
     expect((init.headers as Record<string, string>)['Idempotency-Key']).toMatch(/^[\w-]{16,}$/);
     expect(JSON.parse(init.body as string)).toEqual({ items: [{ productId: product.id, variantId: variant.id, qty: 2 }], name: 'Ana', city: 'Várzea Grande' });
     expect(screen.queryByText('Pague com Pix')).not.toBeInTheDocument();
-    expect(screen.getByText(/link para pagar com Pix/)).toBeInTheDocument();
+    // The text after the order is the owner's (Painel → Site → Textos gerais) or the built-in one.
+    expect(screen.getByText(/Agora envie o pedido pelo WhatsApp. A gente confirma a disponibilidade/)).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /Enviar pedido pelo WhatsApp/ });
     const text = decodeURIComponent(link.getAttribute('href')!.split('text=')[1]!);
     expect(text).toContain('Fiz o pedido nº 1024 pelo site');

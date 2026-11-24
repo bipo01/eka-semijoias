@@ -1,54 +1,58 @@
-import { Gem, HeartHandshake, Sparkles, MapPin } from 'lucide-react';
-import { PageHeader } from '../components/layout/PageHeader';
+import { Gem, HeartHandshake, MapPin, Sparkles, Star } from 'lucide-react';
+import { ContentPageHeader } from '../components/layout/PageHeader';
 import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { asset } from '../lib/assets';
+import { useSection } from '../hooks/useSection';
+import { paragraphs } from '../data/content';
+import { asset, siteImageSources } from '../lib/assets';
 
-/*
- * Starting text in the owner's first person. Replace with her own story
- * before go-live (docs/PERGUNTAS_ERIKA.md, question 14).
- */
-const STORY = [
-  'Eu sou a Érika. A ÉKA nasceu do meu jeito de enxergar as semijoias: não como um enfeite para dias especiais, mas como aquele detalhe que faz a gente se sentir bonita numa terça-feira qualquer.',
-  'Comecei escolhendo peças para mim e para as amigas, sempre com o mesmo cuidado: olhar o acabamento de perto, conferir o fecho, imaginar a peça no dia a dia. Com o tempo, essas escolhas viraram uma curadoria, e a curadoria virou a ÉKA.',
-  'Hoje cada peça que chega aqui passa pelas minhas mãos antes de ir para as suas. E eu continuo atendendo do mesmo jeito que comecei: de perto, pelo WhatsApp, ajudando você a escolher o que combina com o seu estilo.',
-];
-
-const VALUES = [
-  { icon: Gem, title: 'Curadoria', text: 'Peças escolhidas uma a uma, pensando no uso real do dia a dia.' },
-  { icon: Sparkles, title: 'Acabamento', text: 'Banho de qualidade, pedras bem cravadas e fechos que dão segurança.' },
-  { icon: HeartHandshake, title: 'Atendimento próximo', text: 'Conversa de verdade, sem pressa, do primeiro olhar até depois da compra.' },
-];
+/** Icons of the values by position; values beyond them get the fallback. */
+const VALUE_ICONS = [Gem, Sparkles, HeartHandshake];
 
 export function AboutPage() {
   useDocumentTitle('Sobre a ÉKA');
   const biz = useBusiness();
+  const about = useSection('sobre');
+  const photo = about.image ? siteImageSources(about.image, 'banner') : null;
   return (
     <div className="pb-16">
-      <PageHeader eyebrow="Sobre a ÉKA" title={<>Brilho com <em className="font-medium italic">história</em></>} />
+      <ContentPageHeader header={about.header} />
       <div className="container-x grid gap-10 lg:grid-cols-[1fr_360px] lg:gap-16">
-        <div className="max-w-2xl space-y-4 text-lg leading-relaxed">
-          {STORY.map((p) => (
-            <p key={p.slice(0, 20)}>{p}</p>
+        <div className="max-w-2xl min-w-0 space-y-4 text-lg leading-relaxed">
+          {paragraphs(about.story).map((p, i) => (
+            <p key={i} className="whitespace-pre-line [overflow-wrap:anywhere]">{p}</p>
           ))}
-          <p className="pt-2 font-display text-display-m text-copper italic" aria-label="Assinado, Érika">Érika</p>
+          {about.signature && (
+            <p className="pt-2 font-display text-display-m [overflow-wrap:anywhere] text-copper italic" aria-label={`Assinado, ${about.signature}`}>
+              {about.signature}
+            </p>
+          )}
         </div>
         <div className="flex justify-center lg:justify-end">
-          <img src={asset('brand/eka-emblem-rosegold-600.webp')} alt="Emblema da ÉKA Semijoias" width={300} height={300} loading="lazy" decoding="async" className="size-64 lg:size-80" />
+          {about.image && photo ? (
+            <img src={photo.src} srcSet={photo.srcSet} sizes="(min-width: 1024px) 360px, 100vw" alt={about.image.alt} loading="lazy" decoding="async" className="aspect-[4/5] w-full max-w-sm rounded-[12px] bg-champagne object-cover lg:max-w-none" />
+          ) : (
+            <img src={asset('brand/eka-emblem-rosegold-600.webp')} alt="Emblema da ÉKA Semijoias" width={300} height={300} loading="lazy" decoding="async" className="size-64 lg:size-80" />
+          )}
         </div>
       </div>
-      <section aria-labelledby="valores" className="container-x mt-14">
-        <h2 id="valores" className="font-display text-display-m md:text-display-l">O que guia a ÉKA</h2>
-        <ul className="mt-6 grid gap-3 md:grid-cols-3 lg:gap-5">
-          {VALUES.map(({ icon: Icon, title, text }) => (
-            <li key={title} className="rounded-[12px] bg-champagne/70 p-6">
-              <Icon size={26} strokeWidth={1.25} className="text-copper" aria-hidden="true" />
-              <h3 className="mt-3 font-display text-title">{title}</h3>
-              <p className="mt-1 text-ink-muted">{text}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {about.values.length > 0 && (
+        <section aria-labelledby="valores" className="container-x mt-14">
+          <h2 id="valores" className="font-display text-display-m break-words md:text-display-l">{about.valuesTitle}</h2>
+          <ul className="mt-6 grid gap-3 md:grid-cols-3 lg:gap-5">
+            {about.values.map((value, i) => {
+              const Icon = VALUE_ICONS[i] ?? Star;
+              return (
+                <li key={value.id} className="min-w-0 rounded-[12px] bg-champagne/70 p-6">
+                  <Icon size={26} strokeWidth={1.25} className="text-copper" aria-hidden="true" />
+                  <h3 className="mt-3 font-display text-title break-words">{value.title}</h3>
+                  {value.text && <p className="mt-1 whitespace-pre-line [overflow-wrap:anywhere] text-ink-muted">{value.text}</p>}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       {biz.showroom && (
         <section aria-labelledby="showroom" className="container-x mt-14">
           <div className="rounded-[12px] border border-line bg-white p-6 lg:p-8">

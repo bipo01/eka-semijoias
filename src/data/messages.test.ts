@@ -82,6 +82,9 @@ describe('owner settings', () => {
     expect(activeTemplate(settings, 'contato').id).toBe('contato.classica');
     const duvida = templatesFor(settings, 'duvida')[0]!;
     expect(duvida).toMatchObject({ edited: true, text: 'Oi! Dúvida: {peca}' });
+    expect(composeMessage(undefined, 'garantia', {})).toBe('Olá! Preciso de ajuda com a garantia ou a troca de uma peça.');
+    expect(composeMessage(undefined, 'procura', { busca: '"argola"' })).toBe('Olá! Estou procurando "argola" e não encontrei no site. Vocês têm?');
+    expect(composeMessage(undefined, 'procura', { busca: 'uma peça' })).toBe('Olá! Estou procurando uma peça e não encontrei no site. Vocês têm?');
     expect(composeMessage(settings, 'duvida', { peca: 'Anel' })).toBe('Oi! Dúvida: Anel');
     expect(templatesFor(settings, 'pedido').map((t) => t.preset)).toEqual([true, true, true, true, false]);
   });
@@ -96,6 +99,18 @@ describe('owner settings', () => {
     expect(missingRequired('Pague aqui', 'cobranca')).toEqual(['link']);
     expect(MESSAGE_TYPE_INFO.cobranca.group).toBe('loja');
     expect(unknownVariables('Oi {primeiro_nome} {cpf}', 'pago')).toEqual(['cpf']);
+  });
+
+  it('the warranty and "procurando" buttons are customer messages the owner can change', () => {
+    expect(MESSAGE_TYPE_INFO.garantia.group).toBe('cliente');
+    expect(MESSAGE_TYPE_INFO.procura.group).toBe('cliente');
+    expect(unknownVariables('Não achei {busca}', 'procura')).toEqual([]);
+    expect(unknownVariables('Não achei {busca}', 'garantia')).toEqual(['busca']);
+    const saved = { active: { garantia: 'garantia.troca', procura: 'custom.abcd1' }, edited: { 'garantia.classica': 'Oi! Garantia, por favor.' }, custom: [{ id: 'custom.abcd1', type: 'procura', name: 'Minha', text: 'Busco {busca}.' }] };
+    expect(messageSettingsSchema.safeParse(saved).success).toBe(true);
+    const settings = readMessageSettings(saved);
+    expect(composeMessage(settings, 'procura', { busca: 'uma peça' })).toBe('Busco uma peça.');
+    expect(composeMessage(settings, 'garantia', {})).toBe('Oi! Quero trocar o tamanho ou o acabamento de uma peça que ainda não usei. Como funciona?');
   });
 });
 
