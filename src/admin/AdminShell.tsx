@@ -82,7 +82,8 @@ function useNewOrderNotice() {
   const seen = useRef<number | null>(null);
   useEffect(() => {
     if (newest === null) return;
-    if (seen.current !== null && newest > seen.current) toast(manual ? `Pedido nº ${newest} registrado no painel.` : `Novo pedido nº ${newest} no site.`, { tone: 'success', action: { label: 'Ver', to: `${ADMIN_BASE}/pedidos` } });
+    // Orders registered in the panel already get their own confirmation where they were made.
+    if (seen.current !== null && newest > seen.current && !manual) toast(`Novo pedido nº ${newest} no site.`, { tone: 'success', action: { label: 'Ver', to: `${ADMIN_BASE}/pedidos` } });
     seen.current = Math.max(seen.current ?? 0, newest);
   }, [newest, manual]);
 }
