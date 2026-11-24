@@ -299,8 +299,8 @@ export function defaultSections(f: ContentFacts): Sections {
       bagEmptyTitle: 'Sua sacola está vazia',
       bagEmptyText: 'Escolha suas peças preferidas e envie o pedido pelo WhatsApp em poucos toques.',
       afterOrderText: 'Agora envie o pedido pelo WhatsApp. A gente confirma a disponibilidade e combina com você o pagamento por lá.',
-      notFoundTitle: 'Peça não encontrada',
-      notFoundText: 'Ela pode ter saído do catálogo ou o endereço mudou. Que tal ver as outras peças?',
+      notFoundTitle: 'Esta peça escapou da caixinha',
+      notFoundText: 'Parece que ela saiu do lugar: pode ter deixado o catálogo ou o link mudou. Enquanto isso, que tal descobrir outras peças?',
     },
     privacidade: {
       header: {
