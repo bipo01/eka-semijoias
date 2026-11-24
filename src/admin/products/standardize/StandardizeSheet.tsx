@@ -365,6 +365,8 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
     </Button>
   );
   const busy = phase === 'loading' || phase === 'cutting' || phase === 'saving';
+  // The review puts the colour controls beside the photos on wide screens, so the preview stays in view while she drags.
+  const wide = showsResult ? 'max-w-[720px] lg:max-w-[1040px]' : 'max-w-[720px]';
 
   let footer: React.ReactNode;
   if (phase === 'tips') footer = (
@@ -415,14 +417,14 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
       side="full"
       title="Padronizar foto"
       onClose={onClose}
-      footer={<div className="mx-auto flex max-w-[720px] flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 [&>button]:w-full sm:[&>button]:w-auto">{footer}</div>}
+      footer={<div className={cx('mx-auto flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 [&>button]:w-full sm:[&>button]:w-auto', wide)}>{footer}</div>}
     >
-      <div className="mx-auto flex max-w-[720px] flex-col gap-4 pt-1" aria-busy={busy}>
+      <div className={cx('mx-auto flex flex-col gap-4 pt-1', wide)} aria-busy={busy}>
         {phase === 'tips' && (
           <section aria-labelledby={headingId} className="flex flex-col gap-4">
             {heading('Antes de padronizar')}
             <p className="text-ink-muted">
-              A gente recorta a peça, coloca no fundo da marca com uma sombra suave e deixa todas as fotos do mesmo tamanho. Fica melhor quando a foto tem:
+              A gente recorta a peça, coloca no mesmo fundo das fotos do site com uma sombra suave, realça as cores na medida que você escolher e deixa todas as fotos do mesmo tamanho. Fica melhor quando a foto tem:
             </p>
             <ul className="flex flex-col gap-3">
               {TIPS.map(({ icon: Icon, text }) => (
@@ -482,70 +484,70 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
         {(phase === 'review' || phase === 'saving') && (
           <section aria-labelledby={headingId} className="flex flex-col gap-4">
             {heading('Antes e depois')}
-            <div className="grid grid-cols-2 gap-3">
-              <figure className="flex flex-col gap-1.5">
-                <div className="aspect-[4/5] overflow-hidden rounded-[10px] border border-line bg-white">
-                  {beforeUrl && <img src={beforeUrl} alt="Foto original" className="h-full w-full object-contain" />}
-                </div>
-                <figcaption className="text-sm text-ink-muted">Antes</figcaption>
-              </figure>
-              <figure className="flex flex-col gap-1.5">
-                <div className="aspect-[4/5] overflow-hidden rounded-[10px] border border-line bg-champagne">
-                  <canvas ref={preview} role="img" aria-label={`Foto padronizada: a peça no fundo da marca, realce de ${strength}%`} className="block h-full w-full" />
-                </div>
-                <figcaption className="text-sm text-ink-muted">Depois</figcaption>
-              </figure>
-            </div>
-            <div className="flex flex-col gap-2 rounded-[12px] border border-line bg-white px-4 pt-3 pb-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <label htmlFor={`${headingId}-realce`} className="font-medium">
-                  Realce de cor
-                </label>
-                <output htmlFor={`${headingId}-realce`} className="text-title font-medium text-copper tabular-nums" aria-hidden="true">
-                  {strength}%
-                </output>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+              <div className="grid grid-cols-2 gap-3 lg:min-w-0 lg:flex-1">
+                <figure className="flex flex-col gap-1.5">
+                  <div className="aspect-[4/5] overflow-hidden rounded-[10px] border border-line bg-white">
+                    {beforeUrl && <img src={beforeUrl} alt="Foto original" className="h-full w-full object-contain" />}
+                  </div>
+                  <figcaption className="text-sm text-ink-muted">Antes</figcaption>
+                </figure>
+                <figure className="flex flex-col gap-1.5">
+                  <div className="aspect-[4/5] overflow-hidden rounded-[10px] border border-line bg-champagne">
+                    <canvas ref={preview} role="img" aria-label={`Foto padronizada: a peça no fundo da marca, realce de ${strength}%`} className="block h-full w-full object-contain" />
+                  </div>
+                  <figcaption className="text-sm text-ink-muted">Depois</figcaption>
+                </figure>
               </div>
-              <input
-                id={`${headingId}-realce`}
-                type="range"
-                min={MIN_ENHANCE}
-                max={MAX_ENHANCE}
-                step={1}
-                value={strength}
-                onChange={(e) => setStrength(Number(e.target.value))}
-                disabled={phase === 'saving'}
-                aria-valuetext={strength === 0 ? 'sem realce, cores originais' : `${strength}% de realce`}
-                aria-describedby={`${headingId}-realce-hint`}
-                className="range"
-                style={{ '--fill': `${((strength - MIN_ENHANCE) / (MAX_ENHANCE - MIN_ENHANCE)) * 100}%` } as React.CSSProperties}
-              />
-              <div className="flex justify-between text-sm text-ink-muted" aria-hidden="true">
-                <span>Cores originais</span>
-                <span>Mais vida</span>
-              </div>
-              <p id={`${headingId}-realce-hint`} className="text-sm text-ink-muted">
-                {strength === savedStrength ? (
-                  <>Este é o seu padrão para as próximas fotos.</>
-                ) : (
-                  <>
-                    Ao usar esta foto, {strength}% vira o padrão das próximas.{' '}
-                    <button type="button" onClick={() => setStrength(savedStrength)} className="font-medium text-copper underline underline-offset-2">
-                      Voltar a {savedStrength}%
-                    </button>
-                  </>
+              <div className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0">
+                <div className="flex flex-col gap-2 rounded-[12px] border border-line bg-white px-4 pt-3 pb-4">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <label htmlFor={`${headingId}-realce`} className="font-medium">
+                      Realce de cor
+                    </label>
+                    <output htmlFor={`${headingId}-realce`} className="text-title font-medium text-copper tabular-nums" aria-hidden="true">
+                      {strength}%
+                    </output>
+                  </div>
+                  <input
+                    id={`${headingId}-realce`}
+                    type="range"
+                    min={MIN_ENHANCE}
+                    max={MAX_ENHANCE}
+                    step={1}
+                    value={strength}
+                    onChange={(e) => setStrength(Number(e.target.value))}
+                    disabled={phase === 'saving'}
+                    aria-valuetext={strength === 0 ? 'sem realce, cores originais' : `${strength}% de realce`}
+                    aria-describedby={`${headingId}-realce-hint`}
+                    className="range"
+                    style={{ '--fill': `${((strength - MIN_ENHANCE) / (MAX_ENHANCE - MIN_ENHANCE)) * 100}%` } as React.CSSProperties}
+                  />
+                  <div className="flex justify-between text-sm text-ink-muted" aria-hidden="true">
+                    <span>Cores originais</span>
+                    <span>Mais vida</span>
+                  </div>
+                  <p id={`${headingId}-realce-hint`} className="text-sm text-ink-muted" aria-live="polite">
+                    {strength === savedStrength ? 'Este é o seu padrão para as próximas fotos.' : `Ao usar esta foto, ${strength}% vira o padrão das próximas.`}
+                  </p>
+                  {strength !== savedStrength && (
+                    <Button variant="ghost" size="sm" className="-ml-4 self-start" onClick={() => setStrength(savedStrength)} disabled={phase === 'saving'}>
+                      <RotateCcw size={16} strokeWidth={1.5} aria-hidden="true" /> Voltar a {savedStrength}%
+                    </Button>
+                  )}
+                </div>
+                {error && (
+                  <p role="alert" className="text-sm text-danger">
+                    {error}
+                  </p>
                 )}
-              </p>
-            </div>
-            {error && (
-              <p role="alert" className="text-sm text-danger">
-                {error}
-              </p>
-            )}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <Button variant="secondary" size="sm" onClick={openRetouch} disabled={phase === 'saving'}>
-                <Paintbrush size={16} strokeWidth={1.5} aria-hidden="true" /> Retocar
-              </Button>
-              <p className="text-sm text-ink-muted">Sobrou fundo ou faltou um pedaço da peça? Retoque com o pincel.</p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <Button variant="secondary" size="sm" onClick={openRetouch} disabled={phase === 'saving'}>
+                    <Paintbrush size={16} strokeWidth={1.5} aria-hidden="true" /> Retocar
+                  </Button>
+                  <p className="text-sm text-ink-muted">Sobrou fundo ou faltou um pedaço da peça? Retoque com o pincel.</p>
+                </div>
+              </div>
             </div>
           </section>
         )}

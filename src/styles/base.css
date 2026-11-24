@@ -89,7 +89,6 @@
     margin: 0;
     background: transparent;
     cursor: pointer;
-    touch-action: pan-y;
   }
   .range:disabled { cursor: default; opacity: 0.6; }
   .range:focus-visible { outline: 2px solid var(--c-copper); outline-offset: 2px; border-radius: 999px; }
