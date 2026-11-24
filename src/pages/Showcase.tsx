@@ -87,7 +87,7 @@ export function ShowcasePage() {
         {load.status === 'error' && (
           <section className="flex flex-col items-center gap-3 pt-8 text-center">
             <h1 className="font-display text-display-m">{load.notFound ? 'Mostruário não encontrado' : 'Não conseguimos abrir o mostruário'}</h1>
-            <p className="max-w-sm text-ink-muted">{load.message}</p>
+            <p className="max-w-sm text-ink-muted">{load.notFound ? 'Este mostruário não está mais no ar, mas as peças continuam na loja.' : load.message}</p>
             <ButtonAnchor href="/catalogo" variant="secondary">
               Ver as peças da loja
             </ButtonAnchor>
