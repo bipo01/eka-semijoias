@@ -8,18 +8,18 @@ import { createSeed } from '../../data/seed';
 
 describe('contact helpers', () => {
   it('masks and parses Brazilian phones', () => {
-    expect(maskPhone('67999998888')).toBe('(67) 99999-8888');
-    expect(maskPhone('6733334444')).toBe('(67) 3333-4444');
-    expect(maskPhone('5567999998888')).toBe('(67) 99999-8888');
-    expect(parsePhone('(67) 99999-8888')).toBe('5567999998888');
+    expect(maskPhone('65999998888')).toBe('(65) 99999-8888');
+    expect(maskPhone('6533334444')).toBe('(65) 3333-4444');
+    expect(maskPhone('5565999998888')).toBe('(65) 99999-8888');
+    expect(parsePhone('(65) 99999-8888')).toBe('5565999998888');
     expect(parsePhone('')).toBe('');
-    expect(parsePhone('(67) 9999')).toBeNull();
-    expect(formatPhone('5567999998888')).toBe('(67) 99999-8888');
+    expect(parsePhone('(65) 9999')).toBeNull();
+    expect(formatPhone('5565999998888')).toBe('(65) 99999-8888');
   });
 
   it('prefixes 55 to local WhatsApp numbers only', () => {
-    expect(whatsappDigits('(67) 99999-8888')).toBe('5567999998888');
-    expect(whatsappDigits('5567999998888')).toBe('5567999998888');
+    expect(whatsappDigits('(65) 99999-8888')).toBe('5565999998888');
+    expect(whatsappDigits('5565999998888')).toBe('5565999998888');
   });
 
   it('extracts the Instagram handle', () => {
@@ -48,13 +48,13 @@ describe('reorder', () => {
 });
 
 describe('settings form', () => {
-  const base = { announcement: ' Oi ', whatsapp: '(67) 99999-8888', instagram: '@eka', city: 'Campo Grande/MS', showroom: '', openingHours: '', warrantyMonths: '6' };
+  const base = { announcement: ' Oi ', whatsapp: '(65) 99999-8888', instagram: '@eka', city: 'Cuiabá/MT', showroom: '', openingHours: '', warrantyMonths: '6' };
   it('stores WhatsApp with 55 and the bare Instagram handle', () => {
     const result = parseStoreForm(base);
-    expect(result.ok && result.patch).toMatchObject({ announcement: 'Oi', whatsapp: '5567999998888', instagram: 'eka', warrantyMonths: 6 });
+    expect(result.ok && result.patch).toMatchObject({ announcement: 'Oi', whatsapp: '5565999998888', instagram: 'eka', warrantyMonths: 6 });
   });
   it('rejects an incomplete phone and an out-of-range warranty', () => {
-    const result = parseStoreForm({ ...base, whatsapp: '(67) 9999', warrantyMonths: '99' });
+    const result = parseStoreForm({ ...base, whatsapp: '(65) 9999', warrantyMonths: '99' });
     expect(!result.ok && Object.keys(result.errors).sort()).toEqual(['warrantyMonths', 'whatsapp']);
   });
 });
@@ -72,12 +72,12 @@ describe('categories', () => {
 describe('leads CSV', () => {
   it('exports newest first with formatted phone and neutralized formulas', () => {
     const csv = leadsCsv([
-      { id: '1', name: 'Ana', whatsapp: '67999998888', city: 'Dourados', uf: 'MS', alreadySells: false, createdAt: '2026-11-01T10:00:00.000Z' },
-      { id: '2', name: '=cmd()', whatsapp: '67988887777', city: 'Campo Grande', uf: 'MS', alreadySells: true, createdAt: '2026-11-02T10:00:00.000Z' },
+      { id: '1', name: 'Ana', whatsapp: '65999998888', city: 'Várzea Grande', uf: 'MT', alreadySells: false, createdAt: '2026-11-01T10:00:00.000Z' },
+      { id: '2', name: '=cmd()', whatsapp: '65988887777', city: 'Cuiabá', uf: 'MT', alreadySells: true, createdAt: '2026-11-02T10:00:00.000Z' },
     ]);
     const lines = csv.slice(1).split('\r\n');
     expect(lines[0]).toBe('Nome;WhatsApp;Cidade;UF;Instagram;Já revende;Origem;Data');
-    expect(lines[1]!.startsWith("'=cmd();(67) 98888-7777;Campo Grande;MS;;Sim;;")).toBe(true);
-    expect(lines[2]!.startsWith('Ana;(67) 99999-8888;Dourados;MS;;Não;;')).toBe(true);
+    expect(lines[1]!.startsWith("'=cmd();(65) 98888-7777;Cuiabá;MT;;Sim;;")).toBe(true);
+    expect(lines[2]!.startsWith('Ana;(65) 99999-8888;Várzea Grande;MT;;Não;;')).toBe(true);
   });
 });

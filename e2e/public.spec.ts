@@ -73,7 +73,7 @@ test('add to bag, register the order and build the WhatsApp message', async ({ p
   await dialog.getByRole('button', { name: 'Finalizar pedido' }).click();
   await expect(dialog.getByText('Informe seu nome.')).toBeVisible();
   await dialog.getByPlaceholder('Seu nome').fill('Ana');
-  await dialog.getByPlaceholder('Cidade').fill('Campo Grande/MS');
+  await dialog.getByPlaceholder('Cidade').fill('Cuiabá/MT');
   // Remove with undo
   await dialog.getByRole('button', { name: 'Remover Anel Solitário Delicado' }).click();
   await expect(dialog.getByText('Sua sacola está vazia')).toBeVisible();
@@ -91,7 +91,7 @@ test('add to bag, register the order and build the WhatsApp message', async ({ p
   const text = decodeURIComponent(href!.split('text=')[1]!);
   expect(href).toMatch(/^https:\/\/wa\.me\/\?text=/);
   expect(text).toBe(
-    `Olá! Fiz o pedido nº ${number} pelo site:\n\n1) Anel Solitário Delicado — Dourado — aro 16 — 2 un. — R$ 279,80\n\nTotal: R$ 279,80\nNome: Ana · Cidade: Campo Grande/MS`,
+    `Olá! Fiz o pedido nº ${number} pelo site:\n\n1) Anel Solitário Delicado — Dourado — aro 16 — 2 un. — R$ 279,80\n\nTotal: R$ 279,80\nNome: Ana · Cidade: Cuiabá/MT`,
   );
   // "Alterar pedido" goes back to the bag, which is still there.
   await dialog.getByRole('button', { name: 'Alterar pedido' }).click();
@@ -145,10 +145,10 @@ test('reseller pre-registration validates and saves the lead', async ({ page, co
   await expect(page.getByText(/WhatsApp com DDD/)).toBeVisible();
   await expect(page.getByRole('textbox', { name: /Nome completo/ })).toBeFocused();
   await page.getByRole('textbox', { name: /Nome completo/ }).fill('Ana Souza');
-  await page.getByRole('textbox', { name: /WhatsApp/ }).fill('67999991234');
-  await expect(page.getByRole('textbox', { name: /WhatsApp/ })).toHaveValue('(67) 99999-1234');
-  await page.getByRole('textbox', { name: /Cidade/ }).fill('Campo Grande');
-  await page.getByRole('combobox', { name: /UF/ }).selectOption('MS');
+  await page.getByRole('textbox', { name: /WhatsApp/ }).fill('65999991234');
+  await expect(page.getByRole('textbox', { name: /WhatsApp/ })).toHaveValue('(65) 99999-1234');
+  await page.getByRole('textbox', { name: /Cidade/ }).fill('Cuiabá');
+  await page.getByRole('combobox', { name: /UF/ }).selectOption('MT');
   await page.getByRole('radio', { name: 'Não' }).click();
   await page.getByRole('checkbox').check();
   const popup = context.waitForEvent('page');

@@ -75,7 +75,7 @@ These were measured from the logo (metal ramp `#976552 → #B48C78 → #E6BEA4`)
   2) Anel Solitário Delicado — Dourado — aro 16 — 2 un. — R$ 279,80
 
   Total: R$ 409,70
-  Nome: Ana · Cidade: Campo Grande/MS
+  Nome: Ana · Cidade: Cuiabá/MT
   Obs.: é para presente
   ```
   Omit empty lines (no name → no "Nome" line). Over ~1,800 chars → compact format. Don't auto-clear the bag; after sending, offer "Pedido enviado? Limpar sacola".

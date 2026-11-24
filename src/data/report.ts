@@ -101,7 +101,7 @@ function bump(map: Map<string, Ranked>, key: string, label: string, units: numbe
   } else map.set(key, { key, label, units, cents });
 }
 
-/** Normalizes a city for grouping ("  campo grande " and "Campo Grande" are the same). */
+/** Normalizes a city for grouping ("  cuiabá " and "Cuiabá" are the same). */
 export const cityKey = (city: string) =>
   city
     .normalize('NFD')

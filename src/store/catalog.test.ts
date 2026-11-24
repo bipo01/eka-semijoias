@@ -50,10 +50,10 @@ describe('catalog store', () => {
   it('commits through the server and only then updates the catalog', async () => {
     const useCatalog = await freshStore();
     await useCatalog.getState().load();
-    const result = await useCatalog.getState().commit((d) => ({ ...d, settings: { ...d.settings, city: 'Campo Grande/MS' } }));
+    const result = await useCatalog.getState().commit((d) => ({ ...d, settings: { ...d.settings, city: 'Cuiabá/MT' } }));
     expect(result).toEqual({ ok: true, version: 2 });
-    expect(useCatalog.getState().data.settings.city).toBe('Campo Grande/MS');
-    expect(mockServer.catalog.settings.city).toBe('Campo Grande/MS');
+    expect(useCatalog.getState().data.settings.city).toBe('Cuiabá/MT');
+    expect(mockServer.catalog.settings.city).toBe('Cuiabá/MT');
     const sent = mockServer.requests.find((r) => r.path === '/api/admin/changes')!.body as { baseVersion: number; changes: unknown[] };
     expect(sent.baseVersion).toBe(1);
     expect(sent.changes).toHaveLength(1);

@@ -3,7 +3,7 @@ import type { Order, OrderStatus } from './orders';
 import { computeReport, periodRange } from './report';
 
 let n = 1000;
-function order(status: OrderStatus, createdAt: string, items: [string, string, number, number][], city = 'Campo Grande'): Order {
+function order(status: OrderStatus, createdAt: string, items: [string, string, number, number][], city = 'Cuiabá'): Order {
   const list = items.map(([productId, categoryId, qty, unitCents]) => ({
     productId,
     variantId: `${productId}-v`,
@@ -33,8 +33,8 @@ describe('computeReport', () => {
   const local = (d: number, h = 12) => new Date(2026, 10, d, h).toISOString();
   const orders = [
     order('confirmado', local(19), [['anel', 'aneis', 2, 5000]]),
-    order('pago', local(20, 9), [['anel', 'aneis', 1, 5000], ['brinco', 'brincos', 1, 3000]], ' campo grande '),
-    order('entregue', local(10), [['colar', 'colares', 1, 9000]], 'Dourados'),
+    order('pago', local(20, 9), [['anel', 'aneis', 1, 5000], ['brinco', 'brincos', 1, 3000]], ' cuiabá '),
+    order('entregue', local(10), [['colar', 'colares', 1, 9000]], 'Várzea Grande'),
     order('enviado', local(20), [['brinco', 'brincos', 1, 3000]]),
     order('enviado', local(15), [['brinco', 'brincos', 1, 3000]]),
     order('cancelado', local(19), [['anel', 'aneis', 5, 5000]]),
@@ -51,7 +51,7 @@ describe('computeReport', () => {
     expect(r.negotiating).toEqual({ orders: 2, cents: 6000 });
     expect(r.products[0]).toMatchObject({ key: 'anel', units: 3, cents: 15000 });
     expect(r.categories.map((c) => c.key)).toEqual(['aneis', 'brincos']);
-    expect(r.cities).toHaveLength(1); // "Campo Grande" and " campo grande " are one city
+    expect(r.cities).toHaveLength(1); // "Cuiabá" and " cuiabá " are one city
     expect(r.cities[0]).toMatchObject({ units: 2, cents: 18000 });
   });
 

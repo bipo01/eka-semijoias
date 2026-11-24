@@ -7,12 +7,12 @@ export const testimonials = [
   {
     quote: 'Comprei o Brinco Gota Cristal para o casamento da minha irmã e recebi elogios a noite inteira. É ainda mais bonito pessoalmente.',
     name: 'Camila R.',
-    city: 'Campo Grande/MS',
+    city: 'Cuiabá/MT',
   },
   {
     quote: 'Uso a Pulseira Riviera quase todo dia e ela continua linda. O atendimento pelo WhatsApp é rápido e muito atencioso.',
     name: 'Juliana M.',
-    city: 'Dourados/MS',
+    city: 'Várzea Grande/MT',
   },
   {
     quote: 'Dei o Colar Ponto de Luz de presente para a minha mãe e ela amou. Delicado na medida certa e chegou bem embalado.',

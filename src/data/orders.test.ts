@@ -28,9 +28,9 @@ describe('orderRequestSchema', () => {
   it('requires name and city and trims them', () => {
     const base = { items: [{ productId: 'p', variantId: 'v', qty: 1 }] };
     expect(orderRequestSchema.safeParse({ ...base, name: ' ', city: 'Rio' }).success).toBe(false);
-    const ok = orderRequestSchema.parse({ ...base, name: '  Ana   Luiza ', city: ' Campo  Grande ', note: '  ' });
+    const ok = orderRequestSchema.parse({ ...base, name: '  Ana   Luiza ', city: ' Várzea   Grande ', note: '  ' });
     expect(ok.name).toBe('Ana Luiza');
-    expect(ok.city).toBe('Campo Grande');
+    expect(ok.city).toBe('Várzea Grande');
     expect(ok.note).toBeUndefined();
   });
 });

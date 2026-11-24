@@ -19,7 +19,7 @@ describe('whatsappUrl', () => {
     expect(whatsappUrl(null, 'Olá & tchau')).toBe('https://wa.me/?text=Ol%C3%A1%20%26%20tchau');
   });
   it('strips non-digits from the number', () => {
-    expect(whatsappUrl('+55 (67) 99999-0000', 'oi')).toBe('https://wa.me/5567999990000?text=oi');
+    expect(whatsappUrl('+55 (65) 99999-0000', 'oi')).toBe('https://wa.me/5565999990000?text=oi');
   });
 });
 

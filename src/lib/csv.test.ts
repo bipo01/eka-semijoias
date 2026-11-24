@@ -15,7 +15,7 @@ describe('escapeCell', () => {
   });
 
   it('quotes cells with the delimiter, quotes or line breaks (RFC 4180)', () => {
-    expect(escapeCell('Campo Grande, MS')).toBe('"Campo Grande, MS"');
+    expect(escapeCell('Cuiabá, MT')).toBe('"Cuiabá, MT"');
     expect(escapeCell('ela disse "oi"')).toBe('"ela disse ""oi"""');
     expect(escapeCell('linha 1\nlinha 2')).toBe('"linha 1\nlinha 2"');
     expect(escapeCell('a;b', ';')).toBe('"a;b"');
@@ -24,7 +24,7 @@ describe('escapeCell', () => {
 
   it('neutralizes formula injection', () => {
     expect(escapeCell('=HYPERLINK("http://x")')).toBe(`"'=HYPERLINK(""http://x"")"`);
-    expect(escapeCell('+5567999')).toBe("'+5567999");
+    expect(escapeCell('+5565999')).toBe("'+5565999");
     expect(escapeCell('-1+1')).toBe("'-1+1");
     expect(escapeCell('@SUM(A1)')).toBe("'@SUM(A1)");
     expect(escapeCell('\tcmd')).toBe("'\tcmd");
@@ -34,9 +34,9 @@ describe('escapeCell', () => {
 
 describe('toCSV', () => {
   it('starts with a BOM and uses CRLF line endings', () => {
-    const csv = toCSV(['Nome', 'Cidade'], [['Ana', 'Dourados'], ['Bia', 'Campo Grande, MS']]);
+    const csv = toCSV(['Nome', 'Cidade'], [['Ana', 'Várzea Grande'], ['Bia', 'Cuiabá, MT']]);
     expect(csv.startsWith(BOM)).toBe(true);
-    expect(csv.slice(1)).toBe('Nome,Cidade\r\nAna,Dourados\r\nBia,"Campo Grande, MS"\r\n');
+    expect(csv.slice(1)).toBe('Nome,Cidade\r\nAna,Várzea Grande\r\nBia,"Cuiabá, MT"\r\n');
   });
 
   it('supports a semicolon delimiter and no BOM', () => {

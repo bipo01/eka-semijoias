@@ -238,7 +238,7 @@ describe('stock entries and exits', () => {
       due_at: '2026-12-01T00:00:00.000Z',
       updated_at: '2026-11-02T00:00:00.000Z',
       data: JSON.stringify({ items, stockMoves: [], tiers: [{ fromCents: 0, percent: 25 }] }),
-      reseller_data: JSON.stringify({ name: `${resellerId === 'r1' ? 'Ana Paula' : 'Bia'} Souza`, whatsapp: '67999998888' }),
+      reseller_data: JSON.stringify({ name: `${resellerId === 'r1' ? 'Ana Paula' : 'Bia'} Souza`, whatsapp: '65999998888' }),
     });
     const sale = (kitId: string, lines: unknown[], status = 'ativa') => ({
       id: `s-${kitId}-${Math.random()}`,
@@ -264,7 +264,7 @@ describe('stock entries and exits', () => {
       { kitId: 'k1', resellerId: 'r1', resellerName: 'Ana', qty: 1 },
       { kitId: 'k2', resellerId: 'r2', resellerName: 'Bia', qty: 1 },
     ]);
-    expect(JSON.stringify(kitsByCombo)).not.toContain('67999998888'); // first name only, no contact data
+    expect(JSON.stringify(kitsByCombo)).not.toContain('65999998888'); // first name only, no contact data
     expect(unitsInKits([], [])).toEqual({ inKits: {}, kitsByCombo: {} });
   });
 });

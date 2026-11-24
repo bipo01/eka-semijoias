@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 const text = (max: number) => z.string().max(max);
 
-/** "(67) 99999-1234" → "67999991234" (empty stays empty). */
+/** "(65) 99999-1234" → "65999991234" (empty stays empty). */
 export const phoneDigits = (value: string) => value.replace(/\D/g, '');
 
 /** Lowercased, accent-free, single-spaced: what the name search compares. */
@@ -44,7 +44,7 @@ export const customerInputSchema = z.object({
   whatsapp: z
     .string()
     .transform(phoneDigits)
-    .pipe(z.string().regex(/^(\d{10,11})?$/, 'WhatsApp com DDD, ex.: (67) 99999-9999')),
+    .pipe(z.string().regex(/^(\d{10,11})?$/, 'WhatsApp com DDD, ex.: (65) 99999-9999')),
   city: z.string().trim().max(80).default(''),
   uf: z.string().trim().toUpperCase().max(2).default(''),
   instagram: z

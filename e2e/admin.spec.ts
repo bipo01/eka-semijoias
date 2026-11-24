@@ -170,7 +170,7 @@ test('admin: stock, order and confirmation; the visitor page sells out live', as
   await visitor.getByRole('button', { name: 'Pedir agora' }).filter({ visible: true }).first().click();
   const bag = visitor.getByRole('dialog', { name: /Sua sacola/ });
   await bag.getByPlaceholder('Seu nome').fill('Bia Teste');
-  await bag.getByPlaceholder('Cidade').fill('Dourados');
+  await bag.getByPlaceholder('Cidade').fill('Várzea Grande');
   await bag.getByRole('button', { name: 'Finalizar pedido' }).click();
   const heading = bag.getByRole('heading', { name: /Pedido nº \d+ registrado/ });
   await expect(heading).toBeVisible();
@@ -216,7 +216,7 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await customer.getByRole('button', { name: 'Pedir agora' }).filter({ visible: true }).first().click();
   const bag = customer.getByRole('dialog', { name: /Sua sacola/ });
   await bag.getByPlaceholder('Seu nome').fill('Carla Pagadora');
-  await bag.getByPlaceholder('Cidade').fill('Dourados');
+  await bag.getByPlaceholder('Cidade').fill('Várzea Grande');
   await bag.getByRole('button', { name: 'Finalizar pedido' }).click();
   const heading = bag.getByRole('heading', { name: /Pedido nº \d+ registrado/ });
   await expect(heading).toBeVisible();
@@ -228,9 +228,9 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await unlock(page);
   await page.getByRole('link', { name: 'Configurações', exact: true }).click();
   await page.getByRole('combobox', { name: 'Tipo de chave' }).selectOption('phone');
-  await page.getByRole('textbox', { name: 'Chave Pix' }).fill('(67) 99999-8888');
+  await page.getByRole('textbox', { name: 'Chave Pix' }).fill('(65) 99999-8888');
   await page.getByRole('textbox', { name: 'Nome do recebedor' }).fill('ÉKA Semijoias');
-  await page.getByRole('textbox', { name: 'Cidade da conta' }).fill('Campo Grande');
+  await page.getByRole('textbox', { name: 'Cidade da conta' }).fill('Cuiabá');
   await page.getByRole('button', { name: 'Salvar Pix' }).click();
   await expect(page.getByText(/Pix salvo/)).toBeVisible();
   await page.getByRole('link', { name: /^Pedidos/ }).click();

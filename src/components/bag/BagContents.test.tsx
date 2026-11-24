@@ -13,7 +13,7 @@ import { BagContents } from './BagContents';
 const catalog = createCatalogSeed();
 const product = catalog.products.find((p) => p.variants.every((v) => !v.sizes?.length) && p.available && p.variants.every((v) => v.available))!;
 const variant = product.variants[0]!;
-const PIX = { key: '+5567999998888', name: 'EKA SEMIJOIAS', city: 'CAMPO GRANDE' };
+const PIX = { key: '+5565999998888', name: 'EKA SEMIJOIAS', city: 'CUIABA' };
 
 function setup(withPix = true) {
   useCatalog.setState({ data: { ...catalog, settings: { ...catalog.settings, ...(withPix ? { pix: PIX } : {}) } }, version: 1, status: 'ready', offline: false });
@@ -58,14 +58,14 @@ describe('bag checkout', () => {
     vi.stubGlobal('fetch', fetch);
     setup();
     await userEvent.type(screen.getByPlaceholderText('Seu nome'), 'Ana');
-    await userEvent.type(screen.getByPlaceholderText('Cidade'), 'Dourados');
+    await userEvent.type(screen.getByPlaceholderText('Cidade'), 'Várzea Grande');
     await userEvent.click(screen.getByRole('button', { name: 'Finalizar pedido' }));
     expect(await screen.findByText('Pedido nº 1024 registrado')).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(1);
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('/api/orders');
     expect((init.headers as Record<string, string>)['Idempotency-Key']).toMatch(/^[\w-]{16,}$/);
-    expect(JSON.parse(init.body as string)).toEqual({ items: [{ productId: product.id, variantId: variant.id, qty: 2 }], name: 'Ana', city: 'Dourados' });
+    expect(JSON.parse(init.body as string)).toEqual({ items: [{ productId: product.id, variantId: variant.id, qty: 2 }], name: 'Ana', city: 'Várzea Grande' });
     expect(screen.queryByText('Pague com Pix')).not.toBeInTheDocument();
     expect(screen.getByText(/link para pagar com Pix/)).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /Enviar pedido pelo WhatsApp/ });
@@ -81,7 +81,7 @@ describe('bag checkout', () => {
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))));
     setup(false);
     await userEvent.type(screen.getByPlaceholderText('Seu nome'), 'Ana');
-    await userEvent.type(screen.getByPlaceholderText('Cidade'), 'Dourados');
+    await userEvent.type(screen.getByPlaceholderText('Cidade'), 'Várzea Grande');
     await userEvent.click(screen.getByRole('button', { name: 'Finalizar pedido' }));
     expect(await screen.findByText('Não conseguimos registrar o pedido.', {}, { timeout: 5000 })).toBeInTheDocument();
     const fallback = screen.getByRole('link', { name: /Enviar pelo WhatsApp mesmo assim/ });
@@ -94,7 +94,7 @@ describe('bag checkout', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => (String(url).includes('/api/orders') ? new Response(JSON.stringify(body), { status: 409 }) : new Response('{}', { status: 500 }))));
     setup();
     await userEvent.type(screen.getByPlaceholderText('Seu nome'), 'Ana');
-    await userEvent.type(screen.getByPlaceholderText('Cidade'), 'Dourados');
+    await userEvent.type(screen.getByPlaceholderText('Cidade'), 'Várzea Grande');
     await userEvent.click(screen.getByRole('button', { name: 'Finalizar pedido' }));
     expect(await screen.findByText(/Só temos 1 unidade de/)).toBeInTheDocument();
   });

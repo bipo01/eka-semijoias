@@ -33,10 +33,10 @@ describe('buildPixPayload', () => {
   });
 
   it('carries amount, ASCII name/city within limits, txid and a valid CRC', () => {
-    const payload = buildPixPayload({ key: '+5567999998888', name: 'Érika Semijoias Acessórios Ltda', city: 'São José do Rio Preto', amountCents: 25990, txid: 'EKA1024' });
+    const payload = buildPixPayload({ key: '+5565999998888', name: 'Érika Semijoias Acessórios Ltda', city: 'São José do Rio Preto', amountCents: 25990, txid: 'EKA1024' });
     const f = fields(payload);
     expect(f.get('00')).toBe('01');
-    expect(f.get('26')).toBe('0014br.gov.bcb.pix0114+5567999998888');
+    expect(f.get('26')).toBe('0014br.gov.bcb.pix0114+5565999998888');
     expect(f.get('52')).toBe('0000');
     expect(f.get('53')).toBe('986');
     expect(f.get('54')).toBe('259.90');
@@ -59,9 +59,9 @@ describe('Pix keys', () => {
     expect(normalizePixKey('cpf', '111.111.111-11').ok).toBe(false);
     expect(normalizePixKey('cnpj', '11.222.333/0001-81')).toEqual({ ok: true, key: '11222333000181' });
     expect(normalizePixKey('cnpj', '11.222.333/0001-82').ok).toBe(false);
-    expect(normalizePixKey('phone', '(67) 99999-8888')).toEqual({ ok: true, key: '+5567999998888' });
-    expect(normalizePixKey('phone', '+55 67 99999-8888')).toEqual({ ok: true, key: '+5567999998888' });
-    expect(normalizePixKey('phone', '6733334444').ok).toBe(false);
+    expect(normalizePixKey('phone', '(65) 99999-8888')).toEqual({ ok: true, key: '+5565999998888' });
+    expect(normalizePixKey('phone', '+55 65 99999-8888')).toEqual({ ok: true, key: '+5565999998888' });
+    expect(normalizePixKey('phone', '6533334444').ok).toBe(false);
     expect(normalizePixKey('email', ' Loja@Eka.com.br ')).toEqual({ ok: true, key: 'loja@eka.com.br' });
     expect(normalizePixKey('random', '123E4567-E12B-12D1-A456-426655440000')).toEqual({ ok: true, key: '123e4567-e12b-12d1-a456-426655440000' });
   });
@@ -70,7 +70,7 @@ describe('Pix keys', () => {
     expect(pixKeyKind('52998224725')).toBe('cpf');
     expect(formatPixKey('52998224725')).toBe('529.982.247-25');
     expect(formatPixKey('11222333000181')).toBe('11.222.333/0001-81');
-    expect(formatPixKey('+5567999998888')).toBe('(67) 99999-8888');
+    expect(formatPixKey('+5565999998888')).toBe('(65) 99999-8888');
     expect(pixKeyKind('loja@eka.com.br')).toBe('email');
   });
 

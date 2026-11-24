@@ -198,7 +198,7 @@ function LeadFormSection({ whatsapp }: { whatsapp: string | null }) {
       <p className="mt-1 text-ink-muted">Preencha seus dados e dê o primeiro passo para se tornar revendedora ÉKA.</p>
       <form ref={formRef} noValidate onSubmit={submit} className="mt-6 flex flex-col gap-4">
         <TextField label="Nome completo" required autoComplete="name" icon={<User size={18} strokeWidth={1.5} />} value={form.name} error={errors.name} onChange={(e) => set('name', e.target.value)} />
-        <TextField label="WhatsApp (com DDD)" required type="tel" inputMode="tel" autoComplete="tel-national" placeholder="(67) 99999-9999" icon={<WhatsAppIcon size={18} />} value={form.whatsapp} error={errors.whatsapp} onChange={(e) => set('whatsapp', maskPhone(e.target.value))} />
+        <TextField label="WhatsApp (com DDD)" required type="tel" inputMode="tel" autoComplete="tel-national" placeholder="(65) 99999-9999" icon={<WhatsAppIcon size={18} />} value={form.whatsapp} error={errors.whatsapp} onChange={(e) => set('whatsapp', maskPhone(e.target.value))} />
         <div className="grid grid-cols-[1fr_96px] gap-3">
           <TextField label="Cidade" required autoComplete="address-level2" icon={<MapPin size={18} strokeWidth={1.5} />} value={form.city} error={errors.city} onChange={(e) => set('city', e.target.value)} />
           <SelectField label="UF" required autoComplete="address-level1" value={form.uf} error={errors.uf} onChange={(e) => set('uf', e.target.value)}>

@@ -43,9 +43,9 @@ export function parseDraft(draft: CustomerDraft): { ok: true; input: CustomerInp
   const name = draft.name.replace(/\s+/g, ' ').trim();
   if (name.length < 2) errors.name = 'Informe o nome da cliente.';
   const whatsapp = phoneDigits(draft.whatsapp);
-  if (whatsapp && whatsapp.length !== 10 && whatsapp.length !== 11) errors.whatsapp = 'WhatsApp com DDD, ex.: (67) 99999-9999';
+  if (whatsapp && whatsapp.length !== 10 && whatsapp.length !== 11) errors.whatsapp = 'WhatsApp com DDD, ex.: (65) 99999-9999';
   const uf = draft.uf.trim().toUpperCase();
-  if (uf && !/^[A-Z]{2}$/.test(uf)) errors.uf = 'Use a sigla, ex.: MS';
+  if (uf && !/^[A-Z]{2}$/.test(uf)) errors.uf = 'Use a sigla, ex.: MT';
   const instagram = parseInstagram(draft.instagram);
   if (!/^[A-Za-z0-9._]{0,30}$/.test(instagram)) errors.instagram = 'Digite só o @ do Instagram';
   const birthday = birthdayProblem(draft.birthday);
@@ -77,7 +77,7 @@ export function CustomerFields({ draft, errors, onChange, short }: { draft: Cust
         optional
         inputMode="tel"
         autoComplete="off"
-        placeholder="(67) 99999-9999"
+        placeholder="(65) 99999-9999"
         value={draft.whatsapp}
         error={errors.whatsapp}
         hint={short ? 'Com o número, a mensagem da compra abre direto na conversa dela.' : undefined}

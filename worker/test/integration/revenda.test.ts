@@ -57,11 +57,11 @@ async function catalog() {
   return (await (await fetch(`${BASE()}/api/catalog`)).json()) as any;
 }
 
-const phoneOf = () => `679${Math.floor(10_000_000 + Math.random() * 89_999_999)}`;
+const phoneOf = () => `659${Math.floor(10_000_000 + Math.random() * 89_999_999)}`;
 
 async function newReseller(a: Client, name = `Ana Teste ${randomUUID().slice(0, 4)}`) {
   const whatsapp = phoneOf();
-  const created = await a.req('/api/admin/resellers', { body: { name, whatsapp, city: 'Dourados', uf: 'MS' }, headers: { 'Idempotency-Key': randomUUID() } });
+  const created = await a.req('/api/admin/resellers', { body: { name, whatsapp, city: 'Várzea Grande', uf: 'MT' }, headers: { 'Idempotency-Key': randomUUID() } });
   expect(created.status).toBe(201);
   return { reseller: created.json.reseller, token: created.json.invite.token as string, whatsapp };
 }
@@ -84,7 +84,7 @@ describe('reseller program', () => {
   it('reviews an application, effectivates it, and the reseller accepts the contract and sets her PIN once', async () => {
     const a = await admin();
     const lead = await new Client().req('/api/leads', {
-      body: { name: 'Bruna Revenda Silva', whatsapp: '(67) 98888-7766', city: 'Campo Grande', uf: 'MS', instagram: '', alreadySells: true, source: '', consent: true },
+      body: { name: 'Bruna Revenda Silva', whatsapp: '(65) 98888-7766', city: 'Cuiabá', uf: 'MT', instagram: '', alreadySells: true, source: '', consent: true },
     });
     expect(lead.status).toBe(201);
     expect((await a.req(`/api/admin/leads/${lead.json.id}`, { method: 'PATCH', body: { status: 'aprovada', note: 'ótimo perfil' } })).json.lead).toMatchObject({ status: 'aprovada', note: 'ótimo perfil' });
@@ -92,7 +92,7 @@ describe('reseller program', () => {
     expect(listed.status).toBe('aprovada');
 
     const whatsapp = phoneOf();
-    const body = { leadId: lead.json.id, name: 'Bruna Revenda Silva', whatsapp, city: 'Campo Grande', uf: 'MS' };
+    const body = { leadId: lead.json.id, name: 'Bruna Revenda Silva', whatsapp, city: 'Cuiabá', uf: 'MT' };
     const key = randomUUID();
     const created = await a.req('/api/admin/resellers', { body, headers: { 'Idempotency-Key': key } });
     expect(created.status).toBe(201);
@@ -178,7 +178,7 @@ describe('reseller program', () => {
     expect(show.json.items).toHaveLength(2);
     expect(JSON.stringify(show.json)).not.toContain('Souza');
 
-    const sell = (lines: any[], key = randomUUID()) => r.req('/api/revenda/sales', { body: { lines, payment: 'pix', customer: { name: 'Cliente da Carla', whatsapp: '(67) 97777-1111' } }, headers: { 'Idempotency-Key': key } });
+    const sell = (lines: any[], key = randomUUID()) => r.req('/api/revenda/sales', { body: { lines, payment: 'pix', customer: { name: 'Cliente da Carla', whatsapp: '(65) 97777-1111' } }, headers: { 'Idempotency-Key': key } });
     const line1 = (qty: number, unit = p1.promoPrice ?? p1.price) => ({ productId: p1.id, variantId: v1.id, size: '', qty, unitCents: unit });
     // The last unit of p2 raced by two sales: exactly one wins.
     const race = await Promise.all([1, 2].map(() => sell([{ productId: p2.id, variantId: v2.id, size: '', qty: 1, unitCents: p2.promoPrice ?? p2.price }])));

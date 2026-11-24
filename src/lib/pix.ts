@@ -58,7 +58,7 @@ export function normalizePixKey(kind: PixKeyKind, raw: string): { ok: true; key:
     case 'phone': {
       let d = digits(value);
       if (d.length === 13 && d.startsWith('55')) d = d.slice(2);
-      return /^[1-9]{2}9\d{8}$/.test(d) ? { ok: true, key: `+55${d}` } : { ok: false, error: 'Informe o celular com DDD, por exemplo (67) 99999-9999.' };
+      return /^[1-9]{2}9\d{8}$/.test(d) ? { ok: true, key: `+55${d}` } : { ok: false, error: 'Informe o celular com DDD, por exemplo (65) 99999-9999.' };
     }
     case 'email': {
       const email = value.toLowerCase();

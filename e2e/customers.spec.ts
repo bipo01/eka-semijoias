@@ -21,7 +21,7 @@ const PIECE = 'Brinco Pérola Mini';
 test('customers: register a customer, sell to her and open "Compra registrada" with the warranty date', async ({ page }, testInfo) => {
   const tag = `${testInfo.project.name.replace(/[^a-z]/gi, '')}${Date.now().toString(36)}`;
   const name = `Cliente ${tag}`;
-  const digits = `679${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+  const digits = `659${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
 
   await page.goto('/admin');
   await unlock(page);
@@ -34,14 +34,14 @@ test('customers: register a customer, sell to her and open "Compra registrada" w
   await form.getByRole('textbox', { name: /^Nome da cliente/ }).fill(name);
   await form.getByRole('textbox', { name: /^WhatsApp/ }).fill(digits);
   await expect(form.getByRole('textbox', { name: /^WhatsApp/ })).toHaveValue(`(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`);
-  await form.getByRole('textbox', { name: /^Cidade/ }).fill('Dourados');
-  await form.getByRole('textbox', { name: /^UF/ }).fill('ms');
+  await form.getByRole('textbox', { name: /^Cidade/ }).fill('Várzea Grande');
+  await form.getByRole('textbox', { name: /^UF/ }).fill('mt');
   await form.getByRole('button', { name: 'Cadastrar cliente' }).click();
   await expect(page.getByText('Cliente cadastrada.', { exact: true })).toBeVisible();
 
   // Her record opens; the search finds her without accents or by number.
   const record = page.getByRole('dialog', { name });
-  await expect(record.getByText('Dourados/MS')).toBeVisible();
+  await expect(record.getByText('Várzea Grande/MT')).toBeVisible();
   await expect(record.getByRole('link', { name: 'Conversar no WhatsApp' })).toHaveAttribute('href', new RegExp(`^https://wa\\.me/55${digits}`));
   await record.getByRole('button', { name: 'Fechar', exact: true }).click();
   await page.getByRole('searchbox', { name: 'Buscar cliente' }).fill(digits.slice(-6));
@@ -102,7 +102,7 @@ test('customers: accessible and without horizontal overflow at 360px (list, reco
   await page.getByRole('button', { name: 'Nova cliente' }).click();
   const form = page.getByRole('dialog', { name: 'Nova cliente' });
   await form.getByRole('textbox', { name: /^Nome da cliente/ }).fill('Helena Acessível de Sobrenome Comprido');
-  await form.getByRole('textbox', { name: /^Cidade/ }).fill('São Gabriel do Oeste');
+  await form.getByRole('textbox', { name: /^Cidade/ }).fill('Rondonópolis');
   await form.getByRole('textbox', { name: /^Instagram/ }).fill('helena.acessivel');
   await check('new customer');
   await form.getByRole('button', { name: 'Cadastrar cliente' }).click();

@@ -48,15 +48,15 @@ describe('built-in variations', () => {
   });
 
   it('"Clássica" keeps the wording the site used before templates', () => {
-    expect(composeMessage(undefined, 'pedido', { pedido: '1008', total: 'R$ 409,70', nome: 'Ana', cidade: 'Campo Grande/MS', obs: 'é para presente' }, { items })).toBe(
-      'Olá! Fiz o pedido nº 1008 pelo site:\n\n1) Brinco Gota Cristal — Rosé — 1 un. — R$ 129,90\n2) Anel Solitário Delicado — Dourado — aro 16 — 2 un. — R$ 279,80\n\nTotal: R$ 409,70\nNome: Ana · Cidade: Campo Grande/MS\nObs.: é para presente',
+    expect(composeMessage(undefined, 'pedido', { pedido: '1008', total: 'R$ 409,70', nome: 'Ana', cidade: 'Cuiabá/MT', obs: 'é para presente' }, { items })).toBe(
+      'Olá! Fiz o pedido nº 1008 pelo site:\n\n1) Brinco Gota Cristal — Rosé — 1 un. — R$ 129,90\n2) Anel Solitário Delicado — Dourado — aro 16 — 2 un. — R$ 279,80\n\nTotal: R$ 409,70\nNome: Ana · Cidade: Cuiabá/MT\nObs.: é para presente',
     );
     expect(composeMessage(undefined, 'pedido', { total: 'R$ 409,70', nome: 'Ana' }, { items })).toContain('Olá! Fiz o pedido pelo site:');
     expect(composeMessage(undefined, 'duvida', { peca: 'Brinco Gota Cristal' })).toBe('Olá! Tenho uma dúvida sobre a peça Brinco Gota Cristal.');
     expect(composeMessage(undefined, 'contato', {})).toBe('Olá! Vim pelo site da ÉKA e gostaria de ajuda para escolher uma peça.');
     expect(composeMessage(undefined, 'aviseme', { peca: 'Pulseira Elos Rosé' })).toBe('Olá! A peça Pulseira Elos Rosé está esgotada no site. Pode me avisar quando voltar?');
-    expect(composeMessage(undefined, 'revendedora', { nome: 'Ana Souza', whatsapp: '(67) 99999-1234', cidade: 'Campo Grande', uf: 'MS', ja_revende: 'Não' })).toBe(
-      'Olá! Quero ser revendedora ÉKA.\n\nNome: Ana Souza\nWhatsApp: (67) 99999-1234\nCidade: Campo Grande/MS\nJá revendo: Não',
+    expect(composeMessage(undefined, 'revendedora', { nome: 'Ana Souza', whatsapp: '(65) 99999-1234', cidade: 'Cuiabá', uf: 'MT', ja_revende: 'Não' })).toBe(
+      'Olá! Quero ser revendedora ÉKA.\n\nNome: Ana Souza\nWhatsApp: (65) 99999-1234\nCidade: Cuiabá/MT\nJá revendo: Não',
     );
     expect(composeMessage(undefined, 'cobranca', { primeiro_nome: 'Ana', pedido: '1024', total: 'R$ 299,90', frete: 'R$ 10,00', link: 'L', pix: 'P' }, { items: items.slice(0, 1) })).toBe(
       'Oi, Ana! Seu pedido nº 1024 está confirmado.\n\n• Brinco Gota Cristal — Rosé — 1 un. — R$ 129,90\nFrete: R$ 10,00\n*Total: R$ 299,90*\n\nPara pagar com Pix e enviar o comprovante, é só abrir:\nL\n\nSe preferir, use o Pix Copia e Cola:\nP',

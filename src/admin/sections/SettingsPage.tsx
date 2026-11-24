@@ -60,7 +60,7 @@ const toForm = (s: Settings): StoreForm => ({
 export function parseStoreForm(form: StoreForm): { ok: true; patch: Settings } | { ok: false; errors: StoreErrors } {
   const errors: StoreErrors = {};
   const whatsapp = parsePhone(form.whatsapp);
-  if (whatsapp == null) errors.whatsapp = 'Informe DDD + número, por exemplo (67) 99999-9999.';
+  if (whatsapp == null) errors.whatsapp = 'Informe DDD + número, por exemplo (65) 99999-9999.';
   const instagram = parseInstagram(form.instagram);
   if (!/^[A-Za-z0-9._]{0,30}$/.test(instagram)) errors.instagram = 'Use só o nome do perfil: letras, números, ponto e sublinhado.';
   const warranty = form.warrantyMonths.trim() === '' ? 0 : Number(form.warrantyMonths);
@@ -128,7 +128,7 @@ function StoreSettings() {
         label="WhatsApp que recebe os pedidos"
         inputMode="tel"
         autoComplete="tel-national"
-        placeholder="(67) 99999-9999"
+        placeholder="(65) 99999-9999"
         {...field('whatsapp')}
         onChange={(e) => setForm((f) => ({ ...f, whatsapp: maskPhone(e.target.value) }))}
       />
@@ -142,7 +142,7 @@ function StoreSettings() {
         {...field('instagram')}
         onBlur={() => setForm((f) => ({ ...f, instagram: parseInstagram(f.instagram) }))}
       />
-      <TextField label="Cidade/UF" placeholder="Ex.: Campo Grande/MS" maxLength={80} {...field('city')} />
+      <TextField label="Cidade/UF" placeholder="Ex.: Cuiabá/MT" maxLength={80} {...field('city')} />
       <TextArea label="Showroom ou loja física" optional rows={2} maxLength={200} placeholder="Endereço" {...field('showroom')} />
       <TextField label="Horário de atendimento" optional maxLength={120} placeholder="Ex.: seg. a sex., 9h às 18h" {...field('openingHours')} />
       <TextField label="Garantia (meses)" inputMode="numeric" maxLength={2} hint="Use 0 para não mostrar garantia no site." {...field('warrantyMonths')} />

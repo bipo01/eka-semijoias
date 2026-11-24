@@ -235,7 +235,7 @@ export const saleRequestSchema = z.object({
   customer: z
     .object({
       name: z.string().trim().max(80),
-      whatsapp: z.string().transform((v) => v.replace(/\D/g, '')).pipe(z.string().regex(/^(\d{10,11})?$/, 'WhatsApp com DDD, ex.: (67) 99999-9999')),
+      whatsapp: z.string().transform((v) => v.replace(/\D/g, '')).pipe(z.string().regex(/^(\d{10,11})?$/, 'WhatsApp com DDD, ex.: (65) 99999-9999')),
     })
     .optional(),
   payment: z.enum(PAYMENT_METHODS),

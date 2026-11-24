@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { composeMessage } from '../data/messages';
 import { leadFormSchema, leadVars, maskPhone } from './lead';
 
-const valid = { name: 'Ana Souza', whatsapp: '(67) 99999-1234', city: 'Campo Grande', uf: 'MS', instagram: '@ana.semi', alreadySells: false, source: 'Instagram', consent: true };
+const valid = { name: 'Ana Souza', whatsapp: '(65) 99999-1234', city: 'Cuiabá', uf: 'MT', instagram: '@ana.semi', alreadySells: false, source: 'Instagram', consent: true };
 
 describe('maskPhone', () => {
   it('masks progressively', () => {
     expect(maskPhone('6')).toBe('(6');
-    expect(maskPhone('67999')).toBe('(67) 999');
-    expect(maskPhone('6733334444')).toBe('(67) 3333-4444');
-    expect(maskPhone('67999991234')).toBe('(67) 99999-1234');
-    expect(maskPhone('6799999123499')).toBe('(67) 99999-1234');
+    expect(maskPhone('65999')).toBe('(65) 999');
+    expect(maskPhone('6533334444')).toBe('(65) 3333-4444');
+    expect(maskPhone('65999991234')).toBe('(65) 99999-1234');
+    expect(maskPhone('6599999123499')).toBe('(65) 99999-1234');
   });
 });
 
@@ -19,7 +19,7 @@ describe('leadFormSchema', () => {
     const r = leadFormSchema.safeParse(valid);
     expect(r.success).toBe(true);
     if (r.success) {
-      expect(r.data.whatsapp).toBe('67999991234');
+      expect(r.data.whatsapp).toBe('65999991234');
       expect(r.data.instagram).toBe('ana.semi');
     }
   });
@@ -41,8 +41,8 @@ describe('leadFormSchema', () => {
   it('builds the intro message without empty lines for optional fields', () => {
     const r = leadFormSchema.parse({ ...valid, instagram: '', source: '' });
     const msg = composeMessage(undefined, 'revendedora', leadVars(r));
-    expect(msg).toContain('Cidade: Campo Grande/MS');
-    expect(msg).toContain('WhatsApp: (67) 99999-1234');
+    expect(msg).toContain('Cidade: Cuiabá/MT');
+    expect(msg).toContain('WhatsApp: (65) 99999-1234');
     expect(msg).not.toContain('Instagram');
     expect(msg).not.toContain('Conheci');
   });

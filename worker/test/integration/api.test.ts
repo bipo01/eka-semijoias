@@ -375,7 +375,7 @@ describe('media', () => {
 });
 
 describe('leads', () => {
-  const lead = { name: 'Maria da Silva', whatsapp: '(67) 99999-1234', city: 'Campo Grande', uf: 'MS', instagram: '@maria', alreadySells: true, source: 'Instagram', consent: true };
+  const lead = { name: 'Maria da Silva', whatsapp: '(65) 99999-1234', city: 'Cuiabá', uf: 'MT', instagram: '@maria', alreadySells: true, source: 'Instagram', consent: true };
 
   it('stores a lead for the admin only, and honours the honeypot', async () => {
     const visitor = new Client();
@@ -390,7 +390,7 @@ describe('leads', () => {
     expect(names).toContain('Maria da Silva');
     expect(names).not.toContain('Robo Spam');
     const mine = list.json.leads.find((l: any) => l.id === created.json.id);
-    expect(mine).toMatchObject({ whatsapp: '67999991234', instagram: 'maria', uf: 'MS' });
+    expect(mine).toMatchObject({ whatsapp: '65999991234', instagram: 'maria', uf: 'MT' });
     const del = await a.req(`/api/admin/leads/${created.json.id}`, { method: 'DELETE' });
     expect(del.json.deleted).toBe(true);
     expect((await a.req(`/api/admin/leads/${created.json.id}`, { method: 'DELETE' })).json.deleted).toBe(false);
@@ -501,7 +501,7 @@ describe('orders and stock', () => {
       (p: any) => p.available && !skip.includes(p.id) && p.variants.length >= finishes && p.variants.every((v: any) => v.available && !v.sizes?.length) && !c.stock?.[p.id],
     );
   }
-  const order = (items: any[], extra: Record<string, unknown> = {}) => ({ items, name: 'Cliente Teste', city: 'Dourados', ...extra });
+  const order = (items: any[], extra: Record<string, unknown> = {}) => ({ items, name: 'Cliente Teste', city: 'Várzea Grande', ...extra });
   const place = (body: unknown, key = randomUUID(), client = new Client()) => client.req('/api/orders', { body, headers: { 'Idempotency-Key': key } });
 
   it('registers an order priced by the server, idempotently, without exposing it publicly', async () => {
@@ -536,7 +536,7 @@ describe('orders and stock', () => {
     const a = await admin();
     const list = await a.req('/api/admin/orders');
     const stored = list.json.orders.find((o: any) => o.number === first.json.order.number);
-    expect(stored).toMatchObject({ status: 'enviado', customer: { name: secretName, city: 'Dourados' }, note: 'presente', totalCents: price(product) * 2 });
+    expect(stored).toMatchObject({ status: 'enviado', customer: { name: secretName, city: 'Várzea Grande' }, note: 'presente', totalCents: price(product) * 2 });
 
     const anon = await a.req(`/api/admin/orders/${stored.id}/anonymize`, { body: {} });
     expect(anon.json.order).toMatchObject({ customer: { name: 'Cliente removida', city: '' }, anonymized: true });
@@ -658,7 +658,7 @@ describe('orders and stock', () => {
 
     // Confirmed: takes the pieces in the same batch; a retry returns the same order.
     const key = randomUUID();
-    const body = { items: [line(p1, v1, 1)], name: 'Bia Manual', city: 'Campo Grande', note: 'veio pelo WhatsApp', status: 'confirmado' };
+    const body = { items: [line(p1, v1, 1)], name: 'Bia Manual', city: 'Cuiabá', note: 'veio pelo WhatsApp', status: 'confirmado' };
     const conf = await manual(body, key);
     expect(conf.status).toBe(201);
     expect(conf.json.order).toMatchObject({ status: 'confirmado', stockMoves: [{ productId: p1.id, variantId: v1.id, size: '', qty: 1 }] });
@@ -801,11 +801,11 @@ describe('orders and stock', () => {
   it('refuses a malformed Pix key in the settings', async () => {
     const a = await admin();
     const c = await catalog();
-    const bad = await a.req('/api/admin/changes', { body: { baseVersion: c.version, changes: [{ kind: 'settings', op: 'upsert', data: { ...c.settings, pix: { key: '(67) 99999-8888', name: 'EKA', city: 'RIO' } } }] } });
+    const bad = await a.req('/api/admin/changes', { body: { baseVersion: c.version, changes: [{ kind: 'settings', op: 'upsert', data: { ...c.settings, pix: { key: '(65) 99999-8888', name: 'EKA', city: 'RIO' } } }] } });
     expect(bad.status).toBe(400);
-    const good = await a.req('/api/admin/changes', { body: { baseVersion: c.version, changes: [{ kind: 'settings', op: 'upsert', data: { ...c.settings, pix: { key: '+5567999998888', name: 'EKA', city: 'RIO' } } }] } });
+    const good = await a.req('/api/admin/changes', { body: { baseVersion: c.version, changes: [{ kind: 'settings', op: 'upsert', data: { ...c.settings, pix: { key: '+5565999998888', name: 'EKA', city: 'RIO' } } }] } });
     expect(good.status).toBe(200);
-    expect((await catalog()).settings.pix.key).toBe('+5567999998888');
+    expect((await catalog()).settings.pix.key).toBe('+5565999998888');
     const back = await catalog();
     const { pix: _pix, ...rest } = back.settings;
     expect((await a.req('/api/admin/changes', { body: { baseVersion: back.version, changes: [{ kind: 'settings', op: 'upsert', data: rest }] } })).status).toBe(200);
@@ -846,14 +846,14 @@ describe('Pix charges and receipts', () => {
   async function withPix(a: Client, on: boolean) {
     const c = await catalog();
     const { pix: _pix, ...rest } = c.settings;
-    const settings = on ? { ...rest, pix: { key: '+5567999998888', name: 'EKA SEMIJOIAS', city: 'CAMPO GRANDE' } } : rest;
+    const settings = on ? { ...rest, pix: { key: '+5565999998888', name: 'EKA SEMIJOIAS', city: 'CUIABA' } } : rest;
     const res = await a.req('/api/admin/changes', { body: { baseVersion: c.version, changes: [{ kind: 'settings', op: 'upsert', data: settings }] } });
     expect(res.status).toBe(200);
   }
   async function newOrder(a: Client, name = 'Maria Clara Souza') {
     const c = await catalog();
     const product = c.products.find((p: any) => p.available && p.variants.every((v: any) => v.available && !v.sizes?.length) && !c.stock?.[p.id]);
-    const created = await new Client().req('/api/orders', { body: { items: [{ productId: product.id, variantId: product.variants[0].id, qty: 1 }], name, city: 'Dourados' }, headers: { 'Idempotency-Key': randomUUID() } });
+    const created = await new Client().req('/api/orders', { body: { items: [{ productId: product.id, variantId: product.variants[0].id, qty: 1 }], name, city: 'Várzea Grande' }, headers: { 'Idempotency-Key': randomUUID() } });
     expect(created.status).toBe(201);
     const order = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.number === created.json.order.number);
     return { order, product };
@@ -879,9 +879,9 @@ describe('Pix charges and receipts', () => {
     // Public payment view: first name only, amounts, Pix data; nothing else personal.
     const view = await new Client().req(`/api/pay/${charge.token}`);
     expect(view.status).toBe(200);
-    expect(view.json).toMatchObject({ number: order.number, firstName: 'Maria', amountCents: charge.amountCents, shippingCents: 2000, discountCents: 500, state: 'aguardando', pix: { key: '+5567999998888' } });
+    expect(view.json).toMatchObject({ number: order.number, firstName: 'Maria', amountCents: charge.amountCents, shippingCents: 2000, discountCents: 500, state: 'aguardando', pix: { key: '+5565999998888' } });
     expect(view.text).not.toContain('Souza');
-    expect(view.text).not.toContain('Dourados');
+    expect(view.text).not.toContain('Várzea Grande');
     expect((await new Client().req('/api/pay/not-a-real-token-1234567890')).status).toBe(404);
 
     // Same amount keeps the link; a new amount issues a new one and the old link dies.
@@ -1151,7 +1151,7 @@ describe('phone notices (Web Push)', () => {
     const c = await catalog();
     const product = c.products.find((p: any) => p.available && p.variants.every((v: any) => v.available && !v.sizes?.length) && !c.stock?.[p.id]);
     const secret = `Sigilosa ${randomUUID().slice(0, 6)}`;
-    const placed = await new Client().req('/api/orders', { body: { items: [{ productId: product.id, variantId: product.variants[0].id, qty: 2 }], name: secret, city: 'Dourados' }, headers: { 'Idempotency-Key': randomUUID() } });
+    const placed = await new Client().req('/api/orders', { body: { items: [{ productId: product.id, variantId: product.variants[0].id, qty: 2 }], name: secret, city: 'Várzea Grande' }, headers: { 'Idempotency-Key': randomUUID() } });
     expect(placed.status).toBe(201);
     const hit = await waitFor(() => mock.pushHits.find((h) => h.path === new URL(live.json.endpoint).pathname));
     expect(hit.headers['content-encoding']).toBe('aes128gcm');
@@ -1452,7 +1452,7 @@ describe('stock entries and exits', () => {
 });
 
 describe('customers', () => {
-  const phone = () => `679${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+  const phone = () => `659${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
   const create = (client: Client, body: unknown, key = randomUUID()) => client.req('/api/admin/customers', { body, headers: { 'Idempotency-Key': key } });
   async function plain() {
     const c = await catalog();
@@ -1473,11 +1473,11 @@ describe('customers', () => {
   it('creates idempotently, lists newest first and refuses a WhatsApp that is taken', async () => {
     const a = await admin();
     const whatsapp = phone();
-    const body = { name: '  Ana   Júlia ', whatsapp: `(${whatsapp.slice(0, 2)}) ${whatsapp.slice(2, 7)}-${whatsapp.slice(7)}`, city: 'Dourados', uf: 'ms', instagram: '@ana.joias', birthday: '25/03', note: 'Gosta de argolas' };
+    const body = { name: '  Ana   Júlia ', whatsapp: `(${whatsapp.slice(0, 2)}) ${whatsapp.slice(2, 7)}-${whatsapp.slice(7)}`, city: 'Várzea Grande', uf: 'mt', instagram: '@ana.joias', birthday: '25/03', note: 'Gosta de argolas' };
     const key = randomUUID();
     const first = await create(a, body, key);
     expect(first.status).toBe(201);
-    expect(first.json.customer).toMatchObject({ name: 'Ana Júlia', whatsapp, city: 'Dourados', uf: 'MS', instagram: 'ana.joias', birthday: '25/03', note: 'Gosta de argolas', stats: { orders: 0, purchases: 0, spentCents: 0, lastPurchaseAt: null } });
+    expect(first.json.customer).toMatchObject({ name: 'Ana Júlia', whatsapp, city: 'Várzea Grande', uf: 'MT', instagram: 'ana.joias', birthday: '25/03', note: 'Gosta de argolas', stats: { orders: 0, purchases: 0, spentCents: 0, lastPurchaseAt: null } });
     expect(first.json.customer.id).toMatch(/^cus_/);
     // A retry (double tap) answers the same customer; the key cannot carry another body.
     const replay = await create(a, body, key);
@@ -1496,7 +1496,7 @@ describe('customers', () => {
     expect([noPhone1.status, noPhone2.status]).toEqual([201, 201]);
 
     expect((await create(a, { name: 'A', whatsapp: '' })).json.error.message).toBe('Informe o nome da cliente.');
-    expect((await create(a, { name: 'Ana', whatsapp: '6799' })).status).toBe(400);
+    expect((await create(a, { name: 'Ana', whatsapp: '6599' })).status).toBe(400);
     expect((await create(a, { name: 'Ana', whatsapp: '', birthday: '31/02' })).status).toBe(400);
     expect((await a.req('/api/admin/customers', { body: { name: 'Ana', whatsapp: '' } })).status).toBe(400); // no key
 
@@ -1509,18 +1509,18 @@ describe('customers', () => {
 
   it('edits with compare-and-swap and keeps the WhatsApp unique', async () => {
     const a = await admin();
-    const one = (await create(a, { name: 'Carla Edição', whatsapp: phone(), city: 'Campo Grande' })).json.customer;
+    const one = (await create(a, { name: 'Carla Edição', whatsapp: phone(), city: 'Cuiabá' })).json.customer;
     const other = (await create(a, { name: 'Dora Edição', whatsapp: phone() })).json.customer;
     const put = (body: unknown) => a.req(`/api/admin/customers/${one.id}`, { method: 'PUT', body });
 
-    const edited = await put({ name: 'Carla Souza', whatsapp: one.whatsapp, city: 'Campo Grande', uf: 'MS', updatedAt: one.updatedAt });
+    const edited = await put({ name: 'Carla Souza', whatsapp: one.whatsapp, city: 'Cuiabá', uf: 'MT', updatedAt: one.updatedAt });
     expect(edited.status).toBe(200);
-    expect(edited.json.customer).toMatchObject({ name: 'Carla Souza', uf: 'MS', createdAt: one.createdAt });
+    expect(edited.json.customer).toMatchObject({ name: 'Carla Souza', uf: 'MT', createdAt: one.createdAt });
     expect(edited.json.customer.updatedAt).not.toBe(one.updatedAt);
     // The same save again (its answer was lost) is harmless.
-    expect((await put({ name: 'Carla Souza', whatsapp: one.whatsapp, city: 'Campo Grande', uf: 'MS', updatedAt: one.updatedAt })).status).toBe(200);
+    expect((await put({ name: 'Carla Souza', whatsapp: one.whatsapp, city: 'Cuiabá', uf: 'MT', updatedAt: one.updatedAt })).status).toBe(200);
     // Another change from the old version is refused, with what is stored now.
-    const stale = await put({ name: 'Carla Antiga', whatsapp: one.whatsapp, city: 'Campo Grande', updatedAt: one.updatedAt });
+    const stale = await put({ name: 'Carla Antiga', whatsapp: one.whatsapp, city: 'Cuiabá', updatedAt: one.updatedAt });
     expect(stale.status).toBe(409);
     expect(stale.json.error.details.customer).toMatchObject({ name: 'Carla Souza', updatedAt: edited.json.customer.updatedAt });
     // Taking another customer's WhatsApp is refused.
@@ -1534,12 +1534,12 @@ describe('customers', () => {
     const a = await admin();
     const p = await plain();
     const v = p.variants[0];
-    const elisa = (await create(a, { name: 'Elisa Compra', whatsapp: phone(), city: 'Bonito', uf: 'MS' })).json.customer;
+    const elisa = (await create(a, { name: 'Elisa Compra', whatsapp: phone(), city: 'Chapada dos Guimarães', uf: 'MT' })).json.customer;
     const manual = (body: unknown) => a.req('/api/admin/orders', { body, headers: { 'Idempotency-Key': randomUUID() } });
 
     const sold = await manual({ items: [{ productId: p.id, variantId: v.id, qty: 2 }], name: 'Outro Nome', city: 'Outra', status: 'confirmado', customerId: elisa.id });
     expect(sold.status).toBe(201);
-    expect(sold.json.order).toMatchObject({ customerId: elisa.id, customer: { name: 'Elisa Compra', city: 'Bonito' }, status: 'confirmado' });
+    expect(sold.json.order).toMatchObject({ customerId: elisa.id, customer: { name: 'Elisa Compra', city: 'Chapada dos Guimarães' }, status: 'confirmado' });
     const negotiating = await manual({ items: [{ productId: p.id, variantId: v.id, qty: 1 }], name: 'Elisa Compra', status: 'enviado', customerId: elisa.id });
     expect(negotiating.status).toBe(201);
     const listed = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === sold.json.order.id);

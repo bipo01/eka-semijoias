@@ -176,7 +176,7 @@ export async function handleGetReseller(ctx: Context): Promise<Response> {
 const phone = z
   .string()
   .transform((v) => v.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''))
-  .pipe(z.string().regex(/^\d{10,11}$/, 'WhatsApp com DDD, ex.: (67) 99999-9999'));
+  .pipe(z.string().regex(/^\d{10,11}$/, 'WhatsApp com DDD, ex.: (65) 99999-9999'));
 const slugInput = z.string().trim().toLowerCase().regex(/^[a-z0-9-]{2,40}$/, 'Endereço do mostruário: só letras minúsculas, números e hífen (2 a 40).');
 
 const createSchema = z.object({

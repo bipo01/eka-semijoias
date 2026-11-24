@@ -6,17 +6,17 @@ import { orderMessageTypes } from '../sections/OrderMessages';
 import { parseStoreForm } from '../sections/SettingsPage';
 import { birthdayProblem, maskBirthday, matchesCustomer, purchaseDate, warrantyVars } from './customers';
 
-const ana = { name: 'Ana Júlia Conceição', city: 'São Gabriel do Oeste', whatsapp: '67999991234', instagram: 'ana.joias' };
+const ana = { name: 'Ana Júlia Conceição', city: 'Rondonópolis', whatsapp: '65999991234', instagram: 'ana.joias' };
 
 describe('customer search', () => {
   it('ignores accents and case in name and city', () => {
     expect(matchesCustomer(ana, 'julia')).toBe(true);
     expect(matchesCustomer(ana, 'CONCEICAO')).toBe(true);
-    expect(matchesCustomer(ana, 'sao gabriel')).toBe(true);
+    expect(matchesCustomer(ana, 'rondonopolis')).toBe(true);
     expect(matchesCustomer(ana, 'Bia')).toBe(false);
   });
   it('matches the WhatsApp by digits, however it is typed', () => {
-    expect(matchesCustomer(ana, '(67) 99999-1234')).toBe(true);
+    expect(matchesCustomer(ana, '(65) 99999-1234')).toBe(true);
     expect(matchesCustomer(ana, '1234')).toBe(true);
     expect(matchesCustomer(ana, '5555')).toBe(false);
   });
@@ -87,11 +87,11 @@ describe('order messages', () => {
 
 describe('customer form', () => {
   it('normalizes the fields and leaves empty ones out', () => {
-    const r = parseDraft(emptyDraft({ name: '  Ana   Souza ', whatsapp: '(67) 99999-1234', city: ' Dourados ', uf: 'ms', instagram: 'https://instagram.com/ana.joias/', birthday: '25/03' }));
-    expect(r).toEqual({ ok: true, input: { name: 'Ana Souza', whatsapp: '67999991234', city: 'Dourados', uf: 'MS', instagram: 'ana.joias', birthday: '25/03' } });
+    const r = parseDraft(emptyDraft({ name: '  Ana   Souza ', whatsapp: '(65) 99999-1234', city: ' Várzea Grande ', uf: 'mt', instagram: 'https://instagram.com/ana.joias/', birthday: '25/03' }));
+    expect(r).toEqual({ ok: true, input: { name: 'Ana Souza', whatsapp: '65999991234', city: 'Várzea Grande', uf: 'MT', instagram: 'ana.joias', birthday: '25/03' } });
   });
   it('reports each problem on its field', () => {
-    const r = parseDraft(emptyDraft({ name: 'A', whatsapp: '(67) 9999', uf: 'M', birthday: '31/02' }));
+    const r = parseDraft(emptyDraft({ name: 'A', whatsapp: '(65) 9999', uf: 'M', birthday: '31/02' }));
     expect(!r.ok && Object.keys(r.errors).sort()).toEqual(['birthday', 'name', 'uf', 'whatsapp']);
   });
 });

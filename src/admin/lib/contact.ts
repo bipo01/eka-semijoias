@@ -8,7 +8,7 @@ export function localDigits(value: string): string {
   return (d.length === 12 || d.length === 13) && d.startsWith('55') ? d.slice(2) : d;
 }
 
-/** Formats while typing: "(67) 99999-9999" / "(67) 9999-9999". */
+/** Formats while typing: "(65) 99999-9999" / "(65) 9999-9999". */
 export function maskPhone(value: string): string {
   const d = localDigits(value).slice(0, 11);
   if (d.length <= 2) return d.length ? `(${d}` : '';

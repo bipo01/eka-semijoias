@@ -123,7 +123,7 @@ Olá! Gostaria de fazer este pedido:
 2) Anel Solitário — Dourado — aro 16 — 2 un. — R$ 279,80
 
 Total: R$ 409,70
-Nome: Ana · Cidade: Campo Grande/MS
+Nome: Ana · Cidade: Cuiabá/MT
 Obs.: é para presente
 ```
 Built with `encodeURIComponent`, sent to `https://wa.me/<number>?text=…`; while the number is pending, `https://wa.me/?text=…` (WhatsApp asks which contact to send to, so ordering works end to end). The cart is **not** cleared automatically. After the WhatsApp tab opens, show "Pedido enviado? Limpar sacola". Guard: a message over ~1,800 characters triggers a compact format (no blank lines, abbreviated variants).

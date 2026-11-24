@@ -19,7 +19,7 @@ function catalogWithUpload() {
   return {
     ...seed,
     products: [{ ...first!, images: [...first!.images, { id: 'img-upload', src: UPLOADED, thumb: UPLOADED, alt: 'Foto enviada' }] }, ...rest],
-    leads: [{ id: 'lead-1', name: 'Ana', whatsapp: '67999998888', city: 'Dourados', uf: 'MS', alreadySells: true, createdAt: '2026-11-18T10:00:00.000Z' }],
+    leads: [{ id: 'lead-1', name: 'Ana', whatsapp: '65999998888', city: 'Várzea Grande', uf: 'MT', alreadySells: true, createdAt: '2026-11-18T10:00:00.000Z' }],
   };
 }
 

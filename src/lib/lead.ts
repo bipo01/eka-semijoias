@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'] as const;
 
-/** Formats digits as "(67) 99999-9999" while typing. */
+/** Formats digits as "(65) 99999-9999" while typing. */
 export function maskPhone(input: string): string {
   const d = input.replace(/\D/g, '').slice(0, 11);
   if (d.length <= 2) return d.length ? `(${d}` : '';
@@ -17,7 +17,7 @@ export const leadFormSchema = z.object({
   whatsapp: z
     .string()
     .transform((v) => v.replace(/\D/g, ''))
-    .refine((d) => d.length === 10 || d.length === 11, 'Digite o WhatsApp com DDD, ex.: (67) 99999-9999'),
+    .refine((d) => d.length === 10 || d.length === 11, 'Digite o WhatsApp com DDD, ex.: (65) 99999-9999'),
   city: z.string().trim().min(2, 'Digite sua cidade').max(80, 'Cidade muito longa'),
   uf: z.enum(UFS, { message: 'Escolha o estado' }),
   instagram: z
