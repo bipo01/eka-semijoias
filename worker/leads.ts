@@ -97,10 +97,13 @@ export async function handlePatchLead(ctx: Context): Promise<Response> {
     else delete lead.note;
   }
   const status = input.data.status ?? (row.status as NonNullable<ResellerLead['status']>);
-  await ctx.env.DB.batch([
-    ctx.env.DB.prepare('UPDATE leads SET data = ?2, status = ?3 WHERE id = ?1').bind(id, JSON.stringify({ ...lead, status: undefined }), status),
+  // Compare-and-swap on what was read: an application effectivated (or reviewed) on another device
+  // meanwhile is never overwritten back.
+  const results = await ctx.env.DB.batch([
+    ctx.env.DB.prepare(`UPDATE leads SET data = ?2, status = ?3 WHERE id = ?1 AND status = ?4 AND data = ?5 AND status <> 'efetivada'`).bind(id, JSON.stringify({ ...lead, status: undefined }), status, row.status, row.data),
     ctx.env.DB.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(new Date().toISOString(), 'lead.review', `Cadastro ${id}: ${status}`),
   ]);
+  if (!results[0]?.meta.changes) throw new HttpError('conflict', 'Este cadastro mudou em outro aparelho. A lista foi atualizada; confira e tente de novo.');
   ctx.waitUntil(notifyLeads(ctx.env));
   return json({ lead: { ...lead, status } });
 }

@@ -28,7 +28,7 @@ import { createKit, createReseller, editKit, idempotencyKey, inviteLink, isError
 const ufOptions = ['', ...UFS];
 
 /** "Efetivar revendedora": creates her and hands back the first-access link once. */
-export function NewResellerForm({ lead, onDone }: { lead?: ResellerLead; onDone: (r: { reseller: Reseller; token: string }) => void }) {
+export function NewResellerForm({ lead, onDone }: { lead?: ResellerLead; onDone: (r: { reseller: Reseller; token: string | null }) => void }) {
   const [name, setName] = useState(lead?.name ?? '');
   const [whatsapp, setWhatsapp] = useState(lead ? maskPhone(lead.whatsapp) : '');
   const [city, setCity] = useState(lead?.city ?? '');
@@ -50,7 +50,8 @@ export function NewResellerForm({ lead, onDone }: { lead?: ResellerLead; onDone:
     setBusy(false);
     if (isError(result)) return setError(result.error);
     toast(`${firstNameOf(result.reseller.name)} agora é revendedora.`, { tone: 'success' });
-    onDone({ reseller: result.reseller, token: result.invite.token });
+    // A repeated request (lost answer) never carries the access link again: a new one is generated in her sheet.
+    onDone({ reseller: result.reseller, token: result.invite?.token ?? null });
   }
 
   return (
@@ -108,7 +109,8 @@ const toLines = (kit: Kit): OrderLine[] => kit.items.map((i) => ({ productId: i.
 /** Builds or adjusts a kit with the same piece editor as the orders. */
 export function KitEditor({ resellerId, kit, onDone }: { resellerId: string; kit: Kit | null; onDone: () => void }) {
   const [lines, setLines] = useState<OrderLine[]>(() => (kit ? toLines(kit) : []));
-  const [stamp] = useState(kit?.updatedAt ?? '');
+  // The version the editor started from; after a conflict it moves to the server's current one.
+  const [stamp, setStamp] = useState(kit?.updatedAt ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const agreed = useMemo(() => new Map((kit?.items ?? []).map((i) => [`${i.productId}|${i.variantId}|${i.size}`, i.unitCents])), [kit]);
@@ -121,7 +123,14 @@ export function KitEditor({ resellerId, kit, onDone }: { resellerId: string; kit
     const items: KitLineInput[] = lines.map((l) => ({ productId: l.productId, variantId: l.variantId, ...(l.size ? { size: l.size } : {}), qty: l.qty }));
     const result = kit ? await editKit(kit, items, stamp) : await createKit(resellerId, items);
     setBusy(false);
-    if (isError(result)) return setError(result.error);
+    if (isError(result)) {
+      const latest = (result.details as { kit?: { updatedAt?: string } } | undefined)?.kit?.updatedAt;
+      if (latest) {
+        setStamp(latest);
+        return setError(`${result.error} Suas peças continuam aqui: confira e toque em salvar de novo.`);
+      }
+      return setError(result.error);
+    }
     toast(kit ? 'Maleta atualizada.' : 'Maleta montada. As peças com controle de estoque saíram do estoque.', { tone: 'success' });
     onDone();
   }
@@ -153,6 +162,10 @@ export function SettleForm({ kit, sales, onDone }: { kit: Kit; sales: ResellerSa
   const [back, setBack] = useState<Record<string, number>>(() => Object.fromEntries(lines.map((l) => [keyOf(l), l.available])));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The kit version this count was made against: a sale arriving meanwhile is refused by the
+  // server until the owner looks at the new numbers and confirms again.
+  const [stamp, setStamp] = useState(kit.updatedAt);
+  const changed = stamp !== kit.updatedAt;
   const returned = lines.map((l) => ({ productId: l.productId, variantId: l.variantId, size: l.size, qty: back[keyOf(l)] ?? 0 }));
   const preview = settle(kit, sales, returned);
   const commission = commissionFor('error' in preview ? 0 : preview.soldCents, kit.tiers);
@@ -161,9 +174,13 @@ export function SettleForm({ kit, sales, onDone }: { kit: Kit; sales: ResellerSa
     if (busy) return;
     setError(null);
     setBusy(true);
-    const result = await settleKit(kit, returned);
+    const result = await settleKit(kit, returned, stamp);
     setBusy(false);
-    if (isError(result)) return setError(result.error);
+    if (isError(result)) {
+      const latest = (result.details as { kit?: { updatedAt?: string } } | undefined)?.kit?.updatedAt;
+      if (latest) setStamp(latest);
+      return setError(result.error);
+    }
     toast('Acerto feito. As peças devolvidas voltaram para o estoque.', { tone: 'success' });
     onDone();
   }
@@ -211,12 +228,20 @@ export function SettleForm({ kit, sales, onDone }: { kit: Kit; sales: ResellerSa
           <dd className="price border-t border-line pt-2 text-right font-display text-xl">{formatBRL(preview.dueCents)}</dd>
         </dl>
       )}
+      {changed && !error && (
+        <p role="status" className="rounded-[10px] bg-champagne/60 p-3 text-sm">
+          A maleta mudou enquanto você conferia (uma venda nova?). Os números acima já estão atualizados.{' '}
+          <button type="button" className="text-copper underline underline-offset-4" onClick={() => setStamp(kit.updatedAt)}>
+            Conferi, continuar
+          </button>
+        </p>
+      )}
       {error && (
         <p role="alert" className="rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
           {error}
         </p>
       )}
-      <Button size="lg" block disabled={busy || 'error' in preview} aria-busy={busy} onClick={() => void confirmSettlement()}>
+      <Button size="lg" block disabled={busy || 'error' in preview || changed} aria-busy={busy} onClick={() => void confirmSettlement()}>
         {busy ? 'Fechando…' : 'Confirmar acerto'}
       </Button>
       <p className="text-center text-sm text-ink-muted">Fecha esta maleta. Você pode abrir uma nova logo em seguida.</p>

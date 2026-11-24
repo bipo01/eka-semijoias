@@ -98,8 +98,10 @@ describe('reseller program', () => {
     expect(created.status).toBe(201);
     expect(created.json.reseller).toMatchObject({ status: 'ativa', hasPin: false, slug: expect.stringMatching(/^bruna/) });
     expect(created.json.invite.token).toMatch(/^[\w-]{43}$/);
-    // A retry returns the same reseller; the application cannot be effectivated twice.
-    expect((await a.req('/api/admin/resellers', { body, headers: { 'Idempotency-Key': key } })).json.reseller.id).toBe(created.json.reseller.id);
+    // A retry returns the same reseller (without the access link, which is never stored); the application cannot be effectivated twice.
+    const replay = await a.req('/api/admin/resellers', { body, headers: { 'Idempotency-Key': key } });
+    expect(replay.json.reseller.id).toBe(created.json.reseller.id);
+    expect(replay.json.invite).toBeNull();
     expect((await a.req('/api/admin/resellers', { body: { ...body, whatsapp: phoneOf() }, headers: { 'Idempotency-Key': randomUUID() } })).status).toBe(409);
     expect((await a.req('/api/admin/resellers', { body: { ...body, leadId: undefined }, headers: { 'Idempotency-Key': randomUUID() } })).json.error.message).toContain('Já existe uma revendedora com este WhatsApp');
     expect((await a.req('/api/admin/leads')).json.leads.find((l: any) => l.id === lead.json.id).status).toBe('efetivada');
@@ -274,5 +276,35 @@ describe('reseller program', () => {
     expect((await new Client().req(`/api/revenda/invite/${token}`)).json.contract.version).toBe(current.contract.version + 1);
     // Restore the default text for the other tests.
     await a.req('/api/admin/reseller-program', { method: 'PUT', body: { program: current } });
+  });
+
+  it('nets a kit line that was only partly counted, and refuses a second settlement with other numbers', async () => {
+    const a = await admin();
+    const [p] = await plainProducts(1);
+    const v = p.variants[0];
+    const key = `${v.id}|`;
+    const { reseller, token } = await newReseller(a, 'Gina Parcial Rocha');
+    await activate(token, '583920');
+    // Opened while the piece had no stock control: 3 units, none counted.
+    let kit = (await a.req(`/api/admin/resellers/${reseller.id}/kits`, { body: { items: [{ productId: p.id, variantId: v.id, qty: 3 }] } })).json.kit;
+    expect(kit.stockMoves).toEqual([]);
+    expect((await a.req(`/api/admin/stock/${p.id}`, { method: 'PUT', body: { tracked: true, levels: [{ variantId: v.id, size: '', qty: 10, expected: null }] } })).status).toBe(200);
+    const edit = async (qty: number) => {
+      const r = await a.req(`/api/admin/kits/${kit.id}/items`, { method: 'PUT', body: { updatedAt: kit.updatedAt, items: [{ productId: p.id, variantId: v.id, qty }] } });
+      expect(r.status).toBe(200);
+      kit = r.json.kit;
+      return (await catalog()).stock[p.id][key];
+    };
+    expect(await edit(5)).toBe(8); // only the 2 extra units are taken
+    expect(await edit(6)).toBe(7); // one more
+    expect(await edit(4)).toBe(9); // two come back
+    expect(kit.stockMoves).toEqual([{ productId: p.id, variantId: v.id, size: '', qty: 1 }]);
+    // Settlement: retrying the same count is harmless; another count is refused.
+    const all = [{ productId: p.id, variantId: v.id, size: '', qty: 4 }];
+    expect((await a.req(`/api/admin/kits/${kit.id}/settle`, { body: { updatedAt: kit.updatedAt, returned: all } })).status).toBe(200);
+    expect((await a.req(`/api/admin/kits/${kit.id}/settle`, { body: { updatedAt: kit.updatedAt, returned: all } })).status).toBe(200);
+    expect((await a.req(`/api/admin/kits/${kit.id}/settle`, { body: { updatedAt: kit.updatedAt, returned: [{ ...all[0], qty: 2 }] } })).status).toBe(409);
+    expect((await catalog()).stock[p.id][key]).toBe(10);
+    expect((await a.req(`/api/admin/stock/${p.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
   });
 });

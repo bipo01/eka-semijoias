@@ -32,6 +32,7 @@ import {
   programStatement,
   publicSelf,
   RESELLER_COLUMNS,
+  resellerUnchanged,
   resellerPinProblem,
   toKit,
   toReseller,
@@ -54,6 +55,7 @@ const SESSION_MS = 30 * DAY;
 const LOGIN_IP_WINDOW = 15 * MINUTE;
 const LOGIN_IP_MAX = 5;
 const LOGIN_RESELLER_MAX = 10;
+const LOGIN_GLOBAL_MAX = 300;
 const CANCEL_WINDOW_MS = DAY;
 
 const cookieName = (env: Env) => (env.DEV_INSECURE_COOKIES === '1' ? 'eka_revenda' : '__Host-eka_revenda');
@@ -177,6 +179,10 @@ export async function handleAcceptInvite(ctx: Context): Promise<Response> {
     const textHash = await sha256Hex(c.mode === 'aceite' ? `${c.title}\n${c.text}` : (reseller.contractUrl ?? c.url ?? ''));
     next.contract = { acceptedAt: at, version: c.version, mode: c.mode };
     statements.push(
+      // The exact text of every accepted version is kept, so the hash can always be checked later.
+      db
+        .prepare('INSERT OR IGNORE INTO contract_versions (version, title, mode, body, sha256, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
+        .bind(c.version, c.title, c.mode, c.mode === 'aceite' ? c.text : (reseller.contractUrl ?? c.url ?? ''), textHash, at),
       db
         .prepare('INSERT INTO contract_acceptances (id, reseller_id, accepted_at, version, text_sha256, typed_name, ip_hash, user_agent, mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)')
         .bind(`acc_${randomToken().slice(0, 16)}`, reseller.id, at, c.version, textHash, typedName || reseller.name, ip, (ctx.request.headers.get('User-Agent') ?? '').slice(0, 300), c.mode),
@@ -188,6 +194,8 @@ export async function handleAcceptInvite(ctx: Context): Promise<Response> {
     await db.batch([
       // The link works once: a concurrent second use aborts the whole batch here.
       guard(db, '(SELECT used_at FROM reseller_invites WHERE token_hash = ?1) IS NULL', await sha256Hex(token)),
+      // The reseller row is rewritten from what was read: an admin edit meanwhile is never lost.
+      resellerUnchanged(db, reseller.id, stamp),
       db.prepare('UPDATE reseller_invites SET used_at = ?2 WHERE token_hash = ?1 AND used_at IS NULL').bind(await sha256Hex(token), now),
       ...statements,
       db
@@ -203,7 +211,11 @@ export async function handleAcceptInvite(ctx: Context): Promise<Response> {
       db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'reseller.access', `Primeiro acesso de ${reseller.id}${due ? ` (contrato v${c.version})` : ''}`),
     ]);
   } catch (error) {
-    if (isGuardMiss(error)) throw new HttpError('not_found', 'Este link de acesso não vale mais. Peça um novo para a ÉKA.');
+    if (isGuardMiss(error)) {
+      const fresh = await readInvite(db, token).catch(() => null);
+      if (!fresh) throw new HttpError('not_found', 'Este link de acesso não vale mais. Peça um novo para a ÉKA.');
+      throw new HttpError('conflict', 'Seus dados foram atualizados pela ÉKA neste instante. Toque em continuar de novo.');
+    }
     throw toHttpError(error);
   }
   if (due) ctx.waitUntil(notifyOwner(env, ctx.url.origin, { title: 'Contrato de revendedora aceito', body: `${reseller.name.split(/\s+/)[0]} aceitou o contrato e já pode usar o painel.`, url: '/admin/revendedoras', tag: `rev-${reseller.id}` }));
@@ -229,20 +241,23 @@ export async function handleResellerLogin(ctx: Context): Promise<Response> {
   if (byIp.count > LOGIN_IP_MAX) throw retryAfter(byIp.window_start + LOGIN_IP_WINDOW, now, 'Muitas tentativas deste aparelho.');
   const input = loginSchema.safeParse(await readJson(ctx.request, 1024));
   if (!input.success) throw new HttpError('invalid_pin', 'WhatsApp ou PIN incorretos.');
+  // Per number (registered or not, so the limit does not reveal who is a reseller) and overall.
+  const byNumber = await hit(db, `rlogin:n:${input.data.whatsapp}`, HOUR, now);
+  if (byNumber.count > LOGIN_RESELLER_MAX) throw retryAfter(byNumber.window_start + HOUR, now, 'Muitas tentativas deste aparelho.');
+  const global = await hit(db, 'rlogin:global', HOUR, now);
+  if (global.count > LOGIN_GLOBAL_MAX) throw retryAfter(global.window_start + HOUR, now, 'Muitas tentativas agora.');
   const row = await withReadRetry(() =>
     db.prepare(`SELECT r.id, r.status, c.pin_hash, c.salt FROM resellers r LEFT JOIN reseller_credentials c ON c.reseller_id = r.id WHERE r.whatsapp = ?1`).bind(input.data.whatsapp).first<{ id: string; status: string; pin_hash: string | null; salt: string | null }>(),
   );
-  if (row) {
-    const byReseller = await hit(db, `rlogin:r:${row.id}`, HOUR, now);
-    if (byReseller.count > LOGIN_RESELLER_MAX) throw retryAfter(byReseller.window_start + HOUR, now, 'Muitas tentativas para este WhatsApp.');
-  }
-  const ok = !!row?.pin_hash && !!row.salt && safeEqual(await hashResellerPin(pep, row.salt, input.data.pin), row.pin_hash);
+  // Same work whether or not the number exists (no timing hint).
+  const computed = await hashResellerPin(pep, row?.salt ?? 'no-reseller', input.data.pin);
+  const ok = !!row?.pin_hash && safeEqual(computed, row.pin_hash);
   if (!row || !ok) throw new HttpError('invalid_pin', 'WhatsApp ou PIN incorretos.', { attemptsLeft: Math.max(0, LOGIN_IP_MAX - byIp.count) });
   if (row.status !== 'ativa') throw new HttpError('unauthenticated', 'Seu acesso está pausado. Fale com a ÉKA.');
   const session = await sessionStatements(db, row.id, now);
   // Only this reseller's own counter resets: the network counter keeps running, so logging into
   // one's own account cannot buy more guesses at someone else's.
-  await db.batch([...session.statements, db.prepare('DELETE FROM throttle WHERE key = ?1').bind(`rlogin:r:${row.id}`)]);
+  await db.batch([...session.statements, db.prepare('DELETE FROM throttle WHERE key = ?1').bind(`rlogin:n:${input.data.whatsapp}`)]);
   return json({ ok: true }, { headers: { 'Set-Cookie': sessionCookie(env, session.token, SESSION_MS / 1000) } });
 }
 
@@ -272,7 +287,8 @@ export async function handleResellerMe(ctx: Context): Promise<Response> {
   const results = await withReadRetry(() =>
     db.batch<Record<string, unknown>>([
       db.prepare(`SELECT ${KIT_COLUMNS} FROM kits WHERE reseller_id = ?1 ORDER BY opened_at DESC LIMIT 24`).bind(reseller.id),
-      db.prepare(`SELECT s.id, s.status, s.data FROM reseller_sales s JOIN kits k ON k.id = s.kit_id WHERE s.reseller_id = ?1 AND k.status = 'aberta' ORDER BY s.created_at DESC`).bind(reseller.id),
+      db.prepare(`SELECT id, status, data FROM reseller_sales WHERE kit_id = (SELECT id FROM kits WHERE reseller_id = ?1 AND status = 'aberta') ORDER BY created_at DESC`).bind(reseller.id),
+      db.prepare(`SELECT COALESCE(SUM(json_extract(data, '$.settlement.commissionCents')), 0) AS received FROM kits WHERE reseller_id = ?1 AND status = 'fechada'`).bind(reseller.id),
       db.prepare('SELECT body FROM catalog_snapshot WHERE id = 1'),
     ]),
   );
@@ -282,7 +298,9 @@ export async function handleResellerMe(ctx: Context): Promise<Response> {
   const closed = kits.filter((k) => k.status === 'fechada' && k.settlement);
   const soldCents = salesTotalCents(sales);
   // Photos for her kit lines (the catalog snapshot is public anyway).
-  const body = results[2]?.results[0]?.body as string | undefined;
+  const body = results[3]?.results[0]?.body as string | undefined;
+  // Every closed cycle counts (the history list itself shows the latest 24).
+  const received = Number((results[2]?.results[0] as { received?: number } | undefined)?.received ?? 0);
   const catalog = body ? parseSnapshotBody(body) : null;
   const images: Record<string, unknown> = {};
   for (const item of open?.items ?? []) {
@@ -296,7 +314,7 @@ export async function handleResellerMe(ctx: Context): Promise<Response> {
       sales,
       commission: open ? commissionFor(soldCents, open.tiers) : null,
       soldCents,
-      earnings: earnings(open ? { soldCents, tiers: open.tiers } : null, closed.map((k) => k.settlement!)),
+      earnings: earnings(open ? { soldCents, tiers: open.tiers } : null, [{ commissionCents: received }]),
       history: closed.map((k) => ({ id: k.id, openedAt: k.openedAt, closedAt: k.closedAt, settlement: k.settlement })),
       images,
     },
@@ -324,7 +342,7 @@ export async function handleResellerSale(ctx: Context): Promise<Response> {
       db.batch<Record<string, unknown>>([
         db.prepare('SELECT request_hash, response FROM idempotency WHERE key = ?1').bind(idemKey),
         db.prepare(`SELECT ${KIT_COLUMNS} FROM kits WHERE reseller_id = ?1 AND status = 'aberta'`).bind(reseller.id),
-        db.prepare(`SELECT s.id, s.status, s.data FROM reseller_sales s JOIN kits k ON k.id = s.kit_id WHERE s.reseller_id = ?1 AND k.status = 'aberta'`).bind(reseller.id),
+        db.prepare(`SELECT id, status, data FROM reseller_sales WHERE kit_id = (SELECT id FROM kits WHERE reseller_id = ?1 AND status = 'aberta')`).bind(reseller.id),
       ]),
     );
     const replay = results[0]?.results[0] as { request_hash: string; response: string } | undefined;
@@ -358,7 +376,7 @@ export async function handleResellerSale(ctx: Context): Promise<Response> {
     const at = nextStamp(kitRow.updated_at);
     const totalCents = saleLines.reduce((sum, l) => sum + l.qty * l.unitCents, 0);
     const customer = input.data.customer && (input.data.customer.name || input.data.customer.whatsapp) ? input.data.customer : undefined;
-    const sale: ResellerSale = resellerSaleSchema.parse({
+    const parsedSale = resellerSaleSchema.safeParse({
       id: `rsv_${randomToken().slice(0, 16)}`,
       resellerId: reseller.id,
       kitId: kit.id,
@@ -370,6 +388,8 @@ export async function handleResellerSale(ctx: Context): Promise<Response> {
       payment: input.data.payment,
       ...(input.data.note ? { note: input.data.note } : {}),
     });
+    if (!parsedSale.success) throw new HttpError('bad_request', 'Confira as quantidades e os preços da venda.');
+    const sale: ResellerSale = parsedSale.data;
     const response = { sale };
     const now = Date.now();
     try {

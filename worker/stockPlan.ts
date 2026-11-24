@@ -119,3 +119,22 @@ export function planStock(
   }
   return { statements, rows: [...rows.values()], taken, problems };
 }
+
+/**
+ * What a holder (order or kit) must take for its new lines, given what it held. A line confirmed
+ * while its piece had no stock control held fewer units than it had (its "untracked share", which
+ * never left the counted stock); only quantities beyond that share are taken. Give back `held` in
+ * full: planStock nets the two per combination.
+ */
+export function takeForLines(lines: StockMove[], before: { productId: string; variantId: string; size: string; qty: number }[], held: StockMove[]): StockMove[] {
+  const heldQty = new Map(held.map((m) => [rowKey(m.productId, m.variantId, m.size), m.qty]));
+  const prior = new Map(before.map((b) => [rowKey(b.productId, b.variantId, b.size), b.qty]));
+  return lines.flatMap((m) => {
+    const k = rowKey(m.productId, m.variantId, m.size);
+    const previous = prior.get(k);
+    if (previous === undefined) return [m];
+    const untracked = Math.max(0, previous - (heldQty.get(k) ?? 0));
+    const qty = m.qty - untracked;
+    return qty > 0 ? [{ ...m, qty }] : [];
+  });
+}

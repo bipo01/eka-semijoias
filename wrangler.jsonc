@@ -13,7 +13,7 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
+    "not_found_handling": "none",
     // Page routes (/, /catalogo, /produto/…, /admin…) run the Worker so index.html gets a CSP naming
     // this host's WebSocket; static files below skip it (served straight from the edge, not metered).
     "run_worker_first": [

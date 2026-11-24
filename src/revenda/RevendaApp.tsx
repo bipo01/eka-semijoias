@@ -20,7 +20,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { messageItems, useMessages } from '../hooks/useMessages';
 import { ApiError, errorMessage, idempotencyKey } from '../lib/api';
 import { productImageSources } from '../lib/assets';
-import { formatBRL } from '../lib/format';
+import { formatBRL, parseBRL } from '../lib/format';
 import { applyAppHead } from '../lib/install';
 import { maskPhone } from '../lib/lead';
 import { whatsappUrl } from '../lib/whatsapp';
@@ -100,7 +100,7 @@ function LoginPage() {
         <p className="text-ink-muted">Entre com o seu WhatsApp e o PIN que você criou.</p>
       </div>
       <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-4 rounded-[14px] bg-white p-5 shadow-[var(--shadow-1)]">
-        <TextField label="WhatsApp" inputMode="tel" autoComplete="username" value={whatsapp} onChange={(e) => setWhatsapp(maskPhone(e.target.value))} />
+        <TextField label="WhatsApp" inputMode="tel" autoComplete="username" value={whatsapp} onChange={(e) => setWhatsapp(maskPhone(e.target.value.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')))} />
         <TextField label="PIN" type="password" inputMode="numeric" autoComplete="current-password" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} />
         {error && <ErrorText>{error}</ErrorText>}
         <Button type="submit" size="lg" block disabled={busy} aria-busy={busy}>
@@ -368,8 +368,8 @@ function SaleForm({ me, onDone }: { me: Me; onDone: (sale: ResellerSale) => void
   const centsOf = (l: KitLineState) => {
     const raw = price[lineKey(l)];
     if (raw === undefined || raw.trim() === '') return l.unitCents;
-    const v = Math.round(Number(raw.replace(/\./g, '').replace(',', '.')) * 100);
-    return Number.isFinite(v) && v >= 0 ? v : NaN;
+    const v = parseBRL(raw); // "89,90", "89.90" and "1.089,90" all read right
+    return v === null ? NaN : v;
   };
   const chosen = lines.filter((l) => (qty[lineKey(l)] ?? 0) > 0);
   const total = chosen.reduce((sum, l) => sum + (qty[lineKey(l)] ?? 0) * (centsOf(l) || 0), 0);

@@ -29,8 +29,8 @@ import { notifyCatalog, notifyOrders } from './live';
 import { notifyOwner, orderNotice } from './push';
 import { cancelMpPix, mpEnabled } from './mercadopago';
 import type { Context } from './router';
-import { publishStatements, rowKey, type StockState } from './stock';
-import { planStock } from './stockPlan';
+import { publishStatements, type StockState } from './stock';
+import { planStock, takeForLines } from './stockPlan';
 import type { StockRow } from '../src/data/stock';
 
 /*
@@ -621,16 +621,8 @@ export async function handleEditOrderItems(ctx: Context): Promise<Response> {
     const statements: D1PreparedStatement[] = [];
     let publish: ReturnType<typeof publishStatements> | null = null;
     if (HOLDS_STOCK.has(order.status)) {
-      // A line that was not counted when the order was confirmed (no stock control then) holds no
-      // units: only its extra quantity is taken now. Lines that hold units are netted by planStock.
-      const held = new Set((order.stockMoves ?? []).map((m) => rowKey(m.productId, m.variantId, m.size)));
-      const before = new Map(order.items.map((i) => [rowKey(i.productId, i.variantId, i.size ?? ''), i.qty]));
-      const take = movesOf(items).flatMap((m) => {
-        const key = rowKey(m.productId, m.variantId, m.size);
-        if (held.has(key) || !before.has(key)) return [m];
-        const extra = m.qty - before.get(key)!;
-        return extra > 0 ? [{ ...m, qty: extra }] : [];
-      });
+      // A line (or part of a line) that was not counted when the order was confirmed holds no units.
+      const take = takeForLines(movesOf(items), order.items.map((i) => ({ productId: i.productId, variantId: i.variantId, size: i.size ?? '', qty: i.qty })), order.stockMoves ?? []);
       const plan = planStock(db, state, at, { orderId: order.id }, order.stockMoves ?? [], take, items);
       if (plan.problems.length) throw new HttpError('conflict', `Estoque insuficiente: ${plan.problems.join('; ')}. Ajuste o estoque ou o pedido.`, { stock: plan.problems });
       next.stockMoves = plan.taken;

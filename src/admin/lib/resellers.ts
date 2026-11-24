@@ -58,11 +58,11 @@ export const useResellers = () => useLive<{ resellers: ResellerSummary[]; progra
 export const useResellerDetail = (id: string | null) => useLive<ResellerDetail>(id ? `/api/admin/resellers/${encodeURIComponent(id)}` : null);
 export const useProgram = () => useLive<{ program: Program; stored: boolean }>('/api/admin/reseller-program');
 
-async function attempt<T>(run: () => Promise<T>): Promise<T | { error: string }> {
+async function attempt<T>(run: () => Promise<T>): Promise<T | { error: string; details?: unknown }> {
   try {
     return await run();
   } catch (error) {
-    return { error: handle(error) };
+    return { error: handle(error), ...(error instanceof ApiError && error.details !== undefined ? { details: error.details } : {}) };
   }
 }
 
@@ -79,7 +79,7 @@ export interface NewReseller {
   slug?: string;
 }
 export const createReseller = (input: NewReseller, key: string) =>
-  attempt(() => api<{ reseller: Reseller; invite: { token: string; expiresAt: string } }>('/api/admin/resellers', { json: input, headers: { 'Idempotency-Key': key }, retries: 2 }));
+  attempt(() => api<{ reseller: Reseller; invite: { token: string; expiresAt: string } | null }>('/api/admin/resellers', { json: input, headers: { 'Idempotency-Key': key }, retries: 2 }));
 
 export const patchReseller = (reseller: Reseller, patch: Record<string, unknown>) =>
   attempt(() => api<{ reseller: Reseller }>(`/api/admin/resellers/${encodeURIComponent(reseller.id)}`, { method: 'PATCH', json: { ...patch, updatedAt: reseller.updatedAt }, retries: 1 }));
@@ -98,16 +98,16 @@ export const createKit = (resellerId: string, items: KitLineInput[]) =>
   attempt(() => ownWrite(() => api<{ kit: Kit; version?: number }>(`/api/admin/resellers/${encodeURIComponent(resellerId)}/kits`, { json: { items }, timeoutMs: 20_000 }), (r) => r.version));
 
 export const editKit = (kit: Kit, items: KitLineInput[], updatedAt: string) =>
-  attempt(() => ownWrite(() => api<{ kit: Kit; version?: number }>(`/api/admin/kits/${encodeURIComponent(kit.id)}/items`, { method: 'PUT', json: { items, updatedAt }, retries: 1, timeoutMs: 20_000 }), (r) => r.version));
+  attempt(() => ownWrite(() => api<{ kit: Kit; version?: number }>(`/api/admin/kits/${encodeURIComponent(kit.id)}/items`, { method: 'PUT', json: { items, updatedAt }, timeoutMs: 20_000 }), (r) => r.version));
 
-export const settleKit = (kit: Kit, returned: { productId: string; variantId: string; size: string; qty: number }[]) =>
-  attempt(() => ownWrite(() => api<{ kit: Kit; version?: number }>(`/api/admin/kits/${encodeURIComponent(kit.id)}/settle`, { json: { returned, updatedAt: kit.updatedAt }, retries: 1, timeoutMs: 20_000 }), (r) => r.version));
+export const settleKit = (kit: Kit, returned: { productId: string; variantId: string; size: string; qty: number }[], updatedAt: string) =>
+  attempt(() => ownWrite(() => api<{ kit: Kit; version?: number }>(`/api/admin/kits/${encodeURIComponent(kit.id)}/settle`, { json: { returned, updatedAt }, retries: 1, timeoutMs: 20_000 }), (r) => r.version));
 
 export const markKitPaid = (kit: Kit, paid: boolean) => attempt(() => api<{ kit: Kit }>(`/api/admin/kits/${encodeURIComponent(kit.id)}/paid`, { json: { paid }, retries: 1 }));
 
 export const saveProgram = (program: Program) => attempt(() => api<{ program: Program }>('/api/admin/reseller-program', { method: 'PUT', json: { program }, retries: 1 }));
 
-export const isError = (value: unknown): value is { error: string } => !!value && typeof value === 'object' && 'error' in value;
+export const isError = (value: unknown): value is { error: string; details?: unknown } => !!value && typeof value === 'object' && 'error' in value;
 
 export { idempotencyKey };
 

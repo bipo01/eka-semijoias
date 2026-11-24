@@ -37,7 +37,7 @@ import {
   type SaleRow,
 } from './revendaCore';
 import { publishStatements, rowKey, type StockState } from './stock';
-import { counted, planStock } from './stockPlan';
+import { counted, planStock, takeForLines } from './stockPlan';
 import type { StockRow } from '../src/data/stock';
 
 /*
@@ -98,10 +98,20 @@ export async function handlePutProgram(ctx: Context): Promise<Response> {
   const changed = c.mode !== next.contract.mode || c.text !== next.contract.text || c.url !== next.contract.url || c.title !== next.contract.title;
   next.contract.version = changed ? c.version + 1 : c.version;
   const at = new Date().toISOString();
+  const textHash = await sha256Hex(next.contract.mode === 'aceite' ? `${next.contract.title}\n${next.contract.text}` : (next.contract.url ?? ''));
+  try {
   await db.batch([
+    // Two saves from two devices: the second one, made on the older version, is refused.
+    guard(db, `COALESCE((SELECT json_extract(data, '$.contract.version') FROM app_config WHERE key = 'revenda'), 1) = ?1`, c.version),
     db.prepare(`INSERT INTO app_config (key, updated_at, data) VALUES ('revenda', ?1, ?2) ON CONFLICT (key) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data`).bind(at, JSON.stringify(next)),
+    // Every contract version's exact text is kept (the acceptances store its hash).
+    db.prepare('INSERT OR IGNORE INTO contract_versions (version, title, mode, body, sha256, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)').bind(next.contract.version, next.contract.title, next.contract.mode, next.contract.mode === 'aceite' ? next.contract.text : (next.contract.url ?? ''), textHash, at),
     db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'revenda.program', changed ? `Programa de revenda salvo (contrato versão ${next.contract.version})` : 'Programa de revenda salvo'),
   ]);
+  } catch (error) {
+    if (isGuardMiss(error)) throw new HttpError('conflict', 'O programa foi alterado em outro aparelho. Recarregue a página e salve de novo.');
+    throw toHttpError(error);
+  }
   ctx.waitUntil(notifyLeads(ctx.env));
   return json({ program: next });
 }
@@ -246,7 +256,8 @@ export async function handleCreateReseller(ctx: Context): Promise<Response> {
             db.prepare(`UPDATE leads SET status = 'efetivada', data = json_set(data, '$.resellerId', ?2) WHERE id = ?1`).bind(data.leadId, reseller.id),
           ]
         : []),
-      db.prepare('INSERT INTO idempotency (key, request_hash, created_at, response) VALUES (?1, ?2, ?3, ?4)').bind(idemKey, requestHash, now, JSON.stringify(response)),
+      // The stored replay never holds the access token (only its hash exists): a replay asks for a new link.
+      db.prepare('INSERT INTO idempotency (key, request_hash, created_at, response) VALUES (?1, ?2, ?3, ?4)').bind(idemKey, requestHash, now, JSON.stringify({ reseller, invite: null })),
       db.prepare('DELETE FROM idempotency WHERE created_at < ?1').bind(now - IDEMPOTENCY_TTL_MS),
       db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'reseller.create', `Revendedora ${reseller.id} efetivada`),
     ]);
@@ -328,6 +339,7 @@ export async function handlePatchReseller(ctx: Context): Promise<Response> {
   try {
     await db.batch([
       resellerUnchanged(db, reseller.id, stamp),
+      ...(next.status === 'encerrada' ? [guard(db, `NOT EXISTS (SELECT 1 FROM kits WHERE reseller_id = ?1 AND status = 'aberta')`, reseller.id)] : []),
       db.prepare('UPDATE resellers SET slug = ?2, whatsapp = ?3, status = ?4, updated_at = ?5, data = ?6 WHERE id = ?1').bind(reseller.id, next.slug, next.whatsapp, next.status, at, JSON.stringify(parsed.data)),
       // Paused or ended: her sessions end now.
       ...(blocked ? [db.prepare('DELETE FROM reseller_sessions WHERE reseller_id = ?1').bind(reseller.id)] : []),
@@ -335,7 +347,7 @@ export async function handlePatchReseller(ctx: Context): Promise<Response> {
     ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
-    if (isGuardMiss(error)) throw new HttpError('conflict', 'Os dados desta revendedora mudaram em outro aparelho. Confira e salve de novo.');
+    if (isGuardMiss(error)) throw new HttpError('conflict', next.status === 'encerrada' ? 'Faça o acerto da maleta antes de encerrar a parceria.' : 'Os dados desta revendedora mudaram em outro aparelho. Confira e salve de novo.');
     if (/UNIQUE constraint failed: resellers\.whatsapp/i.test(message)) throw new HttpError('conflict', 'Já existe uma revendedora com este WhatsApp.');
     if (/UNIQUE constraint failed: resellers\.slug/i.test(message)) throw new HttpError('conflict', 'Este endereço de mostruário já é de outra revendedora.');
     throw toHttpError(error);
@@ -440,6 +452,8 @@ export async function handleCreateKit(ctx: Context): Promise<Response> {
     try {
       await db.batch([
         ...(publish ? [publish.first] : []),
+        // Paused or ended meanwhile: no kit.
+        guard(db, `(SELECT status FROM resellers WHERE id = ?1) = 'ativa'`, resellerId),
         db.prepare(`INSERT INTO kits (id, reseller_id, status, opened_at, due_at, updated_at, data) VALUES (?1, ?2, 'aberta', ?3, ?4, ?3, ?5)`).bind(kitId, resellerId, at, due, JSON.stringify(kit)),
         ...plan.statements,
         ...(publish?.statements ?? []),
@@ -491,15 +505,8 @@ export async function handleEditKit(ctx: Context): Promise<Response> {
       if (!next || next.qty < line.sold) throw new HttpError('conflict', `${line.name}: já foram vendidas ${line.sold}. A maleta não pode ter menos que isso.`);
     }
     const at = nextStamp(stamp);
-    // Lines that hold no stock units (not tracked when the kit was opened) only take their extra quantity.
-    const held = new Set(kit.stockMoves.map((m) => rowKey(m.productId, m.variantId, m.size)));
-    const before = new Map(kit.items.map((i) => [rowKey(i.productId, i.variantId, i.size), i.qty]));
-    const take = movesOfKit(items).flatMap((m) => {
-      const k = rowKey(m.productId, m.variantId, m.size);
-      if (held.has(k) || !before.has(k)) return [m];
-      const extraQty = m.qty - before.get(k)!;
-      return extraQty > 0 ? [{ ...m, qty: extraQty }] : [];
-    });
+    // Lines (or parts of lines) that were not counted when they entered the kit hold no stock units.
+    const take = takeForLines(movesOfKit(items), kit.items, kit.stockMoves);
     const plan = planStock(db, state, at, { kitId: kit.id }, kit.stockMoves, take, items);
     if (plan.problems.length) throw new HttpError('conflict', `Estoque insuficiente: ${plan.problems.join('; ')}.`, { stock: plan.problems });
     const next: Kit = { ...kit, items, stockMoves: plan.taken, updatedAt: at };
@@ -539,7 +546,13 @@ export async function handleSettleKit(ctx: Context): Promise<Response> {
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, Math.random() * 25 * Math.min(attempt, 4)));
     const { state, kit, stamp, sales } = await loadKitWithStock(db, ctx.params.id ?? '');
-    if (kit.status !== 'aberta') return json({ kit }); // already settled (a retried request)
+    if (kit.status !== 'aberta') {
+      // Already settled: a retry of the same count answers the same; a different count (another
+      // device) must not look like it was applied.
+      const same = (kit.settlement?.returned ?? []).every((r) => (body.data.returned.find((x) => x.productId === r.productId && x.variantId === r.variantId && x.size === r.size)?.qty ?? r.qty) === r.qty);
+      if (same) return json({ kit });
+      throw new HttpError('conflict', 'Esta maleta já foi acertada (em outro aparelho) com outras quantidades. Confira o acerto registrado.', { kit });
+    }
     if (stamp !== body.data.updatedAt) throw new HttpError('conflict', 'A maleta mudou (uma venda nova?). Confira o acerto de novo.', { kit });
     const result = settle(kit, sales, body.data.returned);
     if ('error' in result) throw new HttpError('bad_request', result.error);

@@ -23,7 +23,7 @@ import {
   type ResellerStatus,
 } from '../../data/revenda';
 import { FINISH_LABEL, type ResellerLead } from '../../data/schema';
-import { formatBRL } from '../../lib/format';
+import { formatBRL, parseBRL } from '../../lib/format';
 import { whatsappUrl } from '../../lib/whatsapp';
 import { toast } from '../../store/ui';
 import { EmptyState, SwitchRow } from '../FormBits';
@@ -134,7 +134,7 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
   const open = kits.find((k) => k.status === 'aberta') ?? null;
   const openSales = open ? sales.filter((s) => s.kitId === open.id) : [];
   const closed = kits.filter((k) => k.status === 'fechada');
-  const contractDue = !reseller.contract || reseller.contract.version < program.contract.version;
+  const contractDue = !reseller.contract || reseller.contract.version < program.contract.version || reseller.contract.mode !== program.contract.mode;
 
   async function regenerate() {
     if (busy) return;
@@ -407,7 +407,7 @@ function EditReseller({ reseller, program, onDone }: { reseller: Reseller; progr
 }
 
 const centsToInput = (c: number) => (c / 100).toFixed(2).replace('.', ',');
-const inputToCents = (v: string) => Math.round(Number(v.replace(/\./g, '').replace(',', '.')) * 100);
+const inputToCents = (v: string) => parseBRL(v) ?? NaN;
 
 function ProgramPanel() {
   const { state, reload } = useProgram();
@@ -509,7 +509,7 @@ export function ResellersPage() {
   const { state } = useResellers();
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState<{ lead?: ResellerLead } | null>(null);
-  const [created, setCreated] = useState<{ reseller: Reseller; token: string } | null>(null);
+  const [created, setCreated] = useState<{ reseller: Reseller; token: string | null } | null>(null);
   const list = state.status === 'ready' ? state.data.resellers : [];
   const program = state.status === 'ready' ? state.data.program : null;
   const open = list.find((r) => r.reseller.id === openId);
@@ -576,7 +576,11 @@ export function ResellersPage() {
       >
         {created ? (
           <div className="flex flex-col gap-4">
-            <InviteMessage reseller={created.reseller} token={created.token} />
+            {created.token ? (
+              <InviteMessage reseller={created.reseller} token={created.token} />
+            ) : (
+              <p className="rounded-[10px] bg-champagne/60 p-3 text-sm">A revendedora foi criada. Abra a ficha dela e toque em “Gerar novo convite” para enviar o acesso.</p>
+            )}
             <Button
               variant="ghost"
               block

@@ -125,7 +125,11 @@ export function documentCsp(url: URL): string {
 }
 
 async function serveDocument(request: Request, env: Env, url: URL): Promise<Response> {
-  const asset = await env.ASSETS.fetch(request);
+  // A real file at this path is served as is; any other page route gets the SPA document. (Assets use
+  // not_found_handling "none": a missing /assets/*.js must be a 404, never index.html cached as
+  // immutable JavaScript by the browser — an old tab after a deploy would stay blank.)
+  let asset = await env.ASSETS.fetch(request);
+  if (asset.status === 404) asset = await env.ASSETS.fetch(new Request(new URL('/', url), { method: request.method, headers: request.headers }));
   const response = new Response(asset.body, asset);
   if ((response.headers.get('Content-Type') ?? '').includes('text/html')) {
     response.headers.set('Content-Security-Policy', documentCsp(url));
