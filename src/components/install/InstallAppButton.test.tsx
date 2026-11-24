@@ -162,10 +162,34 @@ describe('InstallAppButton', () => {
     expect(event.defaultPrevented).toBe(true);
     await user.click(screen.getByRole('button', { name: 'Instalar o app' }));
     expect(prompt).toHaveBeenCalledTimes(1);
-    // Declined in the native dialog: remembered like "Agora não".
+    // Closing the browser's window is not "Agora não": nothing is remembered and the button stays.
     await act(async () => {});
-    expect(screen.queryByRole('button', { name: 'Instalar o app' })).not.toBeInTheDocument();
-    expect(localStorage.getItem(dismissKey('store'))).not.toBeNull();
+    expect(localStorage.getItem(dismissKey('store'))).toBeNull();
+    // The event is single use: until Chrome offers a new one, the button opens the address-bar steps.
+    await user.click(screen.getByRole('button', { name: 'Instalar o app' }));
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('dialog', { name: 'Instalar o app da ÉKA' })).toHaveTextContent('Na barra de endereço');
+  });
+
+  it('on desktop Chrome, uses the prompt Chrome offers again after the window was closed', async () => {
+    device(UA.desktopChrome, 0);
+    resetInstallStateForTests();
+    const user = userEvent.setup();
+    render(<InstallAppButton app="reseller" />);
+    const first = installPromptEvent('dismissed');
+    act(() => {
+      window.dispatchEvent(first.event);
+    });
+    await user.click(screen.getByRole('button', { name: 'Instalar o app da revenda' }));
+    await act(async () => {});
+    const second = installPromptEvent('accepted');
+    act(() => {
+      window.dispatchEvent(second.event);
+    });
+    await user.click(screen.getByRole('button', { name: 'Instalar o app da revenda' }));
+    expect(second.prompt).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+    expect(screen.queryByRole('button', { name: 'Instalar o app da revenda' })).not.toBeInTheDocument();
   });
 
   it('on Android, hides once the native prompt is accepted', async () => {

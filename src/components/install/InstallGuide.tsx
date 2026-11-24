@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Copy, Ellipsis, EllipsisVertical, Share, SquarePlus } from 'lucide-react';
+import { Copy, Ellipsis, EllipsisVertical, MonitorDown, Share, SquarePlus } from 'lucide-react';
 import { APP_HEAD, type InstallApp, type InstallGuide as GuideKind, type InstallPlatform } from '../../lib/install';
 import { toast } from '../../store/ui';
 import { Button } from '../ui/Button';
@@ -192,6 +192,32 @@ function content(guide: GuideKind, platform: InstallPlatform, app: InstallApp): 
           { text: <>Na barra de menus, abra <strong>Arquivo</strong>.</> },
           { text: <>Escolha <strong>Adicionar ao Dock</strong>.</> },
           { text: <>Confirme em <strong>Adicionar</strong>.</> },
+        ],
+      };
+    case 'desktop-manual':
+      return {
+        steps: [
+          {
+            text: (
+              <>
+                Na barra de endereço, clique no ícone <MonitorDown {...icon} />
+                <span className="sr-only">(instalar)</span>, do lado direito.
+              </>
+            ),
+            hint: (
+              <>
+                Se ele não aparecer, abra o menu <MenuButton /> do navegador e procure a opção de <strong>instalar</strong> (no Chrome, fica em{' '}
+                <strong>Salvar e compartilhar</strong>).
+              </>
+            ),
+          },
+          {
+            text: (
+              <>
+                Confirme em <strong>Instalar</strong>.
+              </>
+            ),
+          },
         ],
       };
     case 'android-manual': {

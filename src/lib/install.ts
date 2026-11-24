@@ -26,7 +26,7 @@ export type InstallPlatform =
   | { kind: 'desktop' }
   | { kind: 'unsupported' };
 
-export type InstallGuide = 'ios-safari' | 'ios-chrome' | 'ios-other' | 'in-app' | 'mac-safari' | 'android-manual';
+export type InstallGuide = 'ios-safari' | 'ios-chrome' | 'ios-other' | 'in-app' | 'mac-safari' | 'android-manual' | 'desktop-manual';
 
 export type InstallMethod = { kind: 'prompt' } | { kind: 'guide'; guide: InstallGuide } | { kind: 'none' };
 
@@ -71,9 +71,13 @@ export function detectPlatform({ userAgent: ua, maxTouchPoints = 0 }: DeviceInfo
 /**
  * How to offer installation. iPhone, in-app browsers and macOS Safari never fire
  * `beforeinstallprompt`, so their guide wins; elsewhere the native prompt is used when the browser
- * offered one; Android without it gets the browser-menu guide; anything else shows nothing.
+ * offered one; Android without it gets the browser-menu guide; desktop Chromium whose prompt was
+ * already opened and closed (single use) gets the address-bar guide; anything else shows nothing.
  */
-export function installMethod(platform: InstallPlatform, { canPrompt, installed }: { canPrompt: boolean; installed: boolean }): InstallMethod {
+export function installMethod(
+  platform: InstallPlatform,
+  { canPrompt, installed, promptSpent = false }: { canPrompt: boolean; installed: boolean; promptSpent?: boolean },
+): InstallMethod {
   if (installed) return { kind: 'none' };
   switch (platform.kind) {
     case 'ios-safari':
@@ -85,6 +89,7 @@ export function installMethod(platform: InstallPlatform, { canPrompt, installed 
     case 'android':
       return canPrompt ? { kind: 'prompt' } : { kind: 'guide', guide: 'android-manual' };
     case 'desktop':
+      return canPrompt ? { kind: 'prompt' } : promptSpent ? { kind: 'guide', guide: 'desktop-manual' } : { kind: 'none' };
     case 'unsupported':
       return canPrompt ? { kind: 'prompt' } : { kind: 'none' };
   }
@@ -95,7 +100,8 @@ export const DISMISS_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function dismissKey(app: InstallApp): string {
-  return `eka:install-dismissed:${app}:v1`;
+  // v2 (2026-11-24): v1 also held closings of the browser's own window, which no longer hide the button.
+  return `eka:install-dismissed:${app}:v2`;
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;

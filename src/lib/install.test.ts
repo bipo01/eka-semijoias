@@ -78,6 +78,9 @@ describe('installMethod', () => {
   it('falls back to the browser menu on Android and hides on desktop without a prompt', () => {
     expect(installMethod({ kind: 'android' }, noPrompt)).toEqual({ kind: 'guide', guide: 'android-manual' });
     expect(installMethod({ kind: 'desktop' }, noPrompt)).toEqual({ kind: 'none' });
+    // The prompt was opened and closed (single use): the address-bar steps instead of nothing.
+    expect(installMethod({ kind: 'desktop' }, { ...noPrompt, promptSpent: true })).toEqual({ kind: 'guide', guide: 'desktop-manual' });
+    expect(installMethod({ kind: 'unsupported' }, { ...noPrompt, promptSpent: true })).toEqual({ kind: 'none' });
     expect(installMethod({ kind: 'unsupported' }, noPrompt)).toEqual({ kind: 'none' });
   });
 

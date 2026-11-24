@@ -11,6 +11,8 @@ export type PromptOutcome = 'accepted' | 'dismissed' | 'unavailable';
 
 interface InstallState {
   canPrompt: boolean;
+  /** The browser's prompt was opened and closed without installing (it can be opened once per event). */
+  promptSpent: boolean;
   installed: boolean;
   /** Bumped on every "Agora não", so every install button on the page hides at once. */
   dismissals: number;
@@ -20,10 +22,11 @@ interface InstallState {
 // renders its content only while open), so the event is captured once for the whole page.
 let deferred: BeforeInstallPromptEvent | null = null;
 let installedNow = false;
+let promptSpent = false;
 let listening = false;
 /** Dismissed this session (also covers browsers that refuse localStorage). */
 const dismissedNow = new Set<InstallApp>();
-let snapshot: InstallState = { canPrompt: false, installed: false, dismissals: 0 };
+let snapshot: InstallState = { canPrompt: false, promptSpent: false, installed: false, dismissals: 0 };
 const subscribers = new Set<() => void>();
 
 const STANDALONE = '(display-mode: standalone)';
@@ -39,8 +42,13 @@ export function isStandalone(): boolean {
 }
 
 function refresh(dismissals = snapshot.dismissals) {
-  const next = { canPrompt: deferred !== null, installed: installedNow || isStandalone(), dismissals };
-  if (next.canPrompt !== snapshot.canPrompt || next.installed !== snapshot.installed || next.dismissals !== snapshot.dismissals) {
+  const next = { canPrompt: deferred !== null, promptSpent, installed: installedNow || isStandalone(), dismissals };
+  if (
+    next.canPrompt !== snapshot.canPrompt ||
+    next.promptSpent !== snapshot.promptSpent ||
+    next.installed !== snapshot.installed ||
+    next.dismissals !== snapshot.dismissals
+  ) {
     snapshot = next;
     for (const notify of subscribers) notify();
   }
@@ -77,7 +85,7 @@ function subscribe(notify: () => void) {
 }
 
 const getSnapshot = () => snapshot;
-const serverSnapshot: InstallState = { canPrompt: false, installed: false, dismissals: 0 };
+const serverSnapshot: InstallState = { canPrompt: false, promptSpent: false, installed: false, dismissals: 0 };
 const getServerSnapshot = () => serverSnapshot;
 
 /** Opens the browser's install prompt (single use, as the browser allows). */
@@ -89,8 +97,10 @@ async function showBrowserPrompt(): Promise<PromptOutcome> {
     await event.prompt();
     const { outcome } = await event.userChoice;
     if (outcome === 'accepted') installedNow = true;
+    else promptSpent = true;
     return outcome;
   } catch {
+    promptSpent = true;
     return 'unavailable';
   } finally {
     refresh();
@@ -107,8 +117,9 @@ function dismissApp(app: InstallApp) {
 export function resetInstallStateForTests(): void {
   deferred = null;
   installedNow = false;
+  promptSpent = false;
   dismissedNow.clear();
-  snapshot = { canPrompt: false, installed: false, dismissals: 0 };
+  snapshot = { canPrompt: false, promptSpent: false, installed: false, dismissals: 0 };
   refresh();
 }
 
@@ -129,11 +140,9 @@ export function useInstallPrompt(app: InstallApp = 'store'): InstallPrompt {
   const dismissed = useMemo(() => dismissedNow.has(app) || isDismissed(app), [app, state.dismissals]);
   const dismiss = useCallback(() => dismissApp(app), [app]);
 
-  const promptInstall = useCallback(async () => {
-    const outcome = await showBrowserPrompt();
-    if (outcome === 'dismissed') dismiss();
-    return outcome;
-  }, [dismiss]);
+  // Closing the browser's window is not "Agora não": the button stays. Chrome usually offers the prompt
+  // again right away; until it does, the button opens the step-by-step guide.
+  const promptInstall = useCallback(() => showBrowserPrompt(), []);
 
   const method = dismissed ? ({ kind: 'none' } as const) : installMethod(platform, state);
   return { platform, method, installed: state.installed, promptInstall, dismiss };
