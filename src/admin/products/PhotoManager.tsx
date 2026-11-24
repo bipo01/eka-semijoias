@@ -24,6 +24,8 @@ interface PhotoManagerProps {
 }
 
 const tileClass = 'relative aspect-[4/5] w-[88px] shrink-0 overflow-hidden rounded-[10px]';
+/** Add/preparing tiles: as tall as a photo, at least as wide, and wider when the text needs it (keeps the padding). */
+const actionTileClass = 'relative h-[110px] min-w-[88px] shrink-0 rounded-[10px]';
 
 function PickerLabel({ capture, onFiles, children, className }: { capture?: boolean; onFiles: (files: File[]) => void; children: React.ReactNode; className: string }) {
   function onChange(e: ChangeEvent<HTMLInputElement>) {
@@ -151,16 +153,17 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
           );
         })}
         {Array.from({ length: processing }, (_, i) => (
-          <li key={`processing-${i}`} className={cx(tileClass, 'flex flex-col items-center justify-center gap-1 bg-champagne text-sm text-ink-muted')}>
+          <li key={`processing-${i}`} className={cx(actionTileClass, 'flex flex-col items-center justify-center gap-1.5 bg-champagne px-3.5 text-center text-sm leading-tight text-ink-muted')}>
             <Loader2 size={20} strokeWidth={1.5} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
             Preparando
           </li>
         ))}
         {draft.images.length + processing < MAX_PHOTOS && (
-          <li className={tileClass}>
-            <PickerLabel onFiles={addFiles} className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed border-rose bg-white text-center text-sm text-ink">
+          <li className={actionTileClass}>
+            <PickerLabel onFiles={addFiles} className="flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-rose bg-white px-3.5 py-3 text-center text-sm leading-tight text-ink">
               <ImagePlus size={22} strokeWidth={1.5} aria-hidden="true" />
-              Adicionar foto
+              {/* One word per line: the tile widens with a larger system font instead of crowding its border. */}
+              <span className="block">Adicionar</span> <span className="block">foto</span>
             </PickerLabel>
           </li>
         )}

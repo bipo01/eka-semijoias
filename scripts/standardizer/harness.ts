@@ -31,7 +31,7 @@ declare global {
   interface Window {
     standardizer: {
       init(modelKey: string, device: Device): Promise<{ ms: number; device: Device; downloaded: number }>;
-      run(url: string, name: string): Promise<PhotoResult>;
+      run(url: string, name: string, strength?: number): Promise<PhotoResult>;
       dispose(): void;
     };
   }
@@ -49,7 +49,7 @@ window.standardizer = {
     engine = await createEngine({ model, device, wasm: runtimeAssets(device), onProgress: (l) => (downloaded = l) });
     return { ms: performance.now() - t0, device: engine.device, downloaded };
   },
-  async run(url, name) {
+  async run(url, name, strength = 0) {
     if (!engine) throw new Error('init first');
     const t0 = performance.now();
     const blob = await (await fetch(url)).blob();
@@ -59,7 +59,7 @@ window.standardizer = {
     const mask = await cutOut((rgba) => engine!.segment(rgba), engine.model.size, source);
     const t2 = performance.now();
     const bounds = matteBounds(readAlpha(mask), mask.width, mask.height);
-    const out = compose(source, mask, bounds);
+    const out = compose(source, mask, bounds, strength);
     const t3 = performance.now();
     const composite = out ? await blobToDataUrl(await canvasToBlob(out)) : '';
     const maskUrl = await blobToDataUrl(await canvasToBlob(mask));

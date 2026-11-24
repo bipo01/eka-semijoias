@@ -4,11 +4,12 @@ import { Button } from '../../../components/ui/Button';
 import { Sheet } from '../../../components/ui/Sheet';
 import { cx } from '../../../components/ui/cx';
 import { processImage } from '../../../lib/image';
-import { canvasToBlob, compose, cutOut, loadSource, paintStroke, readAlpha, releaseCanvas, renderRetouchView, writeAlpha, makeCanvas, type BrushMode } from './compose';
+import { canvasToBlob, cutOut, loadSource, makeCanvas, paintStroke, placeOnFrame, readAlpha, releaseCanvas, renderRetouchView, renderStandardized, writeAlpha, type BrushMode, type PieceLayer } from './compose';
+import { MAX_ENHANCE, MIN_ENHANCE } from './enhance';
 import { ERROR_MESSAGES, getEngine, releaseEngine, StandardizeError } from './engine';
-import { matteBounds, toCanvasPoint } from './geometry';
+import { matteBounds, OUTPUT_HEIGHT, OUTPUT_WIDTH, toCanvasPoint } from './geometry';
 import { DEFAULT_MODEL, type Device } from './models';
-import { downloadMb, isModelCached, markTipsSeen, tipsSeen } from './prefs';
+import { downloadMb, enhanceStrength, isModelCached, markTipsSeen, saveEnhanceStrength, tipsSeen } from './prefs';
 
 export interface StandardizedPhoto {
   src: string;
@@ -34,6 +35,8 @@ const EMPTY_CUT = 'O recorte não encontrou a peça nesta foto. Retoque à mão 
 const MAX_UNDO = 6;
 const BRUSH_MIN = 1;
 const BRUSH_MAX = 12;
+/** The live preview is drawn at half the output size (it shows ~160–360 px wide): 4× less work per slider move. */
+const PREVIEW = { width: OUTPUT_WIDTH / 2, height: OUTPUT_HEIGHT / 2 } as const;
 
 function messageFor(err: unknown): string {
   if (err instanceof StandardizeError) return err.message;
@@ -55,7 +58,11 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
   const [firstDownload, setFirstDownload] = useState<boolean | null>(null);
   const [device, setDevice] = useState<Device | null>(null);
   const [beforeUrl, setBeforeUrl] = useState('');
-  const [afterUrl, setAfterUrl] = useState('');
+  /** Colour filter strength (%), starting from the one she last used on this device. */
+  const [strength, setStrength] = useState(enhanceStrength);
+  const [savedStrength, setSavedStrength] = useState(strength);
+  /** Bumped each time a new cut-out is ready, so the preview redraws. */
+  const [layerVersion, setLayerVersion] = useState(0);
   const [workSize, setWorkSize] = useState({ width: 0, height: 0 });
   const [mode, setMode] = useState<BrushMode>('erase');
   const [brush, setBrush] = useState(4);
@@ -70,7 +77,10 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
   const work = useRef<HTMLCanvasElement | null>(null);
   const mask = useRef<HTMLCanvasElement | null>(null);
   const aiAlpha = useRef<Uint8ClampedArray | null>(null);
-  const afterBlob = useRef<Blob | null>(null);
+  const layer = useRef<PieceLayer | null>(null);
+  const preview = useRef<HTMLCanvasElement | null>(null);
+  const pieceScratch = useRef<HTMLCanvasElement | null>(null);
+  const previewFrame = useRef(0);
   const history = useRef<Uint8ClampedArray[]>([]);
   const view = useRef<HTMLCanvasElement | null>(null);
   const scratch = useRef<HTMLCanvasElement | null>(null);
@@ -78,30 +88,38 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
   const frame = useRef(0);
   const cursor = useRef<HTMLDivElement>(null);
 
-  useEffect(() => () => {
-    if (afterUrl) URL.revokeObjectURL(afterUrl);
-  }, [afterUrl]);
-
   // Announce each step to screen readers by moving focus to its heading.
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
   }, [phase]);
 
-  /** Composes the standardized photo from the current mask; false when the mask is empty. */
+  /** Places the cut-out piece on the preview frame from the current mask; false when the mask is empty. */
   const recompose = useCallback(async (): Promise<boolean> => {
     if (!work.current || !mask.current) return false;
     const bounds = matteBounds(readAlpha(mask.current), mask.current.width, mask.current.height);
-    const out = bounds ? compose(work.current, mask.current, bounds) : null;
-    if (!out) return false;
-    try {
-      const blob = await canvasToBlob(out);
-      afterBlob.current = blob;
-      setAfterUrl(URL.createObjectURL(blob));
-      return true;
-    } finally {
-      releaseCanvas(out);
-    }
+    const placed = bounds ? placeOnFrame(work.current, mask.current, bounds, PREVIEW.width, PREVIEW.height) : null;
+    if (!placed) return false;
+    layer.current = placed;
+    setLayerVersion((v) => v + 1);
+    return true;
   }, []);
+
+  // The "after" preview: re-rendered (at most once a frame) when the cut-out or the filter strength changes.
+  const showsResult = phase === 'review' || phase === 'saving';
+  useEffect(() => {
+    if (!showsResult) return;
+    cancelAnimationFrame(previewFrame.current);
+    previewFrame.current = requestAnimationFrame(() => {
+      if (!preview.current || !layer.current) return;
+      pieceScratch.current ??= makeCanvas(1, 1);
+      try {
+        renderStandardized(preview.current, layer.current, strength, pieceScratch.current);
+      } catch (err) {
+        console.warn('[padronizador] preview', err);
+      }
+    });
+    return () => cancelAnimationFrame(previewFrame.current);
+  }, [showsResult, strength, layerVersion]);
 
   /** Cut-out pipeline. Callers put the sheet in the 'loading' phase first; state changes here happen after awaits. */
   const start = useCallback(async () => {
@@ -171,7 +189,7 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
   const skipTips = useRef(phase === 'loading');
   useEffect(() => {
     if (skipTips.current) void start();
-    const canvases = { work, mask, view, scratch };
+    const canvases = { work, mask, view, scratch, pieceScratch };
     const jobs = run;
     return () => {
       jobs.current++;
@@ -182,7 +200,7 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
         releaseCanvas(ref.current);
         ref.current = null;
       }
-      aiAlpha.current = afterBlob.current = null;
+      aiAlpha.current = layer.current = null;
       history.current = [];
       releaseEngine(inFlight.current);
       inFlight.current = false;
@@ -202,11 +220,28 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
   }
 
   async function chooseStandardized() {
-    const blob = afterBlob.current;
-    if (!blob) return;
+    if (!layer.current || !work.current || !mask.current) return;
     const token = ++run.current;
     setError('');
     setPhase('saving');
+    let blob: Blob;
+    const out = makeCanvas(OUTPUT_WIDTH, OUTPUT_HEIGHT);
+    const pieceCanvas = makeCanvas(1, 1);
+    try {
+      // The saved photo is rendered at full size from the same cut-out the preview shows.
+      const full = placeOnFrame(work.current, mask.current, undefined, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+      if (!full) throw new Error('empty-mask');
+      renderStandardized(out, full, strength, pieceCanvas);
+      blob = await canvasToBlob(out);
+    } catch {
+      if (run.current !== token) return;
+      setError(ERROR_MESSAGES.unknown);
+      setPhase('review');
+      return;
+    } finally {
+      releaseCanvas(out);
+      releaseCanvas(pieceCanvas);
+    }
     const result = await processImage(new File([blob], 'padronizada.png', { type: 'image/png' }));
     if (run.current !== token) return;
     if (!result.ok) {
@@ -214,6 +249,8 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
       setPhase('review');
       return;
     }
+    // The strength she used becomes the default for her next photos (on this device).
+    if (saveEnhanceStrength(strength)) setSavedStrength(strength);
     onApply({ src: result.src, thumb: result.thumb });
   }
 
@@ -453,11 +490,51 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
                 <figcaption className="text-sm text-ink-muted">Antes</figcaption>
               </figure>
               <figure className="flex flex-col gap-1.5">
-                <div className="aspect-[4/5] overflow-hidden rounded-[10px] border border-line bg-ivory">
-                  {afterUrl && <img src={afterUrl} alt="Foto padronizada: a peça no fundo da marca" className="h-full w-full object-contain" />}
+                <div className="aspect-[4/5] overflow-hidden rounded-[10px] border border-line bg-champagne">
+                  <canvas ref={preview} role="img" aria-label={`Foto padronizada: a peça no fundo da marca, realce de ${strength}%`} className="block h-full w-full" />
                 </div>
                 <figcaption className="text-sm text-ink-muted">Depois</figcaption>
               </figure>
+            </div>
+            <div className="flex flex-col gap-2 rounded-[12px] border border-line bg-white px-4 pt-3 pb-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <label htmlFor={`${headingId}-realce`} className="font-medium">
+                  Realce de cor
+                </label>
+                <output htmlFor={`${headingId}-realce`} className="text-title font-medium text-copper tabular-nums" aria-hidden="true">
+                  {strength}%
+                </output>
+              </div>
+              <input
+                id={`${headingId}-realce`}
+                type="range"
+                min={MIN_ENHANCE}
+                max={MAX_ENHANCE}
+                step={1}
+                value={strength}
+                onChange={(e) => setStrength(Number(e.target.value))}
+                disabled={phase === 'saving'}
+                aria-valuetext={strength === 0 ? 'sem realce, cores originais' : `${strength}% de realce`}
+                aria-describedby={`${headingId}-realce-hint`}
+                className="range"
+                style={{ '--fill': `${((strength - MIN_ENHANCE) / (MAX_ENHANCE - MIN_ENHANCE)) * 100}%` } as React.CSSProperties}
+              />
+              <div className="flex justify-between text-sm text-ink-muted" aria-hidden="true">
+                <span>Cores originais</span>
+                <span>Mais vida</span>
+              </div>
+              <p id={`${headingId}-realce-hint`} className="text-sm text-ink-muted">
+                {strength === savedStrength ? (
+                  <>Este é o seu padrão para as próximas fotos.</>
+                ) : (
+                  <>
+                    Ao usar esta foto, {strength}% vira o padrão das próximas.{' '}
+                    <button type="button" onClick={() => setStrength(savedStrength)} className="font-medium text-copper underline underline-offset-2">
+                      Voltar a {savedStrength}%
+                    </button>
+                  </>
+                )}
+              </p>
             </div>
             {error && (
               <p role="alert" className="text-sm text-danger">
@@ -526,7 +603,8 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
                   value={brush}
                   onChange={(e) => setBrush(Number(e.target.value))}
                   aria-valuetext={`${brush}% da foto`}
-                  className="min-h-11 w-full accent-copper"
+                  className="range"
+                  style={{ '--fill': `${((brush - BRUSH_MIN) / (BRUSH_MAX - BRUSH_MIN)) * 100}%` } as React.CSSProperties}
                 />
               </label>
               <div className="flex flex-wrap gap-1">

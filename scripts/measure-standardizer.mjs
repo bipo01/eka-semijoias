@@ -1,6 +1,8 @@
 // Measures the admin photo standardizer on test photos and saves the outputs for visual review.
 //
-//   node scripts/measure-standardizer.mjs [--photos <dir>] [--models isnet,birefnet-lite] [--devices wasm,webgpu] [--out docs/qa/standardizer]
+//   node scripts/measure-standardizer.mjs [--photos <dir>] [--models isnet,birefnet-lite] [--devices wasm,webgpu] [--strength 0,50,100] [--out docs/qa/standardizer]
+//
+// --strength: colour filter ("Realce de cor") percentages to render; one output per value (default 50, the admin's default).
 //
 // Builds scripts/standardizer/harness.html with Vite (the real engine and compositing modules), serves it
 // on 127.0.0.1:4310 under the same CSPs as production (the Worker's /admin policy on the page, public/_headers
@@ -23,6 +25,7 @@ const args = Object.fromEntries(
 const photosDir = resolve(args.photos ?? join(root, 'public/images/products'));
 const models = (args.models ?? 'isnet,birefnet-lite').split(',');
 const devices = (args.devices ?? 'wasm').split(',');
+const strengths = (args.strength ?? '50').split(',').map(Number);
 const outDir = resolve(args.out ?? join(root, 'docs/qa/standardizer'));
 const port = Number(args.port ?? 4310);
 const buildDir = join(root, 'node_modules/.cache/standardizer-harness');
@@ -149,15 +152,20 @@ try {
         run.init = await page.evaluate(([m, d]) => window.standardizer.init(m, d), [modelKey, device]);
         console.log(`  ready on ${run.init.device} in ${Math.round(run.init.ms)} ms (downloaded ${(run.init.downloaded / 1e6).toFixed(1)} MB)`);
         for (const photo of photos) {
-          const r = await page.evaluate(([u, n]) => window.standardizer.run(u, n), [`/photos/${encodeURIComponent(photo)}`, photo]);
-          const stem = photo.replace(/\.[^.]+$/, '');
-          const tag = `${modelKey}-${r.device}`;
-          // JPEG/grey PNG keep the folder small enough to commit (the app itself re-encodes to WebP within its budget).
-          const decode = (dataUrl) => Buffer.from(dataUrl.split(',')[1], 'base64');
-          if (r.composite) await sharp(decode(r.composite)).jpeg({ quality: 86, mozjpeg: true }).toFile(join(outDir, `${stem}__${tag}.jpg`));
-          await sharp(decode(r.mask)).extractChannel('alpha').resize(800, 800, { fit: 'inside' }).png({ compressionLevel: 9 }).toFile(join(outDir, `${stem}__${tag}__mask.png`));
-          run.photos.push({ name: photo, device: r.device, ms: Object.fromEntries(Object.entries(r.ms).map(([k, v]) => [k, Math.round(v)])), bounds: r.bounds });
-          console.log(`  ${photo}: segment ${Math.round(r.ms.segment)} ms, compose ${Math.round(r.ms.compose)} ms`);
+          for (const [i, strength] of strengths.entries()) {
+            const r = await page.evaluate(([u, n, st]) => window.standardizer.run(u, n, st), [`/photos/${encodeURIComponent(photo)}`, photo, strength]);
+            const stem = photo.replace(/\.[^.]+$/, '');
+            const tag = `${modelKey}-${r.device}`;
+            const suffix = strengths.length > 1 ? `__realce-${strength}` : '';
+            // JPEG/grey PNG keep the folder small enough to commit (the app itself re-encodes to WebP within its budget).
+            const decode = (dataUrl) => Buffer.from(dataUrl.split(',')[1], 'base64');
+            if (r.composite) await sharp(decode(r.composite)).jpeg({ quality: 86, mozjpeg: true }).toFile(join(outDir, `${stem}__${tag}${suffix}.jpg`));
+            if (i === 0) {
+              await sharp(decode(r.mask)).extractChannel('alpha').resize(800, 800, { fit: 'inside' }).png({ compressionLevel: 9 }).toFile(join(outDir, `${stem}__${tag}__mask.png`));
+              run.photos.push({ name: photo, device: r.device, ms: Object.fromEntries(Object.entries(r.ms).map(([k, v]) => [k, Math.round(v)])), bounds: r.bounds });
+            }
+            console.log(`  ${photo} (realce ${strength}%): segment ${Math.round(r.ms.segment)} ms, compose ${Math.round(r.ms.compose)} ms`);
+          }
         }
       } catch (err) {
         run.error = String(err?.message ?? err).slice(0, 500);

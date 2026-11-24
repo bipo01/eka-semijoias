@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { polyfillDialog } from '../../testUtils';
 import { StandardizeError } from './engine';
@@ -25,7 +25,8 @@ vi.mock('./compose', () => {
       return canvas();
     }),
     readAlpha: vi.fn(() => new Uint8ClampedArray(40 * 50).fill(255)),
-    compose: vi.fn(() => canvas()),
+    placeOnFrame: vi.fn(() => ({ frame: { width: 40, height: 50 }, x: 0, y: 0, pixels: {} as ImageData })),
+    renderStandardized: vi.fn(),
     canvasToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
     releaseCanvas: vi.fn(),
     renderRetouchView: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock('./compose', () => {
 });
 
 const { default: StandardizeSheet } = await import('./StandardizeSheet');
+const composeMock = await import('./compose');
 
 polyfillDialog();
 
@@ -83,6 +85,43 @@ describe('StandardizeSheet', () => {
     await user.click(screen.getByRole('button', { name: 'Usar a padronizada' }));
     expect(image.processImage).toHaveBeenCalledWith(expect.objectContaining({ type: 'image/png' }));
     expect(onApply).toHaveBeenCalledWith({ src: 'data:image/webp;base64,AAA=', thumb: 'data:image/webp;base64,BBB=' });
+  });
+
+  it('starts the colour filter at her last strength, previews changes and remembers the one she saved', async () => {
+    localStorage.setItem('eka:standardizer:v1', JSON.stringify({ tips: true, realce: 35 }));
+    engine.getEngine.mockResolvedValue(fakeEngine());
+    image.processImage.mockResolvedValue({ ok: true, src: 'data:image/webp;base64,AAA=', thumb: 'data:image/webp;base64,BBB=', bytes: 3 });
+    const { onApply, user } = setup();
+
+    const slider = await screen.findByRole('slider', { name: 'Realce de cor' });
+    expect(slider).toHaveValue('35');
+    expect(screen.getByText('Este é o seu padrão para as próximas fotos.')).toBeInTheDocument();
+
+    fireEvent.change(slider, { target: { value: '80' } });
+    expect(slider).toHaveAttribute('aria-valuetext', '80% de realce');
+    expect(screen.getByText(/80% vira o padrão das próximas/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Voltar a 35%' }));
+    expect(slider).toHaveValue('35');
+    fireEvent.change(slider, { target: { value: '80' } });
+
+    await user.click(screen.getByRole('button', { name: 'Usar a padronizada' }));
+    expect(onApply).toHaveBeenCalled();
+    // The saved photo is rendered at the chosen strength, and that strength becomes the default.
+    expect(vi.mocked(composeMock.renderStandardized).mock.calls.at(-1)?.[2]).toBe(80);
+    expect(JSON.parse(localStorage.getItem('eka:standardizer:v1')!)).toEqual({ tips: true, realce: 80 });
+  });
+
+  it('does not change the default strength when she keeps the original', async () => {
+    localStorage.setItem('eka:standardizer:v1', JSON.stringify({ tips: true }));
+    engine.getEngine.mockResolvedValue(fakeEngine());
+    const { onClose, user } = setup();
+
+    const slider = await screen.findByRole('slider', { name: 'Realce de cor' });
+    expect(slider).toHaveValue('50');
+    fireEvent.change(slider, { target: { value: '10' } });
+    await user.click(screen.getByRole('button', { name: 'Manter a original' }));
+    expect(onClose).toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem('eka:standardizer:v1')!).realce).toBeUndefined();
   });
 
   it('skips the tips once seen and lets her keep the original', async () => {

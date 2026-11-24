@@ -75,6 +75,53 @@
 @layer components {
   .img-fade { opacity: 0; transition: opacity var(--dur-2) var(--ease); }
   .img-fade[data-loaded='true'] { opacity: 1; }
+
+  /* Range slider: copper fill up to the value (inline --fill: 0%–100%), round thumb, 44 px touch height. */
+  .range {
+    --fill: 50%;
+    --track: 6px;
+    --thumb: 26px;
+    appearance: none;
+    -webkit-appearance: none;
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    touch-action: pan-y;
+  }
+  .range:disabled { cursor: default; opacity: 0.6; }
+  .range:focus-visible { outline: 2px solid var(--c-copper); outline-offset: 2px; border-radius: 999px; }
+  .range::-webkit-slider-runnable-track {
+    height: var(--track);
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--c-copper) 0 var(--fill), var(--c-line) var(--fill) 100%);
+  }
+  .range::-moz-range-track { height: var(--track); border-radius: 999px; background: var(--c-line); }
+  .range::-moz-range-progress { height: var(--track); border-radius: 999px; background: var(--c-copper); }
+  .range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: var(--thumb);
+    height: var(--thumb);
+    margin-top: calc((var(--track) - var(--thumb)) / 2);
+    border-radius: 50%;
+    border: 3px solid var(--c-white);
+    background: var(--c-copper);
+    box-shadow: 0 1px 2px rgb(43 29 24 / 0.18), 0 2px 8px rgb(43 29 24 / 0.16);
+    transition: transform var(--dur-1) var(--ease);
+  }
+  .range::-moz-range-thumb {
+    width: var(--thumb);
+    height: var(--thumb);
+    box-sizing: border-box;
+    border-radius: 50%;
+    border: 3px solid var(--c-white);
+    background: var(--c-copper);
+    box-shadow: 0 1px 2px rgb(43 29 24 / 0.18), 0 2px 8px rgb(43 29 24 / 0.16);
+  }
+  .range:active::-webkit-slider-thumb { transform: scale(1.12); }
 }
 
 /* Sheets and drawers on top of native <dialog>. */

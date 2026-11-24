@@ -1,22 +1,52 @@
+import { clampStrength, DEFAULT_ENHANCE } from './enhance';
 import type { Device, Dtype, ModelSpec } from './models';
 
-/** Per-device convenience only: whether the photo tips were already shown. */
+/**
+ * Per-device conveniences only: whether the photo tips were already shown, and the
+ * colour-filter strength she last used (the default for her next photos).
+ */
 const KEY = 'eka:standardizer:v1';
 
-export function tipsSeen(): boolean {
+interface Prefs {
+  tips?: boolean;
+  realce?: number;
+}
+
+function read(): Prefs {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '{}')?.tips === true;
+    const value: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    return value && typeof value === 'object' ? (value as Prefs) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** False when storage is unavailable (private mode, blocked site data): the value just isn't remembered. */
+function write(patch: Prefs): boolean {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ ...read(), ...patch }));
+    return true;
   } catch {
     return false;
   }
 }
 
+export function tipsSeen(): boolean {
+  return read().tips === true;
+}
+
 export function markTipsSeen() {
-  try {
-    localStorage.setItem(KEY, JSON.stringify({ tips: true }));
-  } catch {
-    // Private mode or blocked storage: the tips just show again next time.
-  }
+  write({ tips: true });
+}
+
+/** The strength (0–100 %) her next photo starts with. */
+export function enhanceStrength(): number {
+  const saved = read().realce;
+  return saved === undefined ? DEFAULT_ENHANCE : clampStrength(saved);
+}
+
+export function saveEnhanceStrength(strength: number): boolean {
+  return write({ realce: clampStrength(strength) });
 }
 
 const SUFFIX: Record<Dtype, string> = { fp32: '', fp16: '_fp16', q8: '_quantized' };
