@@ -3,8 +3,8 @@
  * "not now" memory. Pure functions; the browser wiring lives in src/hooks/useInstallPrompt.ts.
  */
 
-/** Which installable app a page offers: the store ("/") or the owner's panel ("/admin"). */
-export type InstallApp = 'store' | 'admin';
+/** Which installable app a page offers: the store ("/"), the owner's panel ("/admin") or the reseller panel ("/revenda"). */
+export type InstallApp = 'store' | 'admin' | 'reseller';
 
 export type InAppBrowser = 'Instagram' | 'Facebook' | 'WhatsApp' | 'LINE' | 'TikTok';
 
@@ -143,6 +143,7 @@ export function clearDismissed(app: InstallApp, storage: StorageLike | null = de
 export const APP_HEAD: Record<InstallApp, { manifest: string; appleTouchIcon: string; appleTitle: string }> = {
   store: { manifest: '/manifest.webmanifest', appleTouchIcon: '/apple-touch-icon.png', appleTitle: 'ÉKA' },
   admin: { manifest: '/admin.webmanifest', appleTouchIcon: '/admin-apple-touch-icon.png', appleTitle: 'Painel ÉKA' },
+  reseller: { manifest: '/revenda.webmanifest', appleTouchIcon: '/apple-touch-icon.png', appleTitle: 'ÉKA Revenda' },
 };
 
 function headElement<T extends HTMLElement>(doc: Document, selector: string, create: () => T): { el: T; created: boolean } {

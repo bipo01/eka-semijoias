@@ -17,7 +17,7 @@ import { ProductsPage } from './products/ProductsPage';
 import { ProductFormRoute } from './products/ProductFormRoute';
 import { CategoriesPage } from './sections/CategoriesPage';
 import { CustomersPage } from './sections/CustomersPage';
-import { LeadsPage } from './sections/LeadsPage';
+import { ResellersPage } from './sections/ResellersPage';
 import { OrdersPage } from './sections/OrdersPage';
 import { MessagesPage } from './sections/MessagesPage';
 import { ReportPage } from './sections/ReportPage';
@@ -127,7 +127,7 @@ export default function AdminApp() {
             <Route path=":productId" element={<ProductFormRoute />} />
           </Route>
           <Route path="categorias" element={<CategoriesPage />} />
-          <Route path="revendedoras" element={<LeadsPage />} />
+          <Route path="revendedoras" element={<ResellersPage />} />
           <Route path="configuracoes" element={<SettingsPage />} />
           <Route path="backup" element={<BackupPage />} />
           <Route path="*" element={<Navigate to={`${ADMIN_BASE}/pedidos`} replace />} />

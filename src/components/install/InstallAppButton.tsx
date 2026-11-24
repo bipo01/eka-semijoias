@@ -20,6 +20,7 @@ const VARIANT: Record<InstallButtonVariant, { className: string; icon: number }>
 const LABEL: Record<InstallApp, string> = {
   store: 'Instalar o app',
   admin: 'Instalar o Painel ÉKA',
+  reseller: 'Instalar o app da revenda',
 };
 
 interface InstallAppButtonProps {
@@ -45,7 +46,7 @@ export function InstallAppButton({ app = 'store', variant = 'menu', className }:
 
   const style = VARIANT[variant];
   const Icon = platform.kind === 'desktop' || platform.kind === 'mac-safari' ? MonitorDown : Smartphone;
-  const link = app === 'admin' ? `${window.location.origin}/admin` : window.location.href;
+  const link = app === 'admin' ? `${window.location.origin}/admin` : app === 'reseller' ? `${window.location.origin}/revenda` : window.location.href;
 
   const onClick = () => {
     if (method.kind === 'prompt') void promptInstall();

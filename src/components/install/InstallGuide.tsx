@@ -167,11 +167,13 @@ function content(guide: GuideKind, platform: InstallPlatform): GuideContent {
 export const GUIDE_TITLE: Record<InstallApp, string> = {
   store: 'Instalar o app da ÉKA',
   admin: 'Instalar o Painel ÉKA',
+  reseller: 'Instalar o ÉKA Revenda',
 };
 
 const INTRO: Record<InstallApp, string> = {
   store: 'Com o app, a gente fica na sua tela de início: um toque e você vê as peças em tela cheia.',
   admin: 'O painel ganha um ícone próprio na tela de início e abre direto nos pedidos.',
+  reseller: 'Seu painel de revendedora fica na tela de início: um toque e você vê a maleta e registra as vendas.',
 };
 
 interface InstallGuideProps {

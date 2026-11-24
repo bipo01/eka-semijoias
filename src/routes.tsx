@@ -30,6 +30,20 @@ export const router = createBrowserRouter([
     errorElement: <RouteError />,
   },
   {
+    // The reseller's own panel (login, first access, panel): its own chunk, outside the store layout.
+    path: '/revenda/*',
+    lazy: () => import('./revenda/RevendaApp').then((m) => ({ Component: m.default })),
+    hydrateFallbackElement: <div className="min-h-dvh bg-ivory" aria-busy="true" />,
+    errorElement: <RouteError />,
+  },
+  {
+    // A reseller's public showcase: standalone, its own chunk.
+    path: '/r/:slug',
+    lazy: () => import('./pages/Showcase').then((m) => ({ Component: m.default })),
+    hydrateFallbackElement: <div className="min-h-dvh bg-ivory" aria-busy="true" />,
+    errorElement: <RouteError />,
+  },
+  {
     element: <Layout />,
     errorElement: <RouteError />,
     children: [

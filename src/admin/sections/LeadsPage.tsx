@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import { Chip } from '../../components/ui/Misc';
+import { cx } from '../../components/ui/cx';
+import { LEAD_STATUS_LABEL, type LeadStatus } from '../../data/revenda';
+import { patchLead, isError } from '../lib/resellers';
 import { Download, Trash2 } from 'lucide-react';
 import { Button, ButtonAnchor, IconButton } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -35,13 +39,42 @@ export function leadsCsv(leads: ResellerLead[]): string {
 }
 
 
-export function LeadsPage() {
+const LEAD_STYLE: Record<LeadStatus, string> = {
+  nova: 'bg-copper text-white',
+  analise: 'bg-champagne text-ink',
+  aprovada: 'bg-[#e4ece6] text-success',
+  recusada: 'bg-[#f6e9e6] text-danger',
+  efetivada: 'border border-copper text-copper',
+};
+type LeadFilter = 'abertas' | LeadStatus | 'todas';
+const LEAD_FILTERS: { id: LeadFilter; label: string }[] = [
+  { id: 'abertas', label: 'Para analisar' },
+  { id: 'aprovada', label: 'Aprovadas' },
+  { id: 'efetivada', label: 'Revendedoras' },
+  { id: 'recusada', label: 'Recusadas' },
+  { id: 'todas', label: 'Todas' },
+];
+const statusOf = (l: ResellerLead): LeadStatus => l.status ?? 'nova';
+const matches = (l: ResellerLead, f: LeadFilter) => (f === 'todas' ? true : f === 'abertas' ? statusOf(l) === 'nova' || statusOf(l) === 'analise' : statusOf(l) === f);
+
+export function LeadsPage({ onEffectivate }: { onEffectivate?: (lead: ResellerLead) => void } = {}) {
   const { state, reload, remove } = useLeads();
+  const [filter, setFilter] = useState<LeadFilter>('abertas');
+  const [reviewing, setReviewing] = useState<string | null>(null);
+
+  async function review(lead: ResellerLead, status: Exclude<LeadStatus, 'efetivada'>) {
+    if (reviewing) return;
+    setReviewing(lead.id);
+    const r = await patchLead(lead.id, { status });
+    setReviewing(null);
+    if (isError(r)) toast(r.error, { tone: 'error' });
+    else reload();
+  }
   const message = useMessages();
   const [deleting, setDeleting] = useState<ResellerLead | null>(null);
   const [busy, setBusy] = useState(false);
   const leads = state.status === 'ready' ? state.leads : [];
-  const sorted = newestFirst(leads);
+  const sorted = newestFirst(leads).filter((l) => matches(l, filter));
 
   async function confirmDelete() {
     if (!deleting || busy) return;
@@ -69,6 +102,14 @@ export function LeadsPage() {
 
   return (
     <>
+      <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pb-1">
+        {LEAD_FILTERS.map((f) => (
+          <Chip key={f.id} selected={filter === f.id} onClick={() => setFilter(f.id)}>
+            {f.label}
+            <span className={cx('price text-xs', filter === f.id ? 'text-white/85' : 'text-ink-muted')}>{leads.filter((l) => matches(l, f.id)).length}</span>
+          </Chip>
+        ))}
+      </div>
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-sm text-ink-muted">{leads.length === 1 ? '1 cadastro' : `${leads.length} cadastros`}, do mais recente ao mais antigo.</p>
         <Button size="sm" variant="secondary" className="shrink-0" disabled={!leads.length} onClick={() => downloadText(`eka-revendedoras-${fileDate()}.csv`, leadsCsv(leads), 'text/csv;charset=utf-8')}>
@@ -84,7 +125,10 @@ export function LeadsPage() {
               <li key={lead.id} className="rounded-[12px] border border-line bg-white p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-medium break-words">{lead.name}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium break-words">{lead.name}</p>
+                      <span className={cx('inline-flex min-h-6 items-center rounded-full px-2.5 text-xs font-medium', LEAD_STYLE[statusOf(lead)])}>{LEAD_STATUS_LABEL[statusOf(lead)]}</span>
+                    </div>
                     <p className="text-sm text-ink-muted">{formatDateTime(lead.createdAt)}</p>
                   </div>
                   <IconButton label={`Excluir cadastro de ${lead.name}`} onClick={() => setDeleting(lead)} className="-mt-2 -mr-2">
@@ -111,18 +155,40 @@ export function LeadsPage() {
                     </>
                   )}
                 </dl>
-                {digits.length >= 12 && (
-                  <ButtonAnchor href={whatsappUrl(digits, message('boasvindas', { primeiro_nome: firstNameOf(lead.name) }))} size="sm" className="mt-3">
-                    <WhatsAppIcon size={18} /> Chamar no WhatsApp
-                  </ButtonAnchor>
-                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {digits.length >= 12 && (
+                    <ButtonAnchor href={whatsappUrl(digits, message('boasvindas', { primeiro_nome: firstNameOf(lead.name) }))} size="sm" variant="secondary">
+                      <WhatsAppIcon size={18} /> Chamar no WhatsApp
+                    </ButtonAnchor>
+                  )}
+                  {statusOf(lead) === 'nova' && (
+                    <Button size="sm" variant="ghost" disabled={reviewing === lead.id} onClick={() => void review(lead, 'analise')}>
+                      Em análise
+                    </Button>
+                  )}
+                  {(statusOf(lead) === 'nova' || statusOf(lead) === 'analise' || statusOf(lead) === 'recusada') && (
+                    <Button size="sm" variant="ghost" disabled={reviewing === lead.id} onClick={() => void review(lead, 'aprovada')}>
+                      Aprovar
+                    </Button>
+                  )}
+                  {(statusOf(lead) === 'nova' || statusOf(lead) === 'analise' || statusOf(lead) === 'aprovada') && (
+                    <Button size="sm" variant="ghost" className="text-danger" disabled={reviewing === lead.id} onClick={() => void review(lead, 'recusada')}>
+                      Recusar
+                    </Button>
+                  )}
+                  {statusOf(lead) === 'aprovada' && onEffectivate && (
+                    <Button size="sm" onClick={() => onEffectivate(lead)}>
+                      Efetivar revendedora
+                    </Button>
+                  )}
+                </div>
               </li>
             );
           })}
         </ul>
       ) : (
         <EmptyState>
-          Nenhum pré-cadastro ainda. Quando alguém preencher o formulário de revendedoras, o cadastro aparece aqui na hora.
+          {leads.length ? 'Nenhuma ficha neste filtro.' : 'Nenhum pré-cadastro ainda.'}{leads.length ? '' : ' Quando alguém preencher o formulário de revendedoras, o cadastro aparece aqui na hora.'}
         </EmptyState>
       )}
 
