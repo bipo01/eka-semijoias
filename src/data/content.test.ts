@@ -90,6 +90,12 @@ describe('section schemas', () => {
     expect(parseSection('depoimentos', { items: Array.from({ length: 13 }, (_, i) => ({ ...testimonial, id: `t${i}` })) }).ok).toBe(false);
   });
 
+  it('a testimonial may go out with the comment only (name and city optional, the text is not)', () => {
+    expect(parseSection('depoimentos', { items: [{ ...testimonial, name: '', city: '' }] }).ok).toBe(true);
+    expect(parseSection('depoimentos', { items: [{ ...testimonial, name: '  ', city: 'Cuiabá/MT' }] }).ok).toBe(true);
+    expect(parseSection('depoimentos', { items: [{ ...testimonial, text: '  ' }] })).toMatchObject({ ok: false, path: 'items.0.text' });
+  });
+
   it('refuse images that are not built-in, uploaded or data URLs', () => {
     const inicio = defaultSections(none).inicio;
     expect(parseSection('inicio', { ...inicio, hero: { ...inicio.hero, image: { src: 'https://evil.example/x.png', alt: '' } } }).ok).toBe(false);

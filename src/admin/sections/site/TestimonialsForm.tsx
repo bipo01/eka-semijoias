@@ -1,5 +1,5 @@
 import { ShieldCheck } from 'lucide-react';
-import { newItemId, type Testimonial } from '../../../data/content';
+import { newItemId, testimonialSignature, type Testimonial } from '../../../data/content';
 import { Checkbox, TextInput, useEditor } from './fields';
 import { ListField } from './ListEditor';
 import { getIn } from './sectionDraft';
@@ -12,14 +12,13 @@ export const newTestimonial = (): TestimonialDraft => ({ id: newItemId(), text: 
 /** How the card looks on the home page (same shapes and type as the site's card). */
 export function TestimonialPreview({ item }: { item: TestimonialDraft }) {
   const text = item.text.trim();
-  const name = item.name.trim();
-  const city = item.city.trim();
+  const signature = testimonialSignature(item);
   return (
     <figure aria-label="Prévia do depoimento no site" className="flex flex-col gap-3 rounded-[12px] bg-champagne/70 p-4">
       <blockquote className="font-display text-[1.0625rem] leading-snug text-ink italic [overflow-wrap:anywhere]">
         {text ? `“${text}”` : <span className="text-ink-muted not-italic">O texto do depoimento aparece aqui.</span>}
       </blockquote>
-      <figcaption className="text-sm text-ink-muted [overflow-wrap:anywhere]">{[name || 'Nome da cliente', city].filter(Boolean).join(' · ')}</figcaption>
+      {signature && <figcaption className="text-sm text-ink-muted [overflow-wrap:anywhere]">{signature}</figcaption>}
     </figure>
   );
 }
@@ -63,7 +62,12 @@ export function TestimonialsForm() {
               <TextInput path={[...p, 'name']} label="Nome" hint="Ex.: Ana P." />
               <TextInput path={[...p, 'city']} label="Cidade" hint="Ex.: Cuiabá/MT" />
             </div>
-            <Checkbox path={[...p, 'authorized']} label="A cliente autorizou publicar este depoimento" hint="Com o nome e a cidade que aparecem acima." />
+            <p className="-mt-1 text-sm text-ink-muted">Sem nome e sem cidade, aparece só o comentário.</p>
+            <Checkbox
+              path={[...p, 'authorized']}
+              label="A cliente autorizou publicar este depoimento"
+              hint={t.name.trim() || t.city.trim() ? 'Com o nome e a cidade que aparecem acima.' : 'Mesmo sem o nome dela, publique só com a autorização.'}
+            />
           </>
         )}
       />

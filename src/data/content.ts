@@ -72,13 +72,17 @@ const stamped = <T extends z.ZodRawShape>(shape: T) => z.object({ ...shape, upda
 export const testimonialSchema = z.object({
   id: itemIdSchema,
   text: req(400),
-  name: req(40),
+  // Name and city are optional: some testimonials go out with the comment only.
+  name: text(40),
   city: text(40),
   // No "hidden" state on purpose: the snapshot is public, so a testimonial that leaves the site is deleted.
   /** The customer agreed to the publication (required to save). */
   authorized: z.literal(true, { error: 'Confirme que a cliente autorizou publicar.' }),
 });
 export type Testimonial = z.infer<typeof testimonialSchema>;
+
+/** "Name · City", either one alone, or nothing (a testimonial may go out with the comment only). */
+export const testimonialSignature = (t: { name: string; city: string }) => [t.name.trim(), t.city.trim()].filter(Boolean).join(' · ');
 
 export const sectionSchemas = {
   inicio: stamped({

@@ -35,6 +35,14 @@ describe('Testimonials', () => {
     expect(screen.queryByRole('img', { name: /estrelas/ })).not.toBeInTheDocument();
   });
 
+  it('a comment without name or city shows no signature line; a city alone shows the city', () => {
+    show({ depoimentos: { items: [item('a', '', ''), item('b', '', 'Cuiabá/MT')] } });
+    const cards = within(screen.getByRole('list', { name: 'Depoimentos de clientes' })).getAllByRole('listitem');
+    expect(cards[0]!.querySelector('blockquote')).toHaveTextContent('Amei a peça, .');
+    expect(cards[0]!.querySelector('figcaption')).toBeNull();
+    expect(cards[1]!.querySelector('figcaption')).toHaveTextContent(/^Cuiabá\/MT$/);
+  });
+
   it('uses the section title the owner saved', () => {
     const base = show({ depoimentos: { items: [item('b', 'Bia')] } });
     base.unmount();

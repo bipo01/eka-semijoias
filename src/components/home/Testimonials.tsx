@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Quote } from 'lucide-react';
+import { testimonialSignature } from '../../data/content';
 import { useSection } from '../../hooks/useSection';
 import { SectionHeading } from '../ui/Misc';
 import { cx } from '../ui/cx';
@@ -48,18 +49,18 @@ export function Testimonials() {
           count >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3',
         )}
       >
-        {items.map((t, i) => (
-          <li key={t.id} className="w-[86%] shrink-0 snap-start sm:w-[46%] lg:w-auto" aria-label={`Depoimento ${i + 1} de ${count}`}>
-            <figure className="flex h-full flex-col gap-3 rounded-[12px] bg-champagne/70 p-5">
-              <Quote size={22} strokeWidth={1.5} className="fill-current text-rose" aria-hidden="true" />
-              <blockquote className="font-display text-[1.1875rem] leading-snug whitespace-pre-line [overflow-wrap:anywhere] text-ink italic">{t.text}</blockquote>
-              <figcaption className="mt-auto text-sm [overflow-wrap:anywhere] text-ink-muted">
-                {t.name}
-                {t.city && ` · ${t.city}`}
-              </figcaption>
-            </figure>
-          </li>
-        ))}
+        {items.map((t, i) => {
+          const signature = testimonialSignature(t);
+          return (
+            <li key={t.id} className="w-[86%] shrink-0 snap-start sm:w-[46%] lg:w-auto" aria-label={`Depoimento ${i + 1} de ${count}`}>
+              <figure className="flex h-full flex-col gap-3 rounded-[12px] bg-champagne/70 p-5">
+                <Quote size={22} strokeWidth={1.5} className="fill-current text-rose" aria-hidden="true" />
+                <blockquote className="font-display text-[1.1875rem] leading-snug whitespace-pre-line [overflow-wrap:anywhere] text-ink italic">{t.text}</blockquote>
+                {signature && <figcaption className="mt-auto text-sm [overflow-wrap:anywhere] text-ink-muted">{signature}</figcaption>}
+              </figure>
+            </li>
+          );
+        })}
       </ul>
       {count > 1 && (
         <div className="mt-4 flex justify-center gap-2 lg:hidden" aria-hidden="true">
