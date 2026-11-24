@@ -13,6 +13,7 @@ import {
   type Reseller,
 } from '../src/data/revenda';
 import type { StockMove } from '../src/data/orders';
+import { INSTAGRAM_ERROR, isInstagramHandle, normalizeInstagram } from '../src/lib/instagram';
 import { formatBRL } from '../src/lib/format';
 import { requireSession } from './auth';
 import { IDEMPOTENCY_TTL_MS, parseSnapshotBody, WRITE_ATTEMPTS } from './catalog';
@@ -180,13 +181,16 @@ const phone = z
   .pipe(z.string().regex(/^\d{10,11}$/, 'WhatsApp com DDD, ex.: (65) 99999-9999'));
 const slugInput = z.string().trim().toLowerCase().regex(/^[a-z0-9-]{2,40}$/, 'Endereço do mostruário: só letras minúsculas, números e hífen (2 a 40).');
 
+/** "@Perfil", "perfil" or the profile link → "perfil" (same rule as the admin form). */
+const instagramInput = z.string().max(200).transform(normalizeInstagram).refine(isInstagramHandle, INSTAGRAM_ERROR);
+
 const createSchema = z.object({
   leadId: z.string().regex(ID).optional(),
   name: z.string().transform((v) => v.replace(/\s+/g, ' ').trim()).pipe(z.string().min(3, 'Informe o nome completo.').max(120)),
   whatsapp: phone,
   city: z.string().trim().max(80).default(''),
   uf: z.string().trim().toUpperCase().max(2).default(''),
-  instagram: z.string().trim().max(60).optional(),
+  instagram: instagramInput.optional(),
   slug: slugInput.optional(),
 });
 
@@ -240,7 +244,7 @@ export async function handleCreateReseller(ctx: Context): Promise<Response> {
       whatsapp: data.whatsapp,
       city: data.city,
       uf: data.uf,
-      ...(data.instagram ? { instagram: data.instagram.replace(/^@/, '') } : {}),
+      ...(data.instagram ? { instagram: data.instagram } : {}),
       status: 'ativa',
       ...(data.leadId ? { leadId: data.leadId } : {}),
       showWhatsapp: true,
@@ -294,7 +298,7 @@ const patchSchema = z.object({
   whatsapp: phone.optional(),
   city: z.string().trim().max(80).optional(),
   uf: z.string().trim().toUpperCase().max(2).optional(),
-  instagram: z.string().trim().max(60).optional(),
+  instagram: instagramInput.optional(),
   slug: slugInput.optional(),
   status: z.enum(RESELLER_STATUSES).optional(),
   tiers: z.array(commissionTierSchema).min(1).max(8).nullable().optional(),
@@ -327,7 +331,7 @@ export async function handlePatchReseller(ctx: Context): Promise<Response> {
   if (p.city !== undefined) next.city = p.city;
   if (p.uf !== undefined) next.uf = p.uf;
   if (p.instagram !== undefined) {
-    if (p.instagram) next.instagram = p.instagram.replace(/^@/, '');
+    if (p.instagram) next.instagram = p.instagram;
     else delete next.instagram;
   }
   if (p.slug !== undefined) next.slug = p.slug;

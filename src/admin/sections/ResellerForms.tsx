@@ -11,6 +11,7 @@ import { sizeLabel } from '../../data/catalog';
 import { FINISH_LABEL } from '../../data/schema';
 import { useMessages } from '../../hooks/useMessages';
 import { UFS, maskPhone } from '../../lib/lead';
+import { INSTAGRAM_ERROR, INSTAGRAM_HINT, isInstagramHandle, normalizeInstagram } from '../../lib/instagram';
 import { formatBRL } from '../../lib/format';
 import { whatsappUrl } from '../../lib/whatsapp';
 import { toast } from '../../store/ui';
@@ -36,13 +37,18 @@ export function NewResellerForm({ lead, onDone }: { lead?: ResellerLead; onDone:
   const [instagram, setInstagram] = useState(lead?.instagram ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [instagramError, setInstagramError] = useState<string | undefined>();
   const key = useRef<{ body: string; key: string } | null>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
     setError(null);
-    const input = { ...(lead ? { leadId: lead.id } : {}), name, whatsapp, city, uf, ...(instagram.trim() ? { instagram: instagram.trim() } : {}) };
+    const handle = normalizeInstagram(instagram);
+    setInstagram(handle);
+    if (!isInstagramHandle(handle)) return setInstagramError(INSTAGRAM_ERROR);
+    setInstagramError(undefined);
+    const input = { ...(lead ? { leadId: lead.id } : {}), name, whatsapp, city, uf, ...(handle ? { instagram: handle } : {}) };
     const body = JSON.stringify(input);
     if (key.current?.body !== body) key.current = { body, key: idempotencyKey() };
     setBusy(true);
@@ -71,7 +77,24 @@ export function NewResellerForm({ lead, onDone }: { lead?: ResellerLead; onDone:
           ))}
         </SelectField>
       </div>
-      <TextField label="Instagram" optional value={instagram} maxLength={60} onChange={(e) => setInstagram(e.target.value)} />
+      <TextField
+        label="Instagram"
+        optional
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        placeholder="perfil"
+        icon={<span className="text-sm">@</span>}
+        hint={INSTAGRAM_HINT}
+        value={instagram}
+        error={instagramError}
+        maxLength={200}
+        onChange={(e) => {
+          setInstagram(e.target.value);
+          setInstagramError(undefined);
+        }}
+        onBlur={() => setInstagram(normalizeInstagram(instagram))}
+      />
       {error && (
         <p role="alert" className="rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
           {error}

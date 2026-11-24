@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { TextArea, TextField } from '../../components/ui/Field';
 import { phoneDigits, type CustomerInput } from '../../data/customers';
 import { idempotencyKey } from '../../lib/api';
+import { INSTAGRAM_ERROR, INSTAGRAM_HINT, isInstagramHandle } from '../../lib/instagram';
 import { toast } from '../../store/ui';
 import { maskPhone, parseInstagram } from '../lib/contact';
 import { birthdayProblem, createCustomer, maskBirthday, updateCustomer, type Customer, type CustomerFailure } from '../lib/customers';
@@ -47,7 +48,7 @@ export function parseDraft(draft: CustomerDraft): { ok: true; input: CustomerInp
   const uf = draft.uf.trim().toUpperCase();
   if (uf && !/^[A-Z]{2}$/.test(uf)) errors.uf = 'Use a sigla, ex.: MT';
   const instagram = parseInstagram(draft.instagram);
-  if (!/^[A-Za-z0-9._]{0,30}$/.test(instagram)) errors.instagram = 'Digite só o @ do Instagram';
+  if (!isInstagramHandle(instagram)) errors.instagram = INSTAGRAM_ERROR;
   const birthday = birthdayProblem(draft.birthday);
   if (birthday) errors.birthday = birthday;
   if (draft.note.length > 600) errors.note = 'Observação longa demais.';
@@ -104,8 +105,9 @@ export function CustomerFields({ draft, errors, onChange, short }: { draft: Cust
             optional
             autoCapitalize="none"
             spellCheck={false}
-            maxLength={80}
+            maxLength={200}
             placeholder="perfil"
+            hint={INSTAGRAM_HINT}
             icon={<span className="text-sm">@</span>}
             value={draft.instagram}
             error={errors.instagram}

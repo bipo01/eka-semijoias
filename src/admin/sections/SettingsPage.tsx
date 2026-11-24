@@ -10,6 +10,7 @@ import type { Settings } from '../../data/schema';
 import { DEFAULT_LOW_STOCK } from '../../data/stock';
 import { formatPixKey, normalizePixKey, PIX_KEY_KIND_LABEL, pixKeyKind, pixText, type PixKeyKind } from '../../lib/pix';
 import { ApiError, errorMessage } from '../../lib/api';
+import { INSTAGRAM_ERROR, INSTAGRAM_HINT, isInstagramHandle } from '../../lib/instagram';
 import { PIN_MAX, PIN_MIN, pinProblem } from '../../lib/pin';
 import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
@@ -73,7 +74,7 @@ export function parseStoreForm(form: StoreForm): { ok: true; patch: Settings } |
   const whatsapp = parsePhone(form.whatsapp);
   if (whatsapp == null) errors.whatsapp = 'Informe DDD + número, por exemplo (65) 99999-9999.';
   const instagram = parseInstagram(form.instagram);
-  if (!/^[A-Za-z0-9._]{0,30}$/.test(instagram)) errors.instagram = 'Use só o nome do perfil: letras, números, ponto e sublinhado.';
+  if (!isInstagramHandle(instagram)) errors.instagram = INSTAGRAM_ERROR;
   const warranty = form.warrantyMonths.trim() === '' ? 0 : Number(form.warrantyMonths);
   if (!Number.isInteger(warranty) || warranty < 0 || warranty > 60) errors.warrantyMonths = 'Informe um número de meses entre 0 e 60.';
   const warrantyTerms = (form.warrantyTerms ?? '').trim();
@@ -148,7 +149,7 @@ function StoreSettings() {
         placeholder="nomedaloja"
         autoCapitalize="none"
         spellCheck={false}
-        hint="Pode colar o link do perfil; guardamos só o nome."
+        hint={INSTAGRAM_HINT}
         icon={<span className="text-sm">@</span>}
         {...field('instagram')}
         onBlur={() => setForm((f) => ({ ...f, instagram: parseInstagram(f.instagram) }))}

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { INSTAGRAM_ERROR, isInstagramHandle, normalizeInstagram } from '../lib/instagram';
 
 /*
  * The owner's customers (docs/revenda/PLAN.md §1). Personal data: admin-only
@@ -47,12 +48,7 @@ export const customerInputSchema = z.object({
     .pipe(z.string().regex(/^(\d{10,11})?$/, 'WhatsApp com DDD, ex.: (65) 99999-9999')),
   city: z.string().trim().max(80).default(''),
   uf: z.string().trim().toUpperCase().max(2).default(''),
-  instagram: z
-    .string()
-    .trim()
-    .transform((v) => v.replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/.*$/, ''))
-    .pipe(z.string().regex(/^[A-Za-z0-9._]{0,30}$/, 'Digite só o @ do Instagram'))
-    .optional(),
+  instagram: z.string().transform(normalizeInstagram).refine(isInstagramHandle, INSTAGRAM_ERROR).optional(),
   birthday: z.string().regex(/^(\d{2}\/\d{2})?$/, 'Aniversário no formato DD/MM').optional(),
   note: z.string().max(600, 'Observação longa demais.').optional(),
 });

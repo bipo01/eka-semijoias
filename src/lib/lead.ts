@@ -1,5 +1,6 @@
 import type { MessageVars } from '../data/messages';
 import { z } from 'zod';
+import { INSTAGRAM_ERROR, isInstagramHandle, normalizeInstagram } from './instagram';
 
 export const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'] as const;
 
@@ -20,11 +21,7 @@ export const leadFormSchema = z.object({
     .refine((d) => d.length === 10 || d.length === 11, 'Digite o WhatsApp com DDD, ex.: (65) 99999-9999'),
   city: z.string().trim().min(2, 'Digite sua cidade').max(80, 'Cidade muito longa'),
   uf: z.enum(UFS, { message: 'Escolha o estado' }),
-  instagram: z
-    .string()
-    .trim()
-    .transform((v) => v.replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/.*$/, ''))
-    .refine((v) => v === '' || /^[A-Za-z0-9._]{1,30}$/.test(v), 'Digite só o @ do Instagram'),
+  instagram: z.string().transform(normalizeInstagram).refine(isInstagramHandle, INSTAGRAM_ERROR),
   alreadySells: z.boolean({ message: 'Responda se você já revende' }),
   source: z.string().trim().max(200, 'Texto muito longo'),
   consent: z.literal(true, { message: 'Marque a autorização para a gente entrar em contato' }),

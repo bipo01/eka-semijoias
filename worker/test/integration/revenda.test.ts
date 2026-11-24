@@ -363,9 +363,11 @@ describe('reseller program', () => {
     expect(lead.status).toBe(201);
     const second = await new Client().req('/api/leads', { body: { name: 'Lia S. Moraes', whatsapp: masked, city: 'Cuiabá', uf: 'MT', instagram: '', alreadySells: false, source: '', consent: true } });
     expect(second.status).toBe(201);
-    const created = await a.req('/api/admin/resellers', { body: { leadId: lead.json.id, name: 'Lia Saída Moraes', whatsapp, city: 'Cuiabá', uf: 'MT', instagram: 'lia.moraes' }, headers: { 'Idempotency-Key': randomUUID() } });
+    const created = await a.req('/api/admin/resellers', { body: { leadId: lead.json.id, name: 'Lia Saída Moraes', whatsapp, city: 'Cuiabá', uf: 'MT', instagram: 'https://www.instagram.com/Lia.Moraes/?hl=pt-br' }, headers: { 'Idempotency-Key': randomUUID() } });
     expect(created.status).toBe(201);
     const reseller = created.json.reseller;
+    // With or without @, or the profile link: only the handle is kept.
+    expect(reseller.instagram).toBe('lia.moraes');
     const r = await activate(created.json.invite.token, '736251');
     const kit = (await a.req(`/api/admin/resellers/${reseller.id}/kits`, { body: { items: [{ productId: p.id, variantId: v.id, qty: 1 }] } })).json.kit;
     expect((await catalog()).stock[p.id][key]).toBe(3);

@@ -38,12 +38,8 @@ export function formatPhone(value: string): string {
   return d.length === 10 || d.length === 11 ? maskPhone(d) : value;
 }
 
-/** "@eka", "instagram.com/eka/?hl=pt" or "eka" → "eka". */
-export function parseInstagram(value: string): string {
-  const trimmed = value.trim();
-  const fromUrl = trimmed.match(/instagram\.com\/([^/?#\s]+)/i);
-  return (fromUrl ? fromUrl[1]! : trimmed).replace(/^@+/, '').replace(/\/+$/, '');
-}
+/** "@eka", "instagram.com/eka/?hl=pt" or "eka" → "eka" (the shared rule in src/lib/instagram.ts). */
+export { normalizeInstagram as parseInstagram } from '../../lib/instagram';
 
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 

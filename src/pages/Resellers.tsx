@@ -13,6 +13,7 @@ import { useSection } from '../hooks/useSection';
 import { siteImageSources } from '../lib/assets';
 import { apiUrl } from '../lib/api';
 import { leadFormSchema, leadVars, maskPhone, UFS, type LeadForm } from '../lib/lead';
+import { INSTAGRAM_HINT } from '../lib/instagram';
 import { useMessages } from '../hooks/useMessages';
 import { whatsappUrl } from '../lib/whatsapp';
 import { goToSection } from '../lib/goToSection';
@@ -222,7 +223,7 @@ function LeadFormSection({ whatsapp, title, intro }: { whatsapp: string | null; 
             {UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
           </SelectField>
         </div>
-        <TextField label="Instagram" optional autoComplete="off" placeholder="@seuperfil" icon={<InstagramIcon size={18} />} value={form.instagram} error={errors.instagram} onChange={(e) => set('instagram', e.target.value)} />
+        <TextField label="Instagram" optional autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="@seuperfil" hint={INSTAGRAM_HINT} icon={<InstagramIcon size={18} />} value={form.instagram} error={errors.instagram} onChange={(e) => set('instagram', e.target.value)} />
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium">Já revende?<span aria-hidden="true" className="text-copper"> *</span></legend>
           <div role="radiogroup" aria-label="Já revende?" aria-describedby={errors.alreadySells ? 'sells-error' : undefined} data-invalid={errors.alreadySells ? 'true' : undefined} tabIndex={errors.alreadySells ? -1 : undefined} className={cx('grid grid-cols-2 rounded-full border p-1', errors.alreadySells ? 'border-danger' : 'border-line')}>
