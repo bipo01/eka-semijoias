@@ -133,6 +133,20 @@ describe('catalog reads', () => {
     expect(icon.headers.get('X-Request-Id')).toBeNull(); // served by static assets, not the Worker
   });
 
+  it('marks hashed assets immutable only when they exist (a 404 must never be cached)', async () => {
+    const html = await (await fetch(`${BASE()}/`)).text();
+    const entry = /src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
+    expect(entry).toBeTruthy();
+    const ok = await fetch(`${BASE()}${entry}`);
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+    expect(ok.headers.get('Content-Type')).toContain('javascript');
+    const missing = await fetch(`${BASE()}/assets/index-naoexiste.js`);
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get('Cache-Control')).toBe('no-store');
+    expect(missing.headers.get('Content-Type') ?? '').not.toContain('text/html'); // never the SPA document
+  });
+
   it('serves the SPA document with a CSP naming the WebSocket host', async () => {
     const res = await fetch(`${BASE()}/`);
     expect(res.headers.get('Content-Type')).toContain('text/html');

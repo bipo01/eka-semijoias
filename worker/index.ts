@@ -127,6 +127,20 @@ export function documentCsp(url: URL): string {
   ].join('; ');
 }
 
+/**
+ * Hashed build output (/assets/*). A file that exists never changes: immutable, so Workers Caching
+ * answers repeats at the edge. A missing one is `no-store`: during a deploy rollout a new page can ask
+ * for a file this edge does not serve yet, and that 404 must not be cached (a cached 404 for the entry
+ * script blanks the whole site until the next build renames it).
+ */
+async function serveAsset(request: Request, env: Env): Promise<Response> {
+  const asset = await env.ASSETS.fetch(request);
+  const response = new Response(asset.body, asset);
+  response.headers.set('Cache-Control', asset.status === 200 || asset.status === 304 ? 'public, max-age=31536000, immutable' : 'no-store');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  return response;
+}
+
 async function serveDocument(request: Request, env: Env, url: URL): Promise<Response> {
   // A real file at this path is served as is; any other page route gets the SPA document. (Assets use
   // not_found_handling "none": a missing /assets/*.js must be a 404, never index.html cached as
@@ -211,7 +225,10 @@ export default {
     let route = 'unmatched';
     let response: Response;
     try {
-      if (isPageRoute(url.pathname) && (request.method === 'GET' || request.method === 'HEAD')) {
+      if (url.pathname.startsWith('/assets/') && (request.method === 'GET' || request.method === 'HEAD')) {
+        route = 'asset';
+        response = await serveAsset(request, env);
+      } else if (isPageRoute(url.pathname) && (request.method === 'GET' || request.method === 'HEAD')) {
         route = 'document';
         response = await serveDocument(request, env, url);
       } else {
@@ -235,8 +252,10 @@ export default {
       response.headers.set('X-Request-Id', requestId);
       // HEAD answers carry no body: never let the edge cache keep one for a GET.
       if (request.method === 'HEAD' && route !== 'document') response.headers.set('Cache-Control', 'no-store');
+      // Cached copies of an asset are shared by every visitor: no per-request id in them.
+      if (route === 'asset') response.headers.delete('X-Request-Id');
     }
-    log({ event: 'request', requestId, method: request.method, route, status: response.status, ms: Date.now() - started });
+    if (route !== 'asset' || response.status !== 200) log({ event: 'request', requestId, method: request.method, route, status: response.status, ms: Date.now() - started });
     return response;
   },
 } satisfies ExportedHandler<Env>;

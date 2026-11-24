@@ -9,9 +9,9 @@
   Cross-Origin-Opener-Policy: same-origin
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
-# Hashed build output never changes.
-/assets/*
-  Cache-Control: public, max-age=31536000, immutable
+# /assets/* (hashed build output) is served through the Worker (serveAsset in worker/index.ts): immutable
+# only when the file exists. Never mark it immutable here: these rules also apply to a 404, and the edge
+# would keep that 404 for a year.
 
 # Photos and brand files keep their names across deploys: cache a day, refresh in the background.
 /images/*

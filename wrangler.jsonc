@@ -16,9 +16,11 @@
     "not_found_handling": "none",
     // Page routes (/, /catalogo, /produto/…, /admin…) run the Worker so index.html gets a CSP naming
     // this host's WebSocket; static files below skip it (served straight from the edge, not metered).
+    // /assets/* runs the Worker too: it marks a hashed file immutable only when it exists, so a 404 seen
+    // during a deploy rollout is never cached for a year (that blanked the site once). Repeat requests
+    // for an existing file are answered by Workers Caching without running the Worker.
     "run_worker_first": [
       "/*",
-      "!/assets/*",
       "!/images/*",
       "!/brand/*",
       "!/favicon.svg",

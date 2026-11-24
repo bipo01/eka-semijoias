@@ -8,12 +8,15 @@ import '@fontsource/jost/latin-500.css';
 import './styles/base.css';
 import { App } from './App';
 import { listenForInstallPrompt } from './hooks/useInstallPrompt';
+import { listenForChunkErrors } from './lib/chunkReload';
 import { startCatalog } from './store/catalog';
 
 // Start fetching the catalog (and the live connection) before the first render.
 startCatalog();
 // The browser's install prompt can fire before any "Instalar o app" button is on screen.
 listenForInstallPrompt();
+// A section's code that fails to load after a deploy reloads the page once instead of breaking it.
+listenForChunkErrors();
 
 // Service worker (installability + Web Push; it caches nothing). Production only, after the page
 // has loaded so it never competes with the first render; a failure only costs those features.
