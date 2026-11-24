@@ -53,11 +53,18 @@ export interface OrderRow {
   status: OrderStatus;
   updated_at: string;
   data: string;
+  /** Selected only by some queries; when present it is the truth about the customer link. */
+  customer_id?: string | null;
 }
 
-/** The stored row as an Order (number and status come from their columns). */
+/** The stored row as an Order (number and status come from their columns; so does the customer link when selected). */
 export function toOrder(row: OrderRow): Order {
-  return { ...(JSON.parse(row.data) as Omit<Order, 'number' | 'status'>), number: row.number, status: row.status };
+  const order: Order = { ...(JSON.parse(row.data) as Omit<Order, 'number' | 'status'>), number: row.number, status: row.status };
+  if (row.customer_id !== undefined) {
+    if (row.customer_id) order.customerId = row.customer_id;
+    else delete order.customerId;
+  }
+  return order;
 }
 
 /** What is stored in `data`: everything but the column-backed fields. */
@@ -202,7 +209,7 @@ export async function handleListOrders(ctx: Context): Promise<Response> {
   await requireSession(ctx);
   const since = new Date(Date.now() - LIST_DAYS * 24 * 3600_000).toISOString();
   const { results } = await withReadRetry(() =>
-    ctx.env.DB.prepare(`SELECT id, number, status, data FROM orders WHERE created_at >= ?1 OR status = 'enviado' ORDER BY created_at DESC LIMIT ?2`)
+    ctx.env.DB.prepare(`SELECT id, number, status, data, customer_id FROM orders WHERE created_at >= ?1 OR status = 'enviado' ORDER BY created_at DESC LIMIT ?2`)
       .bind(since, LIST_LIMIT)
       .all<OrderRow>(),
   );
@@ -212,7 +219,7 @@ export async function handleListOrders(ctx: Context): Promise<Response> {
 /** The order plus the stored `updated_at`, which every write checks (compare-and-swap on the whole row). */
 export async function readOrder(db: D1Database, id: string): Promise<{ order: Order; stamp: string }> {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new HttpError('not_found', 'Pedido não encontrado.');
-  const row = await withReadRetry(() => db.prepare('SELECT id, number, status, updated_at, data FROM orders WHERE id = ?1').bind(id).first<OrderRow>());
+  const row = await withReadRetry(() => db.prepare('SELECT id, number, status, updated_at, data, customer_id FROM orders WHERE id = ?1').bind(id).first<OrderRow>());
   if (!row) throw new HttpError('not_found', 'Pedido não encontrado.');
   return { order: toOrder(row), stamp: row.updated_at };
 }
@@ -232,7 +239,7 @@ async function readOrderAndStock(db: D1Database, id: string): Promise<{ order: O
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new HttpError('not_found', 'Pedido não encontrado.');
   const results = await withReadRetry(() =>
     db.batch<Record<string, unknown>>([
-      db.prepare('SELECT id, number, status, updated_at, data FROM orders WHERE id = ?1').bind(id),
+      db.prepare('SELECT id, number, status, updated_at, data, customer_id FROM orders WHERE id = ?1').bind(id),
       db.prepare('SELECT version, body FROM catalog_snapshot WHERE id = 1'),
       db.prepare('SELECT product_id, variant_id, size, qty FROM stock_levels'),
       db.prepare('SELECT product_id FROM stock_tracked'),
@@ -436,12 +443,21 @@ export async function handleCreateManualOrder(ctx: Context): Promise<Response> {
         db.prepare('SELECT version, body FROM catalog_snapshot WHERE id = 1'),
         db.prepare('SELECT product_id, variant_id, size, qty FROM stock_levels'),
         db.prepare('SELECT product_id FROM stock_tracked'),
+        db.prepare('SELECT data FROM customers WHERE id = ?1').bind(input.customerId ?? ''),
       ]),
     );
     const replay = results[0]?.results[0] as { request_hash: string; response: string } | undefined;
     if (replay) {
       if (replay.request_hash !== requestHash) throw new HttpError('bad_request', 'Esta chave de envio já foi usada para outro pedido.');
       return json(JSON.parse(replay.response), { status: 201 });
+    }
+    // A registered customer: the order takes her name and city (she may have been erased meanwhile).
+    let customer: { name: string; city: string } | null = null;
+    if (input.customerId) {
+      const row = results[4]?.results[0] as { data: string } | undefined;
+      if (!row) throw new HttpError('conflict', 'Esta cliente não está mais cadastrada. Escolha outra ou cadastre de novo.', { customerId: input.customerId });
+      const record = JSON.parse(row.data) as { name: string; city?: string };
+      customer = { name: record.name.slice(0, 80), city: (record.city ?? '').slice(0, 80) };
     }
     const snapshot = (results[1]?.results[0] as { version: number; body: string } | undefined) ?? (await ensureSeeded(db));
     const state: StockState = {
@@ -461,7 +477,8 @@ export async function handleCreateManualOrder(ctx: Context): Promise<Response> {
       status: input.status,
       createdAt: at,
       updatedAt: at,
-      customer: { name: input.name, city: input.city },
+      customer: customer ?? { name: input.name, city: input.city },
+      ...(input.customerId ? { customerId: input.customerId } : {}),
       ...(input.note ? { note: input.note } : {}),
       items: priced.items,
       totalCents: priced.totalCents,
@@ -495,10 +512,12 @@ export async function handleCreateManualOrder(ctx: Context): Promise<Response> {
           .bind(FIRST_ORDER_NUMBER),
         db
           .prepare(
-            `INSERT INTO orders (id, number, status, created_at, updated_at, total_cents, data)
-             SELECT ?1, value, ?2, ?3, ?3, ?4, ?5 FROM counters WHERE name = 'order' RETURNING number`,
+            `INSERT INTO orders (id, number, status, created_at, updated_at, total_cents, data, customer_id)
+             SELECT ?1, value, ?2, ?3, ?3, ?4, ?5, ?6 FROM counters WHERE name = 'order' RETURNING number`,
           )
-          .bind(order.id, order.status, at, order.totalCents, toData(order)),
+          .bind(order.id, order.status, at, order.totalCents, toData(order), order.customerId ?? null),
+        // The customer must still exist when the order lands (erased meanwhile: re-read and refuse).
+        ...(order.customerId ? [guard(db, 'EXISTS (SELECT 1 FROM customers WHERE id = ?1)', order.customerId)] : []),
         ...stockStatements,
         db
           .prepare(

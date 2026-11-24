@@ -19,6 +19,14 @@ export function WarrantyPage() {
         title={biz.warrantyMonths ? warrantyLabel(biz.warrantyMonths) : 'Garantia e trocas'}
         intro={biz.warrantyMonths ? `Todas as nossas peças têm ${warrantyLabel(biz.warrantyMonths).toLowerCase()} contra defeitos no banho.` : 'Nossas peças têm garantia contra defeitos de fabricação. Fale com a gente para saber os detalhes.'}
       />
+      {biz.warrantyTerms && (
+        <section aria-labelledby="regras" className="container-x mb-4 lg:mb-6">
+          <div className="max-w-3xl rounded-[12px] bg-champagne p-6">
+            <h2 id="regras" className="font-display text-display-m">Regras da garantia</h2>
+            <p className="mt-3 break-words whitespace-pre-line">{biz.warrantyTerms}</p>
+          </div>
+        </section>
+      )}
       <div className="container-x grid gap-4 md:grid-cols-2 lg:gap-6">
         <section aria-labelledby="coberto" className="rounded-[12px] border border-line bg-white p-6">
           <h2 id="coberto" className="font-display text-display-m">O que a garantia cobre</h2>

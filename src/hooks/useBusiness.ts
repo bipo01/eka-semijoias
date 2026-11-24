@@ -9,6 +9,8 @@ export interface ResolvedBusiness {
   showroom: string | null;
   openingHours: string | null;
   warrantyMonths: number | null;
+  /** What the warranty covers, as written by the owner (null when not filled in). */
+  warrantyTerms: string | null;
   hypoallergenic: boolean | null;
   shipsNationwide: boolean | null;
   installments: number | null;
@@ -29,6 +31,7 @@ export function useBusiness(): ResolvedBusiness {
     showroom: orNull(settings.showroom),
     openingHours: orNull(settings.openingHours),
     warrantyMonths: settings.warrantyMonths > 0 ? settings.warrantyMonths : null,
+    warrantyTerms: orNull(settings.warrantyTerms),
     hypoallergenic: business.hypoallergenic,
     shipsNationwide: business.shipsNationwide,
     installments: business.installments,

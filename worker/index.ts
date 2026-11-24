@@ -1,5 +1,6 @@
 import { handleChangePin, handleLogin, handleLogout, handleSessionStatus } from './auth';
 import { handleBackup, handleCatalog, handleChanges } from './catalog';
+import { handleCreateCustomer, handleDeleteCustomer, handleGetCustomer, handleLinkOrderCustomer, handleListCustomers, handleUpdateCustomer } from './customers';
 import { toHttpError } from './db';
 import type { Env } from './env';
 import { assertSameOrigin, errorResponse, HttpError, json } from './http';
@@ -52,6 +53,12 @@ const router = new Router()
   .on('POST', '/api/admin/orders/:id/status', handleOrderStatus)
   .on('POST', '/api/admin/orders/:id/anonymize', handleAnonymizeOrder)
   .on('DELETE', '/api/admin/orders/:id', handleDeleteOrder)
+  .on('POST', '/api/admin/orders/:id/customer', handleLinkOrderCustomer)
+  .on('GET', '/api/admin/customers', handleListCustomers)
+  .on('POST', '/api/admin/customers', handleCreateCustomer)
+  .on('GET', '/api/admin/customers/:id', handleGetCustomer)
+  .on('PUT', '/api/admin/customers/:id', handleUpdateCustomer)
+  .on('DELETE', '/api/admin/customers/:id', handleDeleteCustomer)
   .on('POST', '/api/admin/orders/:id/charge', handleCharge)
   .on('GET', '/api/admin/receipts/:id', handleGetReceipt)
   .on('GET', '/api/admin/push', handlePushStatus)

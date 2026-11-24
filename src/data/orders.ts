@@ -102,6 +102,8 @@ export const adminOrderRequestSchema = z.object({
     .optional()
     .transform((v) => (v?.trim() ? v.trim() : undefined)),
   status: z.enum(['enviado', 'confirmado']),
+  /** A registered customer (Painel → Clientes): the server takes the order's name and city from her record. */
+  customerId: z.string().max(64).optional(),
 });
 export type AdminOrderRequest = z.input<typeof adminOrderRequestSchema>;
 
@@ -185,6 +187,8 @@ export const orderSchema = z.object({
   createdAt: isoDate,
   updatedAt: isoDate,
   customer: z.object({ name: z.string().max(80), city: z.string().max(80) }),
+  /** The registered customer this order belongs to (Painel → Clientes); mirrors orders.customer_id. */
+  customerId: z.string().max(64).optional(),
   note: z.string().max(300).optional(),
   items: z.array(orderItemSchema).min(1).max(MAX_ORDER_ITEMS),
   totalCents: z.number().int().min(0),

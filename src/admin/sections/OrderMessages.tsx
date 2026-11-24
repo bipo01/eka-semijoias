@@ -13,15 +13,18 @@ import { messageItems, useMessages } from '../../hooks/useMessages';
 import { formatBRL } from '../../lib/format';
 import { buildPixPayload, pixTxid } from '../../lib/pix';
 import { whatsappUrl } from '../../lib/whatsapp';
+import { whatsappDigits } from '../lib/contact';
 import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
+import { warrantyVars } from '../lib/customers';
 import { paymentLink } from '../lib/orders';
 
 /*
  * Messages to the customer from an order: the owner picks the kind (charge,
  * reminder, paid, on its way, after-sale), a variation of her templates
  * (Painel → Mensagens), adjusts the text for this time and copies it or opens
- * WhatsApp. The customer's number is not stored: WhatsApp asks for the chat.
+ * WhatsApp. With a linked customer who has a WhatsApp, the chat with her opens
+ * directly; otherwise WhatsApp asks for the chat.
  */
 
 export async function copyText(text: string, done: string) {
@@ -36,6 +39,8 @@ export async function copyText(text: string, done: string) {
 /** Everything an order offers to its message templates. */
 export function useOrderMessage(order: Order) {
   const pix = useCatalog((s) => s.data.settings.pix);
+  const warrantyMonths = useCatalog((s) => s.data.settings.warrantyMonths);
+  const warrantyTerms = useCatalog((s) => s.data.settings.warrantyTerms);
   const compose = useMessages();
   return useMemo(() => {
     const charge = order.charge;
@@ -53,13 +58,14 @@ export function useOrderMessage(order: Order) {
       obs: order.note,
       link,
       pix: pixCode,
+      ...warrantyVars(order, { warrantyMonths, warrantyTerms }),
     };
     const items = messageItems(order.items.map((i) => ({ name: i.name, finish: FINISH_LABEL[i.finish], ...(i.size ? { size: i.size } : {}), qty: i.qty, lineCents: i.unitCents * i.qty })));
     return {
       link,
       compose: (type: MessageType, templateId?: string, extra: MessageVars = {}) => compose(type, { ...vars, ...extra }, { items, compactIfLong: false, ...(templateId ? { templateId } : {}) }),
     };
-  }, [order, pix, compose]);
+  }, [order, pix, compose, warrantyMonths, warrantyTerms]);
 }
 
 /** The kinds of message that make sense for an order right now (first = suggested). */
@@ -67,18 +73,34 @@ export function orderMessageTypes(order: Order): MessageType[] {
   const charged = !!order.charge;
   switch (order.status) {
     case 'confirmado':
-      return charged ? ['lembrete', 'cobranca'] : [];
+      return charged ? ['lembrete', 'cobranca', 'compra'] : ['compra'];
     case 'pago':
-      return ['pago', 'enviado', 'posvenda'];
+      return ['pago', 'compra', 'enviado', 'posvenda'];
     case 'entregue':
-      return ['posvenda', 'enviado', 'pago'];
+      return ['posvenda', 'enviado', 'pago', 'compra'];
     default:
       return [];
   }
 }
 
-/** Copy / open WhatsApp for a ready text. `quiet`: secondary styling when another action leads. */
-export function MessageActions({ text, quiet }: { text: string; quiet?: boolean }) {
+/**
+ * Copy / open WhatsApp for a ready text. `quiet`: secondary styling when another action leads.
+ * `phone` (the customer's WhatsApp, any format): the chat with her opens directly and leads.
+ */
+export function MessageActions({ text, quiet, phone }: { text: string; quiet?: boolean; phone?: string | undefined }) {
+  const digits = phone ? whatsappDigits(phone) : '';
+  if (digits) {
+    return (
+      <div className="flex flex-col gap-2">
+        <ButtonAnchor href={whatsappUrl(digits, text)} variant={quiet ? 'secondary' : 'primary'} block>
+          <WhatsAppIcon size={19} /> Enviar no WhatsApp
+        </ButtonAnchor>
+        <Button block variant={quiet ? 'ghost' : 'secondary'} onClick={() => void copyText(text, 'Mensagem copiada.')}>
+          <Copy size={18} strokeWidth={1.5} /> Copiar mensagem
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-2">
       <Button block variant={quiet ? 'secondary' : 'primary'} onClick={() => void copyText(text, 'Mensagem copiada. É só colar na conversa da cliente.')}>
@@ -95,7 +117,7 @@ export function MessageActions({ text, quiet }: { text: string; quiet?: boolean 
  * Pick a kind and a variation, adjust the text, send. Mounted per opening, so
  * every opening starts from the current templates.
  */
-export function OrderMessageComposer({ order, types, initialType }: { order: Order; types: MessageType[]; initialType?: MessageType }) {
+export function OrderMessageComposer({ order, types, initialType, phone }: { order: Order; types: MessageType[]; initialType?: MessageType; phone?: string | undefined }) {
   const settings = useCatalog((s) => s.data.settings.messages);
   const om = useOrderMessage(order);
   const [type, setType] = useState<MessageType>(initialType ?? types[0]!);
@@ -175,14 +197,14 @@ export function OrderMessageComposer({ order, types, initialType }: { order: Ord
           </button>
         </div>
       )}
-      <MessageActions text={text} />
+      <MessageActions text={text} phone={phone} />
       <p className="text-center text-xs text-ink-muted">Os textos e as variações ficam em Painel → Mensagens.</p>
     </div>
   );
 }
 
-/** "Enviar mensagem" in the order detail. */
-export function OrderMessageButton({ order }: { order: Order }) {
+/** "Enviar mensagem" in the order detail. `phone`: the linked customer's WhatsApp. */
+export function OrderMessageButton({ order, phone }: { order: Order; phone?: string | undefined }) {
   const [open, setOpen] = useState(false);
   const types = orderMessageTypes(order);
   if (!types.length) return null;
@@ -192,8 +214,27 @@ export function OrderMessageButton({ order }: { order: Order }) {
         <MessageCircleMore size={18} strokeWidth={1.5} /> Enviar mensagem
       </Button>
       <Sheet open={open} onClose={() => setOpen(false)} title={`Mensagem · pedido nº ${order.number}`} side="bottom" className="md-right">
-        {open && <OrderMessageComposer order={order} types={types} />}
+        {open && <OrderMessageComposer order={order} types={types} phone={phone} />}
       </Sheet>
     </>
+  );
+}
+
+/**
+ * "Compra registrada": opens by itself when a sale with a customer who has a WhatsApp is registered
+ * (confirmed manual order) or paid. WhatsApp never sends on its own: she taps send in the chat.
+ */
+export function PurchaseMessageSheet({ order, phone, firstName, open, onClose }: { order: Order; phone: string; firstName: string; open: boolean; onClose: () => void }) {
+  return (
+    <Sheet open={open} onClose={onClose} title="Compra registrada" side="bottom" className="md-right">
+      {open && (
+        <div className="flex flex-col gap-4">
+          <p className="rounded-[10px] bg-champagne px-3 py-2 text-sm">
+            Toque em “Enviar no WhatsApp”: a conversa{firstName ? ` com ${firstName}` : ''} abre com a mensagem pronta, e o envio é com você, no botão de enviar do WhatsApp.
+          </p>
+          <OrderMessageComposer order={order} types={['compra']} phone={phone} />
+        </div>
+      )}
+    </Sheet>
   );
 }

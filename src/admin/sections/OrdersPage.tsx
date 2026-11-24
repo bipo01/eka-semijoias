@@ -11,13 +11,25 @@ import { awaitingReview, canTransition, EDITABLE_ITEMS, HOLDS_STOCK, NEXT_STEP, 
 import { EditItemsSheet, NewOrderButton } from './OrderForms';
 import { ReceiptText } from 'lucide-react';
 import { ChargeSheet, PaymentSection } from './OrderPayment';
-import { OrderMessageButton } from './OrderMessages';
+import { OrderMessageButton, PurchaseMessageSheet } from './OrderMessages';
+import { OrderCustomerRow } from './CustomerLink';
+import { firstNameOf } from '../../data/messages';
 import { FINISH_LABEL } from '../../data/schema';
 import { formatBRL } from '../../lib/format';
 import { toast } from '../../store/ui';
 import { EmptyState } from '../FormBits';
 import { formatDateTime } from '../lib/contact';
+import { useCustomer, type Customer } from '../lib/customers';
 import { anonymizeOrder, changeOrderStatus, deleteOrder, useOrders } from '../lib/orders';
+
+/** Who gets the "Compra registrada" message that opens by itself. */
+interface PurchaseTarget {
+  phone: string;
+  firstName: string;
+}
+
+const purchaseTarget = (customer: Pick<Customer, 'name' | 'whatsapp'> | null | undefined): PurchaseTarget | null =>
+  customer?.whatsapp ? { phone: customer.whatsapp, firstName: firstNameOf(customer.name) } : null;
 
 type Filter = 'ativos' | 'comprovantes' | OrderStatus | 'todos';
 
@@ -71,11 +83,12 @@ function stockNote(from: OrderStatus, to: OrderStatus): string | null {
   return null;
 }
 
-function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) {
+function OrderDetail({ order, onClose, onPurchase }: { order: Order; onClose: () => void; onPurchase: (target: PurchaseTarget) => void }) {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<'cancelar' | 'anonimizar' | 'excluir' | null>(null);
   const [charging, setCharging] = useState(false);
   const [editing, setEditing] = useState(false);
+  const customer = useCustomer(order.anonymized ? undefined : order.customerId);
   const next = NEXT_STEP[order.status];
   const reviewing = awaitingReview(order) && order.status === 'confirmado';
   // Payment-led flow: from "em negociação" the main action is to charge by Pix (which confirms);
@@ -91,8 +104,11 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
     const problem = await changeOrderStatus(order, to);
     setBusy(false);
     setConfirm(null);
-    if (problem) toast(problem, { tone: 'error', duration: 12_000 });
-    else toast(STEP_DONE[to], { tone: 'success' });
+    if (problem) return toast(problem, { tone: 'error', duration: 12_000 });
+    toast(STEP_DONE[to], { tone: 'success' });
+    // Paid: the purchase summary (with the warranty) goes to her chat.
+    const target = to === 'pago' ? purchaseTarget(customer) : null;
+    if (target) onPurchase(target);
   }
 
   async function anonymize() {
@@ -127,6 +143,7 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
         <dd className="break-words">{order.customer.name || '—'}</dd>
         <dt className="text-ink-muted">Cidade</dt>
         <dd className="break-words">{order.customer.city || '—'}</dd>
+        <OrderCustomerRow order={order} />
         <dt className="text-ink-muted">Origem</dt>
         <dd>{order.source === 'manual' ? 'Registrado no painel' : 'Sacola do site'}</dd>
         <dt className="text-ink-muted">Pagamento</dt>
@@ -210,7 +227,7 @@ function OrderDetail({ order, onClose }: { order: Order; onClose: () => void }) 
             {UNDO_LABEL[order.status]}
           </Button>
         )}
-        <OrderMessageButton order={order} />
+        <OrderMessageButton order={order} phone={customer?.whatsapp || undefined} />
         {canCancel && (
           <Button variant="ghost" block disabled={busy} className="text-danger" onClick={() => setConfirm('cancelar')}>
             Cancelar pedido
@@ -288,6 +305,9 @@ export function OrdersPage() {
   const [filter, setFilter] = useState<Filter>('ativos');
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  // "Compra registrada" waiting to open over its order: a confirmed manual sale or an order just paid,
+  // for a customer with WhatsApp. Rendered after the order sheet, so it opens on top of it.
+  const [purchase, setPurchase] = useState<{ orderId: string; target: PurchaseTarget } | null>(null);
   const orders = useMemo(() => (state.status === 'ready' ? state.orders : []), [state]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, orders.filter((o) => matchesFilter(o, f.id)).length])) as Record<Filter, number>, [orders]);
   const q = query.trim().toLowerCase().replace(/^n[ºo°]?\s*/, '');
@@ -298,6 +318,7 @@ export function OrdersPage() {
   const open = orders.find((o) => o.id === openId) ?? (linked ? (orders.find((o) => String(o.number) === linked) ?? null) : null);
   const close = () => {
     setOpenId(null);
+    setPurchase(null);
     if (linked) setParams((p) => { p.delete('pedido'); return p; }, { replace: true });
   };
 
@@ -318,7 +339,9 @@ export function OrdersPage() {
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm text-ink-muted">Venda fechada pelo WhatsApp ou pessoalmente? Registre aqui.</p>
         <NewOrderButton
-          onCreated={(order) => {
+          onCreated={(order, customer) => {
+            const target = order.status === 'confirmado' ? purchaseTarget(customer) : null;
+            setPurchase(target ? { orderId: order.id, target } : null);
             setFilter('ativos');
             setQuery('');
             setOpenId(order.id);
@@ -389,8 +412,11 @@ export function OrdersPage() {
       )}
 
       <Sheet open={!!open} onClose={close} title={open ? `Pedido nº ${open.number}` : 'Pedido'} side="right">
-        {open && <OrderDetail key={open.id} order={open} onClose={close} />}
+        {open && <OrderDetail key={open.id} order={open} onClose={close} onPurchase={(target) => setPurchase({ orderId: open.id, target })} />}
       </Sheet>
+      {open && purchase?.orderId === open.id && (
+        <PurchaseMessageSheet order={open} phone={purchase.target.phone} firstName={purchase.target.firstName} open onClose={() => setPurchase(null)} />
+      )}
     </>
   );
 }
