@@ -170,7 +170,7 @@ function Kpi({ label, value, hint, tone, className }: { label: string; value: st
   return (
     <div className={cx('min-w-0 rounded-[12px] border border-line bg-white px-3 py-2.5 md:p-4', className)}>
       <p className="truncate text-sm text-ink-muted">{label}</p>
-      <p className={cx('price mt-0.5 text-[1.375rem] leading-tight md:text-[1.5rem]', tone === 'danger' ? 'text-danger' : tone === 'copper' ? 'text-copper' : 'text-ink')}>{value}</p>
+      <p className={cx('price mt-0.5 text-[1.375rem] leading-tight whitespace-nowrap md:text-[1.5rem]', tone === 'danger' ? 'text-danger' : tone === 'copper' ? 'text-copper' : 'text-ink')}>{value}</p>
       {hint && <p className="mt-0.5 text-xs text-ink-muted">{hint}</p>}
     </div>
   );
@@ -178,7 +178,7 @@ function Kpi({ label, value, hint, tone, className }: { label: string; value: st
 
 /** "3 em casa · 2 nas maletas" (or the sold-out / no-control wording) for a product row. */
 export function stockLine(stock: ProductStock): string {
-  const kits = stock.inKits > 0 ? ` · ${stock.inKits} nas maletas` : '';
+  const kits = stock.inKits > 0 ? ` · ${stock.inKits}\u00a0nas\u00a0maletas` : '';
   if (!stock.tracked) return `Sem controle de estoque${kits}`;
   if (stock.soldOut) return `Esgotada em casa${kits}`;
   return `${stock.home} em casa${kits}${stock.low ? ' · poucas unidades' : ''}`;
@@ -302,11 +302,11 @@ export function StockPage() {
       </p>
 
       {/* Phone: units in a row of three, the value on its own line, then the alerts; wide screens: one row. */}
-      <section aria-label="Resumo do estoque" className="mb-4 grid grid-cols-6 gap-2 lg:grid-cols-7">
+      <section aria-label="Resumo do estoque" className="mb-4 grid grid-cols-6 gap-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1.4fr)]">
         <Kpi className="col-span-2 lg:col-span-1" label="Em casa" value={String(overview.home)} hint="unidades" />
         <Kpi className="col-span-2 lg:col-span-1" label="Nas maletas" value={String(overview.inKits)} hint="unidades" />
         <Kpi className="col-span-2 lg:col-span-1" label="Total" value={String(overview.total)} hint="unidades" />
-        <Kpi className="col-span-6 lg:col-span-2" label="Valor em estoque" value={formatBRL(overview.valueCents)} hint="a preço de venda, com as maletas" />
+        <Kpi className="col-span-6 lg:col-span-1" label="Valor em estoque" value={formatBRL(overview.valueCents)} hint="a preço de venda, com as maletas" />
         <Kpi className="col-span-3 lg:col-span-1" label="Esgotadas" value={String(overview.soldOut)} tone={overview.soldOut ? 'danger' : undefined} hint="sem unidades em casa" />
         <Kpi className="col-span-3 lg:col-span-1" label="Poucas unidades" value={String(overview.low)} tone={overview.low ? 'copper' : undefined} hint={`até ${threshold} por acabamento`} />
       </section>

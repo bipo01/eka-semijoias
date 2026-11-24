@@ -170,6 +170,7 @@ export function ProductForm({ source }: { source: FormSource }) {
     <Sheet
       open
       side="full"
+      headerClassName="mx-auto w-full max-w-[760px]"
       title={draft.isNew ? (source.kind === 'copy' ? 'Nova peça (cópia)' : 'Nova peça') : 'Editar peça'}
       onClose={() => navigate(adminPath('produtos'))}
       footer={
@@ -262,7 +263,7 @@ export function ProductForm({ source }: { source: FormSource }) {
           />
           <TextField
             label="Preço promocional"
-            hint="Opcional"
+            optional
             inputMode="decimal"
             placeholder="0,00"
             icon={<span className="text-sm">R$</span>}

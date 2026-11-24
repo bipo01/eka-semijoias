@@ -36,7 +36,7 @@ describe('backup', () => {
   });
 
   it('summarizes counts in Portuguese', () => {
-    expect(summarize(catalogWithUpload())).toMatch(/^\d+ produtos, 6 categorias, 2 coleções, 1 revendedora$/);
+    expect(summarize(catalogWithUpload())).toMatch(/^\d+ produtos, 6 categorias, 1 revendedora$/);
   });
 
   it('upgrades a v1 backup, dropping the old PIN hash', () => {

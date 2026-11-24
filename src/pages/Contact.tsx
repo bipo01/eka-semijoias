@@ -21,11 +21,11 @@ export function ContactPage() {
       <ContentPageHeader header={contact.header} />
       <div className="container-x grid gap-6 lg:grid-cols-2 lg:gap-10">
         <div className="flex flex-col gap-4">
-          <ButtonAnchor href={whatsappUrl(biz.whatsapp, contactMessage)} size="lg" className="w-full sm:w-fit">
+          <ButtonAnchor href={whatsappUrl(biz.whatsapp, contactMessage)} size="lg" className="w-full sm:w-72">
             <WhatsAppIcon size={22} /> Chamar no WhatsApp
           </ButtonAnchor>
           {biz.instagramUrl && (
-            <ButtonAnchor href={biz.instagramUrl} variant="secondary" size="lg" className="w-full sm:w-fit">
+            <ButtonAnchor href={biz.instagramUrl} variant="secondary" size="lg" className="w-full sm:w-72">
               <InstagramIcon size={22} /> @{biz.instagram}
             </ButtonAnchor>
           )}

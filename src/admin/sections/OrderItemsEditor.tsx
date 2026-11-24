@@ -154,7 +154,7 @@ function Picker({ catalog, onAdd, onClose, addLabel }: { catalog: Catalog; onAdd
           ref={searchRef}
           type="search"
           autoFocus
-          placeholder="Buscar peça por nome ou referência"
+          placeholder="Buscar peça ou referência"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="min-h-12 w-full rounded-[10px] border border-line bg-white pr-3 pl-10 text-base placeholder:text-ink-muted focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"

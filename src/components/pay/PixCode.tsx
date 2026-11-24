@@ -69,10 +69,10 @@ export function PixCopyField({ code, id }: { code: string; id: string }) {
         id={id}
         ref={area}
         readOnly
-        rows={2}
+        rows={5}
         value={code}
         onFocus={(e) => e.currentTarget.select()}
-        className="w-full resize-none rounded-[10px] border border-line bg-ivory px-3 py-2 font-mono text-[11px] leading-relaxed break-all text-ink-muted focus:border-copper focus:outline-none"
+        className="w-full resize-none rounded-[10px] border border-line bg-ivory px-3 py-2 font-mono text-xs leading-relaxed break-all text-ink-muted [field-sizing:content] focus:border-copper focus:outline-none"
       />
     </div>
   );

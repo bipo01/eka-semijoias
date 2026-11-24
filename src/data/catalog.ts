@@ -68,6 +68,12 @@ export const BADGE_LABEL: Record<Exclude<ProductBadge, null>, string> = {
 export const sortedCategories = (data: Catalog): Category[] =>
   [...data.categories].sort((a, b) => a.order - b.order);
 
+/** Categories visitors can browse: an empty one would only lead to "Nenhuma peça encontrada". */
+export const categoriesWithProducts = (data: Catalog): Category[] => {
+  const used = new Set(data.products.map((p) => p.categoryId));
+  return sortedCategories(data).filter((c) => used.has(c.id));
+};
+
 export const byOrder = (a: Product, b: Product) => a.order - b.order;
 
 export function categoryProducts(data: Catalog, categoryId: string): Product[] {

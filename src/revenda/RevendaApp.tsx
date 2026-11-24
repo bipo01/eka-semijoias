@@ -40,7 +40,7 @@ const lineKey = (l: { productId: string; variantId: string; size: string }) => `
 function Shell({ children, onLogout }: { children: ReactNode; onLogout?: () => void }) {
   return (
     <div className="min-h-dvh bg-ivory">
-      <header className="mx-auto flex max-w-[560px] items-center gap-3 px-5 pt-6 pb-2">
+      <header className={cx('mx-auto flex max-w-[560px] items-center gap-3 px-5 pt-6 pb-2', !onLogout && 'justify-center')}>
         <Lockup className="h-9 w-auto" />
         <span className="eyebrow text-ink-muted">Revenda</span>
         {onLogout && (

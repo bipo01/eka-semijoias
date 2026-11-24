@@ -154,7 +154,7 @@ export function CustomerDetail({ id, onClose }: { id: string; onClose: () => voi
       </div>
 
       <section aria-labelledby={`compras-${customer.id}`}>
-        <h3 id={`compras-${customer.id}`} className="mb-2 text-sm font-medium">
+        <h3 id={`compras-${customer.id}`} className="mb-2 font-sans text-sm font-medium">
           Pedidos
         </h3>
         {loaded.status === 'loading' ? (

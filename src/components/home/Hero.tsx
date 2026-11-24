@@ -49,7 +49,7 @@ export function Hero() {
         </div>
       </div>
       <div className="relative z-10 -mt-36 px-[var(--gutter)] pb-8 md:order-1 md:mt-0 md:py-12 md:pr-0 md:pl-[max(var(--gutter),calc((100vw-1200px)/2))] lg:py-16">
-        <h1 id="hero-title" className="font-display text-display-xl break-words text-ink">
+        <h1 id="hero-title" className="font-display text-display-xl break-words text-ink md:text-display-l lg:text-display-xl">
           <HeroTitle title={hero.title} highlight={hero.highlight} />
         </h1>
         <span aria-hidden="true" className="mt-4 block h-px w-16 bg-rose" />

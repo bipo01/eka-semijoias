@@ -102,7 +102,8 @@ export function AdminShell() {
 
   useEffect(() => {
     activeTab.current?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
-  }, [section.path]);
+    // The open-order badge changes the strip's width: center again when it appears.
+  }, [section.path, openOrders]);
 
   return (
     <div className="min-h-dvh bg-ivory">
@@ -119,7 +120,8 @@ export function AdminShell() {
           )}
         </div>
         <nav aria-label="Seções do painel" className="no-scrollbar mx-auto max-w-[960px] overflow-x-auto px-4 pb-2.5">
-          <ul className="flex gap-1.5">
+          {/* Phone: one scrolling row (w-max keeps the right padding scrollable); wide screens: every tab visible. */}
+          <ul className="flex w-max gap-1.5 lg:w-auto lg:flex-wrap">
             {SECTIONS.map((s) => (
               <li key={s.path}>
                 <NavLink

@@ -102,7 +102,6 @@ export function summarize(state: Catalog & { leads?: unknown[] }): string {
   return [
     plural(state.products.length, 'produto', 'produtos'),
     plural(state.categories.length, 'categoria', 'categorias'),
-    plural(state.collections.length, 'coleção', 'coleções'),
     ...(state.leads ? [plural(state.leads.length, 'revendedora', 'revendedoras')] : []),
   ].join(', ');
 }
@@ -203,7 +202,7 @@ export function BackupPage() {
       <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4">
         <h2 className="font-display text-title">Exportar</h2>
         <p className="text-sm text-ink-muted">
-          Baixa um arquivo com o catálogo do site (peças, fotos enviadas, categorias, coleções, textos do site e informações da loja) e os cadastros de revendedoras. Atualmente:{' '}
+          Baixa um arquivo com o catálogo do site (peças, fotos enviadas, categorias, textos do site e informações da loja) e os cadastros de revendedoras. Atualmente:{' '}
           {summarize(data)}.
         </p>
         <Button
@@ -236,7 +235,7 @@ export function BackupPage() {
 
       <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4">
         <h2 className="font-display text-title">Restaurar catálogo inicial</h2>
-        <p className="text-sm text-ink-muted">Volta às peças, categorias, coleções e textos originais do site. O PIN e os cadastros de revendedoras continuam os mesmos.</p>
+        <p className="text-sm text-ink-muted">Volta às peças, categorias e textos originais do site. O PIN e os cadastros de revendedoras continuam os mesmos.</p>
         <Button variant="danger" onClick={() => setConfirmReset(true)} className="self-start" disabled={!!progress}>
           <RotateCcw size={18} strokeWidth={1.5} /> Restaurar catálogo inicial
         </Button>
@@ -326,7 +325,7 @@ export function BackupPage() {
         onCancel={() => !progress && setConfirmReset(false)}
       >
         <div className="flex flex-col gap-3">
-          <p>Peças, categorias, coleções, informações da loja e textos do site voltam ao início, para todas as clientes. O PIN e as revendedoras continuam os mesmos.</p>
+          <p>Peças, categorias, informações da loja e textos do site voltam ao início, para todas as clientes. O PIN e as revendedoras continuam os mesmos.</p>
           <Button variant="secondary" size="sm" onClick={() => void exportNow()} className="self-start">
             <Download size={16} strokeWidth={1.5} /> Exportar backup antes
           </Button>

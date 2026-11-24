@@ -94,7 +94,11 @@ export function ProductList({ products, categoryName, onReorder }: ProductListPr
                 </p>
                 <Price price={p.price} promoPrice={p.promoPrice} size="sm" className="mt-0.5" />
               </div>
-              <Switch checked={p.available} onChange={(v) => patchProduct(p.id, { available: v })} label={`Disponível: ${p.name}`} className="-mt-1" />
+              {/* Visible caption: on its own the switch did not say what it turns on and off (off = "Esgotado" on the site). */}
+              <div className="-mt-1 flex flex-col items-center">
+                <Switch checked={p.available} onChange={(v) => patchProduct(p.id, { available: v })} label={`Disponível: ${p.name}`} />
+                <span aria-hidden="true" className="-mt-1 text-xs text-ink-muted">{p.available ? 'À venda' : 'Esgotada'}</span>
+              </div>
               <div className="col-start-2 -ml-2.5 flex items-center">
                 <IconButton
                   label={`Destaque na home: ${p.name}`}

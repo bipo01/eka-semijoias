@@ -138,7 +138,7 @@ function PixSection({ view }: { view: PayView }) {
         </ol>
         <PixCopyField code={code} id="pix-code" />
         <div className="flex flex-col items-center gap-2 border-t border-line pt-5">
-          <p className="text-sm text-ink-muted">No computador? Leia o QR Code com o celular.</p>
+          <p className="text-center text-sm text-ink-muted">No computador? Leia o QR Code com o celular.</p>
           <QrCode value={code} label={`QR Code Pix de ${formatBRL(view.amountCents)}`} className="size-[188px] ring-1 ring-line" />
           <p className="text-center text-sm text-ink-muted">
             Recebedor: <span className="text-ink">{pixText(pix.name, 25)}</span>

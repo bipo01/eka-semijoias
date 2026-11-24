@@ -33,7 +33,7 @@ export function ResellersPage() {
 
   return (
     <div className="pb-16">
-      <section aria-labelledby="rev-title" className="lg:container-x lg:grid lg:grid-cols-2 lg:items-center lg:gap-12 lg:pt-10">
+      <section aria-labelledby="rev-title" className="lg:container-x lg:grid lg:grid-cols-2 lg:items-center lg:gap-16 lg:pt-10">
         <div className="relative lg:order-2">
           <div className="aspect-[4/3] overflow-hidden bg-champagne lg:rounded-[12px]">
             <img src={hero.src} srcSet={hero.srcSet} sizes="(min-width: 1024px) 50vw, 100vw" alt={page.hero.image.alt} width={1536} height={1024} fetchPriority="high" className="h-full w-full object-cover" />
@@ -101,7 +101,7 @@ export function ResellersPage() {
         </section>
       )}
 
-      <div className={cx('container-x mt-12 grid gap-12 lg:mt-20 lg:gap-16', page.faq.length ? 'lg:grid-cols-[1fr_1.1fr]' : 'lg:grid-cols-[minmax(0,42rem)] lg:justify-center')}>
+      <div className={cx('container-x mt-12 grid gap-12 lg:mt-20 lg:gap-16', page.faq.length ? 'lg:grid-cols-2' : 'lg:grid-cols-[minmax(0,42rem)] lg:justify-center')}>
         {page.faq.length > 0 && (
           <section aria-labelledby="rev-faq" className="min-w-0">
             <h2 id="rev-faq" className="mb-4 font-display text-display-m break-words md:text-display-l">{page.faqTitle}</h2>

@@ -172,7 +172,7 @@ export function LeadsPage({ onEffectivate }: { onEffectivate?: (lead: ResellerLe
                     </Button>
                   )}
                   {(statusOf(lead) === 'nova' || statusOf(lead) === 'analise' || statusOf(lead) === 'aprovada') && (
-                    <Button size="sm" variant="ghost" className="text-danger" disabled={reviewing === lead.id} onClick={() => void review(lead, 'recusada')}>
+                    <Button size="sm" variant="ghost-danger" disabled={reviewing === lead.id} onClick={() => void review(lead, 'recusada')}>
                       Recusar
                     </Button>
                   )}

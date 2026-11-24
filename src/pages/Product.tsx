@@ -199,7 +199,7 @@ function ProductView({ product }: { product: Product }) {
                 {sizeName}
                 {validSize && <span className="font-normal text-ink-muted">: {validSize}</span>}
               </legend>
-              <div role="radiogroup" aria-label={sizeName} aria-describedby={sizeError ? 'size-error' : undefined} className="flex flex-wrap gap-2">
+              <div role="radiogroup" aria-label={sizeName} aria-describedby={sizeError ? 'size-error' : undefined} className="grid grid-cols-6 gap-2">
                 {sizes.map((s) => {
                   const soldOut = sizeUnits(s) === 0;
                   return (
@@ -295,7 +295,7 @@ function ProductView({ product }: { product: Product }) {
 
           <TrustList items={trust} compact className="mt-6 border-y border-line py-5" />
 
-          <div className="mt-6 flex items-center justify-between gap-4 rounded-[12px] bg-champagne p-4">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-[12px] bg-champagne p-4">
             <p className="font-display text-title leading-snug">Ficou com alguma dúvida?</p>
             <ButtonAnchor href={whatsappUrl(biz.whatsapp, message('duvida', { peca: product.name, link_peca: productLink }))} variant="secondary" size="sm" className="shrink-0 bg-ivory/60">
               <WhatsAppIcon size={18} /> Fale com a gente
@@ -313,8 +313,8 @@ function ProductView({ product }: { product: Product }) {
           </div>
           <ul className="no-scrollbar flex snap-x snap-mandatory scroll-px-[var(--gutter)] gap-3 overflow-x-auto px-[var(--gutter)] lg:container-x lg:grid lg:grid-cols-4 lg:gap-5">
             {related.map((p) => (
-              <li key={p.id} className="w-[40%] shrink-0 snap-start sm:w-[30%] lg:w-auto">
-                <ProductCard product={p} compact sizes="(min-width: 1024px) 280px, 40vw" />
+              <li key={p.id} className="w-[44%] shrink-0 snap-start sm:w-[30%] lg:w-auto">
+                <ProductCard product={p} compact sizes="(min-width: 1024px) 280px, 44vw" />
               </li>
             ))}
           </ul>

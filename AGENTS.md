@@ -23,6 +23,7 @@ Hosting: **one Cloudflare Worker** (`wrangler.jsonc`) serves the built SPA (Work
 | `npm test -- --run` | Vitest unit tests (jsdom) |
 | `npm run e2e` | Playwright on Chromium (Pixel 7, desktop) and WebKit/Safari (iPhone 13, desktop Safari) against the real stack: builds, starts `wrangler dev` on a fresh local D1 (`.wrangler/e2e`). Includes a live-update test with two browsers. `E2E_BASE_URL=<url>` targets a running server. `--project=mobile-webkit` for a quick Safari pass. |
 | `QA_SCREENS=1 npx playwright test e2e/qa-screens.spec.ts --project=desktop-chromium` | Full-page screenshots of every route at 360/390/768/1280/1440 into `docs/qa/` |
+| `QA_FULL=1 npx playwright test e2e/qa-full.spec.ts --project=desktop-chromium` | Full visual QA: seeds local orders, a Pix charge, a reseller with a kit; screenshots of every public page, admin tab and editor, reseller panel and payment page at phone/tablet/desktop into `docs/qa/full/` (git-ignored) plus `layout-problems.json` (sideways scroll, cut text, off-screen controls) |
 | `npm run images` | One-off: regenerate `public/images` and `public/brand` from `assets/` (outputs are committed; CI does not run it) |
 
 CI (`.github/workflows/deploy.yml`): `npm ci` → typecheck → lint → unit → worker unit → integration → build; on `main` it also publishes the GitHub Pages forwarding page (`deploy/github-pages/index.html`). Cloudflare deploys are manual (`npm run deploy`). E2E is not in CI; run it locally before pushing UI changes.

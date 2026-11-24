@@ -100,7 +100,7 @@ function SalesChart({ buckets, monthly }: { buckets: Bucket[]; monthly: boolean 
           </div>
         ))}
       </div>
-      <div className="mt-1.5 flex gap-[2px] text-[11px] text-ink-muted" aria-hidden="true">
+      <div className="mt-1.5 flex gap-[2px] text-xs text-ink-muted" aria-hidden="true">
         {buckets.map((b, i) => (
           <span key={b.key} className="min-w-0 flex-1 overflow-visible text-center whitespace-nowrap">
             {i % every === 0 ? tick(b) : ''}

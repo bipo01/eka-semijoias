@@ -226,7 +226,7 @@ export function PaymentSection({ order, onCharge, phone }: { order: Order; onCha
             </p>
           )}
         </div>
-        {charge && <span className="price shrink-0 font-display text-[1.5rem] leading-none">{formatBRL(charge.amountCents)}</span>}
+        {charge && <span className="price shrink-0 text-xl leading-none">{formatBRL(charge.amountCents)}</span>}
       </div>
 
       {charge?.paidBy === 'mercadopago' && <p className="text-sm text-success">Pago pelo Pix automático: o Mercado Pago confirmou o valor exato.</p>}
@@ -266,7 +266,7 @@ export function PaymentSection({ order, onCharge, phone }: { order: Order; onCha
               <Link2 size={15} strokeWidth={1.5} aria-hidden="true" /> Copiar link
             </button>
             <button type="button" className="min-h-11 text-sm text-copper underline underline-offset-4" onClick={onCharge}>
-              Alterar valor
+              Alterar frete ou desconto
             </button>
           </div>
         </div>

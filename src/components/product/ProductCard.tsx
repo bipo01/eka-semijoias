@@ -61,7 +61,8 @@ export function ProductCard({ product, priority, sizes = CARD_SIZES, compact }: 
           )}
         </div>
         {badge && (
-          <span className={cx('eyebrow absolute top-2.5 left-2.5 rounded-full px-2.5 py-1 normal-case tracking-[0.02em]', badge === 'esgotado' ? 'bg-white/90 text-ink' : 'bg-copper text-white')}>
+          // Narrow cards (2 columns on a phone, "Complete o look"): a smaller badge that never runs under the heart.
+          <span className={cx('absolute top-2.5 left-2.5 max-w-[calc(100%-3.5rem)] truncate rounded-full px-2 py-1 text-[0.6875rem] leading-[1.4] font-medium tracking-[0.02em] sm:px-2.5 sm:text-xs', badge === 'esgotado' ? 'bg-white/90 text-ink' : 'bg-copper text-white')}>
             {BADGE_LABEL[badge]}
           </span>
         )}
@@ -92,7 +93,8 @@ export function ProductCard({ product, priority, sizes = CARD_SIZES, compact }: 
         )}
       </div>
       <div className={cx('flex flex-col gap-1.5', compact ? 'pt-2' : 'pt-3')}>
-        <h3 className="font-sans text-[0.9375rem] leading-snug text-ink">
+        {/* Room for two lines on every card, so swatches and prices line up across a row. */}
+        <h3 className="min-h-[2.75em] font-sans text-[0.9375rem] leading-snug text-ink">
           <Link to={`/produto/${product.slug}`} className="line-clamp-2 after:absolute after:inset-0 after:content-[''] hover:text-copper focus-visible:outline-none [&:focus-visible]:after:rounded-[12px] [&:focus-visible]:after:outline-2 [&:focus-visible]:after:outline-copper">
             {product.name}
           </Link>

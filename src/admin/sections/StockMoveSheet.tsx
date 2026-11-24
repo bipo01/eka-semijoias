@@ -54,7 +54,7 @@ function PiecePicker({ products, data, onPick }: { products: Product[]; data: St
         <input
           id="move-piece-search"
           type="search"
-          placeholder="Buscar peça por nome ou referência"
+          placeholder="Buscar peça ou referência"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="min-h-12 w-full rounded-[10px] border border-line bg-white pr-3 pl-10 text-base placeholder:text-ink-muted focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"

@@ -29,15 +29,21 @@ export function Gallery({ images, name, caption }: { images: ProductImage[]; nam
   useEffect(() => {
     const el = rail.current;
     if (!el) return;
-    const items = Array.from(el.children) as HTMLElement[];
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) if (e.isIntersecting) setActive(items.indexOf(e.target as HTMLElement));
-      },
-      { root: el, threshold: 0.6 },
-    );
-    items.forEach((i) => observer.observe(i));
-    return () => observer.disconnect();
+    // From the scroll position, not visibility: on a tablet the slides are 60% wide, so two of
+    // them are "mostly visible" at once and the dot jumped to the second photo.
+    const update = () => {
+      // Hidden on desktop (thumbnails own the active photo there): leave it alone.
+      if (!el.clientWidth) return;
+      const items = el.children;
+      const max = el.scrollWidth - el.clientWidth;
+      if (items.length < 2 || max <= 0) return setActive(0);
+      const step = (items[1] as HTMLElement).offsetLeft - (items[0] as HTMLElement).offsetLeft;
+      setActive(el.scrollLeft >= max - 2 ? items.length - 1 : Math.max(0, Math.min(items.length - 1, Math.round(el.scrollLeft / Math.max(1, step)))));
+    };
+    update();
+    // A few reads per scroll event; React skips the render when the index did not change.
+    el.addEventListener('scroll', update, { passive: true });
+    return () => el.removeEventListener('scroll', update);
   }, [key]);
 
   if (!images.length) return <Img src="" alt={name} frameClassName="rounded-[12px]" />;

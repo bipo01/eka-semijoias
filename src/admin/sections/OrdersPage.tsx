@@ -147,7 +147,7 @@ function OrderDetail({ order, onClose, onPurchase }: { order: Order; onClose: ()
         <dt className="text-ink-muted">Origem</dt>
         <dd>{order.source === 'manual' ? 'Registrado no painel' : 'Sacola do site'}</dd>
         <dt className="text-ink-muted">Pagamento</dt>
-        <dd>{order.charge ? `Pix · ${formatBRL(order.charge.amountCents)}` : order.pix ? 'Pix (mostrado à cliente)' : 'A combinar'}</dd>
+        <dd>{order.charge ? `Cobrança Pix de ${formatBRL(order.charge.amountCents)}` : order.pix ? 'Pix (mostrado à cliente)' : 'A combinar'}</dd>
         {order.note && (
           <>
             <dt className="text-ink-muted">Observação</dt>
@@ -158,7 +158,7 @@ function OrderDetail({ order, onClose, onPurchase }: { order: Order; onClose: ()
 
       <section aria-label="Peças do pedido">
         <div className="mb-2 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-medium">Peças</h3>
+          <h3 className="font-sans text-sm font-medium">Peças</h3>
           {EDITABLE_ITEMS.has(order.status) && (
             <button type="button" className="min-h-9 text-sm text-copper underline underline-offset-4" onClick={() => setEditing(true)}>
               Editar peças
@@ -186,7 +186,8 @@ function OrderDetail({ order, onClose, onPurchase }: { order: Order; onClose: ()
           ))}
         </ul>
         <div className="flex items-baseline justify-between pt-3">
-          <span>Total</span>
+          {/* Pieces only: shipping and discount live in the Pix charge below. */}
+          <span>{order.charge ? 'Total das peças' : 'Total'}</span>
           <span className="price text-xl">{formatBRL(order.totalCents)}</span>
         </div>
       </section>
@@ -219,6 +220,7 @@ function OrderDetail({ order, onClose, onPurchase }: { order: Order; onClose: ()
                 {busy ? 'Salvando…' : next.label}
               </Button>
               {stockNote(order.status, next.to) && <p className="text-center text-sm text-ink-muted">{stockNote(order.status, next.to)}</p>}
+              {next.to === 'pago' && <p className="text-center text-sm text-ink-muted">Confira no app do banco se o valor entrou antes de marcar.</p>}
             </>
           )
         )}
@@ -229,14 +231,14 @@ function OrderDetail({ order, onClose, onPurchase }: { order: Order; onClose: ()
         )}
         <OrderMessageButton order={order} phone={customer?.whatsapp || undefined} />
         {canCancel && (
-          <Button variant="ghost" block disabled={busy} className="text-danger" onClick={() => setConfirm('cancelar')}>
+          <Button variant="ghost-danger" block disabled={busy} onClick={() => setConfirm('cancelar')}>
             Cancelar pedido
           </Button>
         )}
       </div>
 
       <section aria-labelledby={`hist-${order.id}`}>
-        <h3 id={`hist-${order.id}`} className="mb-2 text-sm font-medium">Histórico</h3>
+        <h3 id={`hist-${order.id}`} className="mb-2 font-sans text-sm font-medium">Histórico</h3>
         <ol className="flex flex-col gap-1.5 border-l border-line pl-4 text-sm">
           {[...order.history].reverse().map((h, i) => (
             <li key={`${h.at}-${i}`} className="flex flex-wrap justify-between gap-x-3">
@@ -394,7 +396,7 @@ export function OrdersPage() {
                     {order.customer.city && <span className="text-ink-muted"> · {order.customer.city}</span>}
                   </p>
                   <p className="text-sm text-ink-muted">
-                    {formatDateTime(order.createdAt)} · {unitsOf(order)} {unitsOf(order) === 1 ? 'peça' : 'peças'}
+                    <span className="whitespace-nowrap">{formatDateTime(order.createdAt)}</span><span className="whitespace-nowrap"> · {unitsOf(order)} {unitsOf(order) === 1 ? 'peça' : 'peças'}</span>
                   </p>
                 </div>
                 <span className="price shrink-0 text-lg">{formatBRL(order.charge?.amountCents ?? order.totalCents)}</span>

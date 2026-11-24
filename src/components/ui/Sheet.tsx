@@ -15,6 +15,8 @@ interface SheetProps {
   side?: SheetSide;
   /** Extra class on the dialog, e.g. 'md-right' to become a drawer on tablets/desktop. */
   className?: string;
+  /** Extra classes for the title row (e.g. to line it up with a centered form). */
+  headerClassName?: string;
   children: ReactNode;
   footer?: ReactNode;
   headerExtra?: ReactNode;
@@ -26,7 +28,7 @@ interface SheetProps {
  * Modal sheet on top of the native <dialog> element: it provides the focus
  * trap, inert background, Esc handling and focus return.
  */
-export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', className, children, footer, headerExtra, initialFocus }: SheetProps) {
+export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', className, headerClassName, children, footer, headerExtra, initialFocus }: SheetProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -82,7 +84,7 @@ export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', classN
       {(open || mounted) && (
         <div ref={contentRef} tabIndex={-1} className={cx('flex max-h-[inherit] flex-col outline-none', side !== 'center' && 'h-full')} style={side === 'center' ? { maxHeight: 'calc(100dvh - 32px)' } : undefined}>
           {side === 'bottom' && <div aria-hidden="true" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line md:hidden" />}
-          <div className={cx('flex shrink-0 items-center gap-2 px-5 pt-3 pb-2', hideTitle && 'justify-end')}>
+          <div className={cx('flex shrink-0 items-center gap-2 px-5 pt-3 pb-2', hideTitle && 'justify-end', headerClassName)}>
             <h2 id={titleId} className={cx('font-display text-display-m flex-1', hideTitle && 'sr-only')}>
               {title}
             </h2>

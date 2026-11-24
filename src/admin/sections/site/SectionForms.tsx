@@ -108,11 +108,11 @@ function InstagramPhotos() {
         addLabel="Adicionar foto"
         onAdd={() => setAdding(true)}
         empty="Sem fotos, a faixa do Instagram não aparece."
-        renderItem={(item, i, p) => {
+        renderItem={(item, _i, p) => {
           const key = pathKey(p);
           return (
             <ImageField
-              label={`Foto ${i + 1}`}
+              label="Foto"
               ratio="1 / 1"
               value={item}
               onChange={(img) => img && set(p, { ...img, id: item.id })}

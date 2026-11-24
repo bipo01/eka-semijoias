@@ -188,7 +188,7 @@ export function SettleForm({ kit, sales, onDone }: { kit: Kit; sales: ResellerSa
   return (
     <div className="flex flex-col gap-5">
       <section aria-label="Peças devolvidas">
-        <h3 className="mb-2 text-sm font-medium">Quantas voltaram de cada peça?</h3>
+        <h3 className="mb-2 font-sans text-sm font-medium">Quantas voltaram de cada peça?</h3>
         <ul className="divide-y divide-line border-y border-line">
           {lines.map((l) => (
             <li key={keyOf(l)} className="flex items-center justify-between gap-3 py-3">

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronRight, Search } from 'lucide-react';
+import { ChevronRight, Plus, Search } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Sheet } from '../../components/ui/Sheet';
 import { formatBRL } from '../../lib/format';
@@ -64,8 +64,8 @@ export function CustomersPage() {
         <p className="text-sm text-ink-muted">
           {customers.length ? `${customers.length} ${customers.length === 1 ? 'cliente cadastrada' : 'clientes cadastradas'}.` : 'Cadastre quem compra com você.'}
         </p>
-        <Button size="sm" onClick={() => setCreating(true)}>
-          Nova cliente
+        <Button size="sm" onClick={() => setCreating(true)} className="shrink-0 whitespace-nowrap">
+          <Plus size={18} strokeWidth={1.75} aria-hidden="true" /> Nova cliente
         </Button>
       </div>
       <div className="relative mb-4">
@@ -78,7 +78,7 @@ export function CustomersPage() {
           type="search"
           inputMode="search"
           autoComplete="off"
-          placeholder="Buscar por nome, WhatsApp ou cidade"
+          placeholder="Nome, cidade ou WhatsApp"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="min-h-12 w-full rounded-[10px] border border-line bg-white pr-3 pl-10 text-base placeholder:text-ink-muted focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"

@@ -117,7 +117,7 @@ export function VariantsEditor({ draft, update, errors }: VariantsEditorProps) {
             </div>
           </div>
 
-          <TextField label="Código de referência" optional hint="Aparece como “Ref.” na página da peça. Pode ser o código do fornecedor ou um seu, ex.: EKA-BR-001." maxLength={40} value={v.sku} onChange={(e) => patchVariant(v.id, { sku: e.target.value })} />
+          <TextField label="Código de referência" optional hint="Aparece como “Ref.” na página da peça. Pode ser o código do fornecedor ou um seu, ex.: EKA‑BR‑001." maxLength={40} value={v.sku} onChange={(e) => patchVariant(v.id, { sku: e.target.value })} />
           <SwitchRow label={`Disponível em ${FINISH_LABEL[v.finish]}`} checked={v.available} onChange={(available) => patchVariant(v.id, { available })} />
         </fieldset>
       ))}

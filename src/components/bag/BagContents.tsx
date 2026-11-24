@@ -310,7 +310,8 @@ export function BagContents({ onNavigate, variant }: { onNavigate?: () => void; 
             className={cx(inputClass, 'min-h-12 resize-none py-3 leading-normal')}
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        {/* One field per line: side by side, a full name or a long city did not fit on a phone. */}
+        <div className="grid grid-cols-1 gap-3">
           <div>
             <div className="relative">
               <label className="sr-only" htmlFor={`bag-name-${variant}`}>Seu nome</label>

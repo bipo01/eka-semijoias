@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react';
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { Button } from '../../components/ui/Button';
 import { TextArea, TextField } from '../../components/ui/Field';
@@ -121,7 +122,7 @@ function NewOrderForm({ onDone }: { onDone: (order: Order, customer: Customer | 
       <p className="text-sm text-ink-muted">Para vendas que chegaram direto pelo WhatsApp ou pessoalmente. Os preços vêm do catálogo.</p>
       <OrderItemsEditor lines={lines} onChange={setLines} />
       <section aria-labelledby="new-order-customer" className="flex flex-col gap-3">
-        <h3 id="new-order-customer" className="text-sm font-medium">
+        <h3 id="new-order-customer" className="font-sans text-sm font-medium">
           Cliente
         </h3>
         {mode === 'pick' && picked ? (
@@ -199,8 +200,8 @@ export function NewOrderButton({ onCreated }: { onCreated: (order: Order, custom
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        Novo pedido
+      <Button size="sm" onClick={() => setOpen(true)} className="shrink-0 whitespace-nowrap">
+        <Plus size={18} strokeWidth={1.75} aria-hidden="true" /> Novo pedido
       </Button>
       <Sheet open={open} onClose={() => setOpen(false)} title="Novo pedido" side="right">
         {open && (

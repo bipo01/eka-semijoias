@@ -304,7 +304,7 @@ function StockSettings() {
         wrapperClassName="max-w-xs"
         onChange={(e) => setValue(e.target.value.replace(/\D/g, ''))}
       />
-      <Button type="submit" variant="secondary" className="self-start" disabled={busy} aria-busy={busy}>
+      <Button type="submit" className="self-start" disabled={busy} aria-busy={busy}>
         {busy ? 'Salvando…' : 'Salvar'}
       </Button>
     </form>
@@ -379,7 +379,7 @@ function PinSettings() {
         onChange={(e) => setConfirm(digitsOnly(e.target.value))}
         error={errors.confirm}
       />
-      <Button type="submit" variant="secondary" className="self-start" disabled={busy} aria-busy={busy}>
+      <Button type="submit" className="self-start" disabled={busy} aria-busy={busy}>
         {busy ? 'Alterando…' : 'Alterar PIN'}
       </Button>
     </form>

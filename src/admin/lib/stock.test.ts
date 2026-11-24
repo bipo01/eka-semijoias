@@ -83,10 +83,10 @@ describe('matchesFilter', () => {
 
 describe('stock wording', () => {
   it('describes a product row', () => {
-    expect(stockLine({ tracked: true, home: 3, inKits: 2, soldOut: false, low: false })).toBe('3 em casa · 2 nas maletas');
+    expect(stockLine({ tracked: true, home: 3, inKits: 2, soldOut: false, low: false })).toBe('3 em casa · 2\u00a0nas\u00a0maletas');
     expect(stockLine({ tracked: true, home: 1, inKits: 0, soldOut: false, low: true })).toBe('1 em casa · poucas unidades');
     expect(stockLine({ tracked: true, home: 0, inKits: 0, soldOut: true, low: false })).toBe('Esgotada em casa');
-    expect(stockLine({ tracked: false, home: 0, inKits: 4, soldOut: false, low: false })).toBe('Sem controle de estoque · 4 nas maletas');
+    expect(stockLine({ tracked: false, home: 0, inKits: 4, soldOut: false, low: false })).toBe('Sem controle de estoque · 4\u00a0nas\u00a0maletas');
   });
 
   it('names the order or the kit of a movement', () => {

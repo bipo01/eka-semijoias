@@ -101,7 +101,7 @@ export function ShowcasePage() {
               <span aria-hidden="true" className="mt-1 h-px w-24 bg-rose/60" />
             </div>
             {view.items.length ? (
-              <ul className="grid grid-cols-2 gap-x-4 gap-y-8 md:grid-cols-3 lg:grid-cols-4">
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-8 md:grid-cols-4">
                 {view.items.map((item) => (
                   <li key={`${item.productId}|${item.variantId}|${item.size}`} className="flex flex-col gap-2">
                     {item.image ? (

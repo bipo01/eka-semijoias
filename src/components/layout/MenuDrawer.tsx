@@ -1,6 +1,6 @@
 import { ChevronRight, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { sortedCategories } from '../../data/catalog';
+import { categoriesWithProducts } from '../../data/catalog';
 import { useBusiness } from '../../hooks/useBusiness';
 import { useMessages } from '../../hooks/useMessages';
 import { useSection } from '../../hooks/useSection';
@@ -33,7 +33,7 @@ export function MenuDrawer() {
                 <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" />
               </Link>
             </li>
-            {sortedCategories(data).map((c) => (
+            {categoriesWithProducts(data).map((c) => (
               <li key={c.id}>
                 <Link to={`/catalogo/${c.slug}`} onClick={close} className={linkRow}>
                   <span className="font-display text-title">{c.name}</span>

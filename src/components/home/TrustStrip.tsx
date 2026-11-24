@@ -27,9 +27,10 @@ export function TrustList({ items, className, compact }: { items: TrustItem[]; c
   return (
     <ul className={cx('grid divide-x divide-line', className)} style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
       {items.map((item) => (
-        <li key={item.label} className={cx('flex flex-col items-center gap-2 px-2 text-center text-ink lg:flex-row lg:justify-center lg:gap-3 lg:text-left', compact ? 'text-[0.8125rem] leading-tight' : 'text-sm leading-tight lg:text-[0.9375rem]')}>
+        <li key={item.label} className={cx('flex flex-col items-center gap-2 px-2 text-center text-ink', compact ? 'text-[0.8125rem] leading-tight' : 'text-sm leading-tight lg:flex-row lg:justify-center lg:gap-3 lg:text-left lg:text-[0.9375rem]')}>
           <span className="text-copper" aria-hidden="true">{item.icon}</span>
-          <span className="max-w-[9rem] lg:max-w-none">{item.label}</span>
+          {/* Compact (product page column): icon over text at every width; side by side the labels broke mid-phrase. */}
+          <span className={cx('max-w-[9rem]', !compact && 'lg:max-w-none')}>{item.label}</span>
         </li>
       ))}
     </ul>

@@ -2,7 +2,7 @@ import { forwardRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes } from
 import { Link, type LinkProps } from 'react-router-dom';
 import { cx } from './cx';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'on-dark';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'ghost-danger' | 'danger' | 'on-dark';
 export type ButtonSize = 'md' | 'sm' | 'lg';
 
 export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize = 'md', block = false): string {
@@ -16,6 +16,8 @@ export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize
     variant === 'primary' && 'bg-copper text-white hover:bg-copper-dark active:bg-copper-dark',
     variant === 'secondary' && 'border border-copper text-copper bg-transparent hover:bg-champagne',
     variant === 'ghost' && 'text-ink hover:bg-champagne',
+    // A text color passed in className would lose to text-ink (same specificity): destructive ghosts get their own variant.
+    variant === 'ghost-danger' && 'text-danger hover:bg-[#f6e9e6]',
     variant === 'danger' && 'border border-danger text-danger bg-transparent hover:bg-[#f6e9e6]',
     variant === 'on-dark' && 'border border-rose-light text-rose-light hover:bg-white/5',
     block && 'w-full',

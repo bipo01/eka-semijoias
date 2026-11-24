@@ -190,8 +190,10 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
         <dd>{reseller.status !== 'ativa' ? (reseller.status === 'pausada' ? 'Acesso pausado' : 'Acesso encerrado') : reseller.hasPin ? `Painel ativo${reseller.lastSeenAt ? ` · visto ${formatDateTime(reseller.lastSeenAt)}` : ''}` : invitePendingUntil ? `Convite válido até ${formatDateTime(invitePendingUntil)}` : 'Sem convite válido'}</dd>
       </dl>
       {acceptances[0] && (
-        <details className="text-sm text-ink-muted">
-          <summary className="cursor-pointer">Registro do aceite</summary>
+        <details className="group text-sm text-ink-muted">
+          <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+            <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="transition-transform group-open:rotate-90" /> Registro do aceite
+          </summary>
           <p className="mt-2 break-all">
             Nome digitado: {acceptances[0].typedName} · {formatDateTime(acceptances[0].acceptedAt)} · versão {acceptances[0].version} · SHA-256 do texto: {acceptances[0].textSha256}
           </p>
@@ -203,9 +205,12 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
           <InviteMessage reseller={reseller} token={invite} />
         ) : (
           reseller.status === 'ativa' && (
-            <Button variant="secondary" block disabled={busy} onClick={() => void regenerate()}>
-              <KeyRound size={18} strokeWidth={1.5} /> {reseller.hasPin ? 'Gerar novo acesso (esqueceu o PIN)' : 'Gerar novo convite'}
-            </Button>
+            <>
+              <Button variant="secondary" block disabled={busy} onClick={() => void regenerate()}>
+                <KeyRound size={18} strokeWidth={1.5} /> {reseller.hasPin ? 'Gerar novo acesso' : 'Gerar novo convite'}
+              </Button>
+              {reseller.hasPin && <p className="text-center text-sm text-ink-muted">Use se ela esqueceu o PIN.</p>}
+            </>
           )
         )}
         <Button variant="ghost" block onClick={() => void copyText(showcaseLink(reseller.slug), 'Link do mostruário copiado.')}>
@@ -556,8 +561,8 @@ export function ResellersPage() {
           <>
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-sm text-ink-muted">Aprove uma ficha ou cadastre direto.</p>
-              <Button size="sm" onClick={() => setCreating({})}>
-                Nova revendedora
+              <Button size="sm" onClick={() => setCreating({})} className="shrink-0 whitespace-nowrap">
+                <Plus size={18} strokeWidth={1.75} aria-hidden="true" /> Nova revendedora
               </Button>
             </div>
             {list.length ? (

@@ -8,7 +8,7 @@ import { WhatsAppIcon } from '../components/ui/Icons';
 import { Chip, SwatchDot, Switch } from '../components/ui/Misc';
 import { Sheet } from '../components/ui/Sheet';
 import { cx } from '../components/ui/cx';
-import { sortedCategories } from '../data/catalog';
+import { categoriesWithProducts } from '../data/catalog';
 import { FINISHES, FINISH_LABEL, type Finish } from '../data/schema';
 import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -91,12 +91,14 @@ export function CatalogPage() {
         <BareInput id="catalog-search" type="search" enterKeyHint="search" placeholder="Buscar peças" icon={<Search size={20} strokeWidth={1.5} />} value={query} onChange={(e) => setQuery(e.target.value)} />
       </form>
 
-      <nav aria-label="Categorias" className="-mx-[var(--gutter)] mt-4">
-        <ul className="no-scrollbar flex gap-2 overflow-x-auto px-[var(--gutter)] py-1">
+      {/* Desktop: category chips and Filtrar/Ordenar share one row. */}
+      <div className="lg:mt-4 lg:flex lg:items-center lg:justify-between lg:gap-6">
+        <nav aria-label="Categorias" className="-mx-[var(--gutter)] mt-4 lg:mx-0 lg:mt-0 lg:min-w-0 lg:flex-1">
+          <ul className="no-scrollbar flex gap-2 overflow-x-auto px-[var(--gutter)] py-1 lg:px-0">
           <li>
             <Link to={`/catalogo${search}`} aria-current={!category ? 'page' : undefined} className={chipLink(!category)}>Todos</Link>
           </li>
-          {sortedCategories(data).map((c) => (
+          {categoriesWithProducts(data).map((c) => (
             <li key={c.id}>
               <Link to={`/catalogo/${c.slug}${search}`} aria-current={category?.id === c.id ? 'page' : undefined} className={chipLink(category?.id === c.id)}>
                 {c.name}
@@ -106,13 +108,14 @@ export function CatalogPage() {
         </ul>
       </nav>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:flex lg:justify-end">
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:mt-0 lg:flex lg:shrink-0">
         <Button variant="secondary" size="sm" onClick={() => setFilterOpen(true)} className="lg:min-w-40">
           <SlidersHorizontal size={18} strokeWidth={1.5} aria-hidden="true" /> Filtrar{activeCount > 0 && <span className="price">({activeCount})</span>}
         </Button>
         <Button variant="secondary" size="sm" onClick={() => setSortOpen(true)} className="lg:min-w-40">
           <ArrowUpDown size={18} strokeWidth={1.5} aria-hidden="true" /> {filters.sort === 'destaques' ? 'Ordenar' : SORTS.find((s) => s.value === filters.sort)!.label}
         </Button>
+        </div>
       </div>
 
       {activeChips.length > 0 && (
@@ -145,8 +148,9 @@ export function CatalogPage() {
       ) : (
         <div className="mx-auto mt-12 flex max-w-sm flex-col items-center gap-3 text-center">
           <p className="font-display text-display-m">Nenhuma peça encontrada</p>
-          <p className="text-ink-muted">Tente outra busca ou limpe os filtros.</p>
-          {(activeCount > 0 || filters.q || category) && (
+          {/* An empty category with no filter on: nothing to clear, just say so. */}
+          <p className="text-ink-muted">{activeCount > 0 || filters.q ? 'Tente outra busca ou limpe os filtros.' : 'Ainda não temos peças nesta categoria.'}</p>
+          {(activeCount > 0 || filters.q) && (
             <Button
               variant="secondary"
               onClick={() => {

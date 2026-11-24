@@ -235,7 +235,7 @@ export function PushSettings() {
 
       {status.devices.length > 0 && (
         <div>
-          <h3 className="mb-2 text-sm font-medium">Aparelhos que recebem os avisos</h3>
+          <h3 className="mb-2 font-sans text-sm font-medium">Aparelhos que recebem os avisos</h3>
           <ul className="divide-y divide-line rounded-[10px] border border-line">
             {status.devices.map((d) => (
               <li key={d.id} className="flex items-center gap-3 p-3">
