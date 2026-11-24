@@ -117,6 +117,8 @@ test('catalog filters live in the URL and survive back navigation', async ({ pag
   await open(page, '/catalogo');
   await page.getByRole('button', { name: /^Filtrar/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Filtrar' });
+  // The panel really shows, with its content (Safari on iOS 26 once drew bottom sheets 0 px tall).
+  await expect.poll(async () => (await sheet.boundingBox())?.height ?? 0).toBeGreaterThan(300);
   await sheet.getByRole('button', { name: /Ródio negro/ }).click();
   await sheet.getByRole('button', { name: /^Ver \d+ peças?$/ }).click();
   await expect(page).toHaveURL(/acabamento=rodio-negro/);

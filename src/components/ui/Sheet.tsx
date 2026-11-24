@@ -25,6 +25,18 @@ interface SheetProps {
 }
 
 /**
+ * The content fills the dialog only where the dialog has a height of its own (drawers and full screens:
+ * 100dvh). A bottom sheet is as tall as its content (capped by max-height); there `height: 100%` is
+ * circular, and Safari on iOS 26 resolves it to 0, so the sheet opened invisible with only its backdrop
+ * showing. On tablets/desktop `md-right` turns the bottom sheet into a full-height drawer again.
+ */
+function contentHeight(side: SheetSide, className?: string) {
+  if (side === 'left' || side === 'right' || side === 'full') return 'h-full';
+  if (side === 'bottom' && className?.split(/\s+/).includes('md-right')) return 'md:h-full';
+  return undefined;
+}
+
+/**
  * Modal sheet on top of the native <dialog> element: it provides the focus
  * trap, inert background, Esc handling and focus return.
  */
@@ -82,7 +94,7 @@ export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', classN
       }}
     >
       {(open || mounted) && (
-        <div ref={contentRef} tabIndex={-1} className={cx('flex max-h-[inherit] flex-col outline-none', side !== 'center' && 'h-full')} style={side === 'center' ? { maxHeight: 'calc(100dvh - 32px)' } : undefined}>
+        <div ref={contentRef} tabIndex={-1} className={cx('flex max-h-[inherit] flex-col outline-none', contentHeight(side, className))} style={side === 'center' ? { maxHeight: 'calc(100dvh - 32px)' } : undefined}>
           {side === 'bottom' && <div aria-hidden="true" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line md:hidden" />}
           <div className={cx('flex shrink-0 items-center gap-2 px-5 pt-3 pb-2', hideTitle && 'justify-end', headerClassName)}>
             <h2 id={titleId} className={cx('font-display text-display-m flex-1', hideTitle && 'sr-only')}>
