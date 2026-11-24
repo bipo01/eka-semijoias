@@ -51,6 +51,17 @@ test('site content: a testimonial added in the admin shows live, is deleted and 
   await expect(section).toBeVisible({ timeout: 15_000 });
   await expect(section.getByText('Uso a argola todos os dias e continua linda.')).toBeVisible();
   await expect(section.getByText(/Bruna S\..*Cuiabá\/MT/)).toBeVisible();
+  // A lone testimonial sits centered (not on the left, as if waiting for the next one), on a computer and on a phone.
+  const gaps = () =>
+    section.getByRole('listitem').evaluate((li) => {
+      const r = li.getBoundingClientRect();
+      return { left: r.left, right: document.documentElement.clientWidth - r.right };
+    });
+  for (const size of [null, { width: 390, height: 844 }]) {
+    if (size) await visitor.setViewportSize(size);
+    const g = await gaps();
+    expect(Math.abs(g.left - g.right), JSON.stringify(g)).toBeLessThan(2);
+  }
 
   // Deleted (there is no "hidden" state: the public catalog would still carry it): gone from the site.
   await editor.getByRole('button', { name: /Apagar Bruna S\.|Apagar depoimento 1/ }).click();
