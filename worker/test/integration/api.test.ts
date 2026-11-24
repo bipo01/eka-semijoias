@@ -1450,3 +1450,162 @@ describe('stock entries and exits', () => {
     expect((await a.req(`/api/admin/stock/${product.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
   });
 });
+
+describe('customers', () => {
+  const phone = () => `679${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+  const create = (client: Client, body: unknown, key = randomUUID()) => client.req('/api/admin/customers', { body, headers: { 'Idempotency-Key': key } });
+  async function plain() {
+    const c = await catalog();
+    return c.products.find((p: any) => p.available && p.variants.length && p.variants.every((v: any) => v.available && !v.sizes?.length) && !c.stock?.[p.id]);
+  }
+  const price = (p: any) => p.promoPrice ?? p.price;
+
+  it('is admin-only', async () => {
+    const anon = new Client();
+    expect((await anon.req('/api/admin/customers')).status).toBe(401);
+    expect((await create(anon, { name: 'Ana', whatsapp: '' })).status).toBe(401);
+    expect((await anon.req('/api/admin/customers/cus_x')).status).toBe(401);
+    expect((await anon.req('/api/admin/customers/cus_x', { method: 'PUT', body: { name: 'Ana', whatsapp: '', updatedAt: 'x' } })).status).toBe(401);
+    expect((await anon.req('/api/admin/customers/cus_x', { method: 'DELETE' })).status).toBe(401);
+    expect((await anon.req('/api/admin/orders/ord_x/customer', { body: { customerId: null } })).status).toBe(401);
+  });
+
+  it('creates idempotently, lists newest first and refuses a WhatsApp that is taken', async () => {
+    const a = await admin();
+    const whatsapp = phone();
+    const body = { name: '  Ana   Júlia ', whatsapp: `(${whatsapp.slice(0, 2)}) ${whatsapp.slice(2, 7)}-${whatsapp.slice(7)}`, city: 'Dourados', uf: 'ms', instagram: '@ana.joias', birthday: '25/03', note: 'Gosta de argolas' };
+    const key = randomUUID();
+    const first = await create(a, body, key);
+    expect(first.status).toBe(201);
+    expect(first.json.customer).toMatchObject({ name: 'Ana Júlia', whatsapp, city: 'Dourados', uf: 'MS', instagram: 'ana.joias', birthday: '25/03', note: 'Gosta de argolas', stats: { orders: 0, purchases: 0, spentCents: 0, lastPurchaseAt: null } });
+    expect(first.json.customer.id).toMatch(/^cus_/);
+    // A retry (double tap) answers the same customer; the key cannot carry another body.
+    const replay = await create(a, body, key);
+    expect(replay.status).toBe(201);
+    expect(replay.json.customer.id).toBe(first.json.customer.id);
+    expect((await create(a, { ...body, name: 'Outra' }, key)).status).toBe(400);
+
+    const dup = await create(a, { name: 'Ana Outra', whatsapp });
+    expect(dup.status).toBe(409);
+    expect(dup.json.error.message).toBe('Já existe uma cliente com este WhatsApp: Ana Júlia.');
+    expect(dup.json.error.details.customer.id).toBe(first.json.customer.id);
+
+    // Without a WhatsApp, any number of customers.
+    const noPhone1 = await create(a, { name: 'Bia Sem Número', whatsapp: '' });
+    const noPhone2 = await create(a, { name: 'Bia Sem Número', whatsapp: '' });
+    expect([noPhone1.status, noPhone2.status]).toEqual([201, 201]);
+
+    expect((await create(a, { name: 'A', whatsapp: '' })).json.error.message).toBe('Informe o nome da cliente.');
+    expect((await create(a, { name: 'Ana', whatsapp: '6799' })).status).toBe(400);
+    expect((await create(a, { name: 'Ana', whatsapp: '', birthday: '31/02' })).status).toBe(400);
+    expect((await a.req('/api/admin/customers', { body: { name: 'Ana', whatsapp: '' } })).status).toBe(400); // no key
+
+    const list = (await a.req('/api/admin/customers')).json.customers;
+    expect(list[0].id).toBe(noPhone2.json.customer.id);
+    expect(list.find((c: any) => c.id === first.json.customer.id)).toMatchObject({ name: 'Ana Júlia', stats: { purchases: 0 } });
+    // Personal data never reaches the public catalog.
+    expect(JSON.stringify(await catalog())).not.toContain(whatsapp);
+  });
+
+  it('edits with compare-and-swap and keeps the WhatsApp unique', async () => {
+    const a = await admin();
+    const one = (await create(a, { name: 'Carla Edição', whatsapp: phone(), city: 'Campo Grande' })).json.customer;
+    const other = (await create(a, { name: 'Dora Edição', whatsapp: phone() })).json.customer;
+    const put = (body: unknown) => a.req(`/api/admin/customers/${one.id}`, { method: 'PUT', body });
+
+    const edited = await put({ name: 'Carla Souza', whatsapp: one.whatsapp, city: 'Campo Grande', uf: 'MS', updatedAt: one.updatedAt });
+    expect(edited.status).toBe(200);
+    expect(edited.json.customer).toMatchObject({ name: 'Carla Souza', uf: 'MS', createdAt: one.createdAt });
+    expect(edited.json.customer.updatedAt).not.toBe(one.updatedAt);
+    // The same save again (its answer was lost) is harmless.
+    expect((await put({ name: 'Carla Souza', whatsapp: one.whatsapp, city: 'Campo Grande', uf: 'MS', updatedAt: one.updatedAt })).status).toBe(200);
+    // Another change from the old version is refused, with what is stored now.
+    const stale = await put({ name: 'Carla Antiga', whatsapp: one.whatsapp, city: 'Campo Grande', updatedAt: one.updatedAt });
+    expect(stale.status).toBe(409);
+    expect(stale.json.error.details.customer).toMatchObject({ name: 'Carla Souza', updatedAt: edited.json.customer.updatedAt });
+    // Taking another customer's WhatsApp is refused.
+    const taken = await put({ name: 'Carla Souza', whatsapp: other.whatsapp, updatedAt: edited.json.customer.updatedAt });
+    expect(taken.status).toBe(409);
+    expect(taken.json.error.message).toBe('Já existe uma cliente com este WhatsApp: Dora Edição.');
+    expect((await a.req('/api/admin/customers/cus_nao_existe', { method: 'PUT', body: { name: 'X Y', whatsapp: '', updatedAt: 'x' } })).status).toBe(404);
+  });
+
+  it('registers a manual order for a customer (name and city from her record) and counts her purchases', async () => {
+    const a = await admin();
+    const p = await plain();
+    const v = p.variants[0];
+    const elisa = (await create(a, { name: 'Elisa Compra', whatsapp: phone(), city: 'Bonito', uf: 'MS' })).json.customer;
+    const manual = (body: unknown) => a.req('/api/admin/orders', { body, headers: { 'Idempotency-Key': randomUUID() } });
+
+    const sold = await manual({ items: [{ productId: p.id, variantId: v.id, qty: 2 }], name: 'Outro Nome', city: 'Outra', status: 'confirmado', customerId: elisa.id });
+    expect(sold.status).toBe(201);
+    expect(sold.json.order).toMatchObject({ customerId: elisa.id, customer: { name: 'Elisa Compra', city: 'Bonito' }, status: 'confirmado' });
+    const negotiating = await manual({ items: [{ productId: p.id, variantId: v.id, qty: 1 }], name: 'Elisa Compra', status: 'enviado', customerId: elisa.id });
+    expect(negotiating.status).toBe(201);
+    const listed = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === sold.json.order.id);
+    expect(listed.customerId).toBe(elisa.id);
+
+    const gone = await manual({ items: [{ productId: p.id, variantId: v.id, qty: 1 }], name: 'Ninguém', status: 'enviado', customerId: 'cus_nao_existe' });
+    expect(gone.status).toBe(409);
+    expect(gone.json.error.message).toContain('não está mais cadastrada');
+
+    const detail = await a.req(`/api/admin/customers/${elisa.id}`);
+    expect(detail.status).toBe(200);
+    // Only the confirmed order is a purchase; both are her orders (newest first).
+    expect(detail.json.customer.stats).toMatchObject({ orders: 2, purchases: 1, spentCents: price(p) * 2, lastPurchaseAt: sold.json.order.createdAt });
+    expect(detail.json.orders.map((o: any) => o.id)).toEqual([negotiating.json.order.id, sold.json.order.id]);
+    const inList = (await a.req('/api/admin/customers')).json.customers.find((c: any) => c.id === elisa.id);
+    expect(inList.stats).toEqual(detail.json.customer.stats);
+  });
+
+  it('links and unlinks a site order (compare-and-swap, idempotent)', async () => {
+    const a = await admin();
+    const p = await plain();
+    const placed = await new Client().req('/api/orders', { body: { items: [{ productId: p.id, variantId: p.variants[0].id, qty: 1 }], name: 'Fabi do Site', city: 'Corumbá' }, headers: { 'Idempotency-Key': randomUUID() } });
+    expect(placed.status).toBe(201);
+    const id = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.number === placed.json.order.number).id;
+    const fabi = (await create(a, { name: 'Fabiana', whatsapp: phone(), city: 'Corumbá' })).json.customer;
+    const link = (customerId: string | null) => a.req(`/api/admin/orders/${id}/customer`, { body: { customerId } });
+
+    expect((await link('cus_nao_existe')).status).toBe(404);
+    expect((await a.req(`/api/admin/orders/${id}/customer`, { body: { customerId: 'não vale' } })).status).toBe(400);
+    const linked = await link(fabi.id);
+    expect(linked.status).toBe(200);
+    // The order keeps the name and city the customer typed.
+    expect(linked.json.order).toMatchObject({ customerId: fabi.id, customer: { name: 'Fabi do Site', city: 'Corumbá' } });
+    expect((await link(fabi.id)).json.order.updatedAt).toBe(linked.json.order.updatedAt); // a retry changes nothing
+    expect((await a.req(`/api/admin/customers/${fabi.id}`)).json.orders.map((o: any) => o.id)).toEqual([id]);
+
+    // A status change after the link keeps it (the order JSON and the column agree).
+    expect((await a.req(`/api/admin/orders/${id}/status`, { body: { from: 'enviado', to: 'confirmado' } })).status).toBe(200);
+    expect((await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === id).customerId).toBe(fabi.id);
+
+    const unlinked = await link(null);
+    expect(unlinked.status).toBe(200);
+    expect(unlinked.json.order).not.toHaveProperty('customerId');
+    expect((await a.req(`/api/admin/customers/${fabi.id}`)).json.orders).toEqual([]);
+    expect((await a.req('/api/admin/orders/ord_nao_existe/customer', { body: { customerId: null } })).status).toBe(404);
+  });
+
+  it('erases a customer and unlinks her orders in the same batch (LGPD), idempotently', async () => {
+    const a = await admin();
+    const p = await plain();
+    const gabi = (await create(a, { name: 'Gabi Apagar', whatsapp: phone(), city: 'Aquidauana' })).json.customer;
+    const order = (await a.req('/api/admin/orders', { body: { items: [{ productId: p.id, variantId: p.variants[0].id, qty: 1 }], name: 'Gabi Apagar', status: 'enviado', customerId: gabi.id }, headers: { 'Idempotency-Key': randomUUID() } })).json.order;
+    expect(order.customerId).toBe(gabi.id);
+
+    const del = await a.req(`/api/admin/customers/${gabi.id}`, { method: 'DELETE' });
+    expect(del.json).toEqual({ deleted: true, unlinked: 1 });
+    expect((await a.req(`/api/admin/customers/${gabi.id}`)).status).toBe(404);
+    expect((await a.req('/api/admin/customers')).json.customers.some((c: any) => c.id === gabi.id)).toBe(false);
+    const kept = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id);
+    expect(kept).toMatchObject({ customer: { name: 'Gabi Apagar', city: 'Aquidauana' } });
+    expect(kept).not.toHaveProperty('customerId');
+    expect(kept.updatedAt).not.toBe(order.updatedAt);
+    // Later writes to the order do not bring the link back.
+    expect((await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'enviado', to: 'cancelado' } })).json.order).not.toHaveProperty('customerId');
+    expect((await a.req(`/api/admin/customers/${gabi.id}`, { method: 'DELETE' })).json).toEqual({ deleted: false, unlinked: 0 });
+    // Her WhatsApp is free again.
+    expect((await create(a, { name: 'Gabi Nova', whatsapp: gabi.whatsapp })).status).toBe(201);
+  });
+});

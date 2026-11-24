@@ -8,17 +8,33 @@ import { formatBRL } from '../../lib/format';
 import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
 import { SwitchRow } from '../FormBits';
+import { formatPhone } from '../lib/contact';
+import { createCustomer, type Customer, type CustomerFailure } from '../lib/customers';
 import { createManualOrder, editOrderItems, type OrderLine } from '../lib/orders';
+import { placeOf } from './CustomerDetail';
+import { CustomerFailureBox, CustomerFields, emptyDraft, parseDraft, type DraftErrors } from './CustomerForm';
+import { CustomerSearchList } from './CustomerPicker';
 import { lineKey, linePrice, OrderItemsEditor } from './OrderItemsEditor';
 
 /*
  * "Novo pedido" (a sale closed on WhatsApp or in person, registered by the
  * owner) and "Editar peças" of an open order. The server prices, checks the
- * stock and answers; the list changes only after it confirms.
+ * stock and answers; the list changes only after it confirms. The customer is
+ * picked from Clientes, registered on the spot (name, WhatsApp, city) or, for
+ * a one-off sale, just named.
  */
 
-function NewOrderForm({ onDone }: { onDone: (order: Order) => void }) {
+type CustomerMode = 'pick' | 'new' | 'free';
+
+const linkButton = 'min-h-9 text-sm text-copper underline underline-offset-4';
+
+function NewOrderForm({ onDone }: { onDone: (order: Order, customer: Customer | null) => void }) {
   const [lines, setLines] = useState<OrderLine[]>([]);
+  const [mode, setMode] = useState<CustomerMode>('pick');
+  const [picked, setPicked] = useState<Customer | null>(null);
+  const [draft, setDraft] = useState(() => emptyDraft());
+  const [draftErrors, setDraftErrors] = useState<DraftErrors>({});
+  const [customerProblem, setCustomerProblem] = useState<CustomerFailure | null>(null);
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
   const [note, setNote] = useState('');
@@ -26,25 +42,70 @@ function NewOrderForm({ onDone }: { onDone: (order: Order) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | undefined>(undefined);
-  // One key per form content: a retry of the same order never registers it twice.
+  // One key per form content: a retry of the same order (or customer) never registers it twice.
   const key = useRef<{ body: string; key: string } | null>(null);
+  const customerKey = useRef<{ body: string; key: string } | null>(null);
+
+  const switchTo = (next: CustomerMode) => {
+    setMode(next);
+    setError(null);
+    setCustomerProblem(null);
+  };
+  const choose = (c: Customer) => {
+    setPicked(c);
+    switchTo('pick');
+  };
+
+  /** The order's customer: the picked one, one registered now, or 'free' (just a name). Null when an error is shown. */
+  async function resolveCustomer(): Promise<Customer | 'free' | null> {
+    if (mode === 'free') {
+      if (name.trim().length >= 2) return 'free';
+      setNameError('Informe o nome da cliente.');
+      return null;
+    }
+    if (mode === 'pick') {
+      if (!picked) setError('Escolha a cliente, cadastre uma nova ou registre só com o nome.');
+      return picked;
+    }
+    const parsed = parseDraft(draft);
+    if (!parsed.ok) {
+      setDraftErrors(parsed.errors);
+      return null;
+    }
+    setDraftErrors({});
+    const body = JSON.stringify(parsed.input);
+    if (customerKey.current?.body !== body) customerKey.current = { body, key: idempotencyKey() };
+    const result = await createCustomer(parsed.input, customerKey.current.key);
+    if ('error' in result) {
+      if (result.field && result.field in draft && !result.existing) setDraftErrors({ [result.field]: result.error });
+      else setCustomerProblem(result);
+      return null;
+    }
+    // From here on she is registered: if the order fails and is sent again, it uses her (no second record).
+    setPicked(result.customer);
+    setMode('pick');
+    return result.customer;
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
     setError(null);
-    if (name.trim().length < 2) {
-      setNameError('Informe o nome da cliente.');
-      return;
-    }
+    setCustomerProblem(null);
     if (!lines.length) {
       setError('Adicione pelo menos uma peça.');
       return;
     }
-    const input = { items: lines, name, city, ...(note.trim() ? { note } : {}), status: confirmed ? ('confirmado' as const) : ('enviado' as const) };
+    setBusy(true);
+    const customer = await resolveCustomer();
+    if (!customer) {
+      setBusy(false);
+      return;
+    }
+    const who = customer === 'free' ? { name, city } : { name: customer.name, city: customer.city, customerId: customer.id };
+    const input = { items: lines, ...who, ...(note.trim() ? { note } : {}), status: confirmed ? ('confirmado' as const) : ('enviado' as const) };
     const body = JSON.stringify(input);
     if (key.current?.body !== body) key.current = { body, key: idempotencyKey() };
-    setBusy(true);
     const result = await createManualOrder(input, key.current.key);
     setBusy(false);
     if ('error' in result) {
@@ -52,26 +113,68 @@ function NewOrderForm({ onDone }: { onDone: (order: Order) => void }) {
       return;
     }
     toast(`Pedido nº ${result.order.number} registrado${confirmed ? ' e confirmado' : ''}.`, { tone: 'success' });
-    onDone(result.order);
+    onDone(result.order, customer === 'free' ? null : customer);
   }
 
   return (
     <form onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-5">
       <p className="text-sm text-ink-muted">Para vendas que chegaram direto pelo WhatsApp ou pessoalmente. Os preços vêm do catálogo.</p>
       <OrderItemsEditor lines={lines} onChange={setLines} />
-      <TextField
-        label="Nome da cliente"
-        required
-        autoComplete="off"
-        value={name}
-        maxLength={80}
-        error={nameError}
-        onChange={(e) => {
-          setName(e.target.value);
-          setNameError(undefined);
-        }}
-      />
-      <TextField label="Cidade" optional autoComplete="off" value={city} maxLength={80} onChange={(e) => setCity(e.target.value)} />
+      <section aria-labelledby="new-order-customer" className="flex flex-col gap-3">
+        <h3 id="new-order-customer" className="text-sm font-medium">
+          Cliente
+        </h3>
+        {mode === 'pick' && picked ? (
+          <div className="flex items-start justify-between gap-3 rounded-[12px] border border-copper bg-white p-3">
+            <div className="min-w-0">
+              <p className="leading-snug font-medium">{picked.name}</p>
+              <p className="text-sm text-ink-muted">{[placeOf(picked), picked.whatsapp && formatPhone(picked.whatsapp)].filter(Boolean).join(' · ') || 'Sem cidade e WhatsApp'}</p>
+            </div>
+            <button type="button" className={linkButton} onClick={() => setPicked(null)}>
+              Trocar
+            </button>
+          </div>
+        ) : mode === 'pick' ? (
+          <>
+            <CustomerSearchList onPick={choose} label="Buscar cliente cadastrada" />
+            <div className="flex flex-wrap gap-x-5">
+              <button type="button" className={linkButton} onClick={() => switchTo('new')}>
+                Cadastrar nova cliente
+              </button>
+              <button type="button" className={linkButton} onClick={() => switchTo('free')}>
+                Sem cadastro (só o nome)
+              </button>
+            </div>
+          </>
+        ) : mode === 'new' ? (
+          <>
+            <CustomerFields short draft={draft} errors={draftErrors} onChange={setDraft} />
+            {customerProblem && <CustomerFailureBox failure={customerProblem} existingLabel="Usar esta cliente" onExisting={choose} />}
+            <button type="button" className={`${linkButton} self-start`} onClick={() => switchTo('pick')}>
+              Escolher uma cliente cadastrada
+            </button>
+          </>
+        ) : (
+          <>
+            <TextField
+              label="Nome da cliente"
+              required
+              autoComplete="off"
+              value={name}
+              maxLength={80}
+              error={nameError}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameError(undefined);
+              }}
+            />
+            <TextField label="Cidade" optional autoComplete="off" value={city} maxLength={80} onChange={(e) => setCity(e.target.value)} />
+            <button type="button" className={`${linkButton} self-start`} onClick={() => switchTo('pick')}>
+              Escolher uma cliente cadastrada
+            </button>
+          </>
+        )}
+      </section>
       <TextArea label="Observação" optional value={note} maxLength={300} rows={3} onChange={(e) => setNote(e.target.value)} />
       <SwitchRow
         label="Já confirmado"
@@ -92,7 +195,7 @@ function NewOrderForm({ onDone }: { onDone: (order: Order) => void }) {
 }
 
 /** "Novo pedido" button + sheet (the form is mounted per opening, so it always starts empty). */
-export function NewOrderButton({ onCreated }: { onCreated: (order: Order) => void }) {
+export function NewOrderButton({ onCreated }: { onCreated: (order: Order, customer: Customer | null) => void }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -102,9 +205,9 @@ export function NewOrderButton({ onCreated }: { onCreated: (order: Order) => voi
       <Sheet open={open} onClose={() => setOpen(false)} title="Novo pedido" side="right">
         {open && (
           <NewOrderForm
-            onDone={(order) => {
+            onDone={(order, customer) => {
               setOpen(false);
-              onCreated(order);
+              onCreated(order, customer);
             }}
           />
         )}

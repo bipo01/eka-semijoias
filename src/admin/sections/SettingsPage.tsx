@@ -37,7 +37,11 @@ interface StoreForm {
   showroom: string;
   openingHours: string;
   warrantyMonths: string;
+  /** What the warranty covers (optional in the type: absent means empty). */
+  warrantyTerms?: string;
 }
+
+export const WARRANTY_TERMS_MAX = 600;
 
 type StoreErrors = Partial<Record<keyof StoreForm, string>>;
 
@@ -49,6 +53,7 @@ const toForm = (s: Settings): StoreForm => ({
   showroom: s.showroom ?? '',
   openingHours: s.openingHours ?? '',
   warrantyMonths: String(s.warrantyMonths),
+  warrantyTerms: s.warrantyTerms ?? '',
 });
 
 /** Validates the store form; returns the settings patch or the errors. */
@@ -60,6 +65,8 @@ export function parseStoreForm(form: StoreForm): { ok: true; patch: Settings } |
   if (!/^[A-Za-z0-9._]{0,30}$/.test(instagram)) errors.instagram = 'Use só o nome do perfil: letras, números, ponto e sublinhado.';
   const warranty = form.warrantyMonths.trim() === '' ? 0 : Number(form.warrantyMonths);
   if (!Number.isInteger(warranty) || warranty < 0 || warranty > 60) errors.warrantyMonths = 'Informe um número de meses entre 0 e 60.';
+  const warrantyTerms = (form.warrantyTerms ?? '').trim();
+  if (warrantyTerms.length > WARRANTY_TERMS_MAX) errors.warrantyTerms = `Use até ${WARRANTY_TERMS_MAX} caracteres.`;
   if (Object.keys(errors).length) return { ok: false, errors };
   const showroom = form.showroom.trim();
   const openingHours = form.openingHours.trim();
@@ -73,6 +80,7 @@ export function parseStoreForm(form: StoreForm): { ok: true; patch: Settings } |
       ...(showroom ? { showroom } : {}),
       ...(openingHours ? { openingHours } : {}),
       warrantyMonths: warranty,
+      ...(warrantyTerms ? { warrantyTerms } : {}),
     },
   };
 }
@@ -83,7 +91,7 @@ function StoreSettings() {
   const [errors, setErrors] = useState<StoreErrors>({});
   const [busy, setBusy] = useState(false);
   const field = (key: keyof StoreForm) => ({
-    value: form[key],
+    value: form[key] ?? '',
     error: errors[key],
     onChange: (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value })),
   });
@@ -138,6 +146,15 @@ function StoreSettings() {
       <TextArea label="Showroom ou loja física" optional rows={2} maxLength={200} placeholder="Endereço" {...field('showroom')} />
       <TextField label="Horário de atendimento" optional maxLength={120} placeholder="Ex.: seg. a sex., 9h às 18h" {...field('openingHours')} />
       <TextField label="Garantia (meses)" inputMode="numeric" maxLength={2} hint="Use 0 para não mostrar garantia no site." {...field('warrantyMonths')} />
+      <TextArea
+        label="Regras da garantia"
+        optional
+        rows={4}
+        maxLength={WARRANTY_TERMS_MAX}
+        placeholder="Ex.: cobre defeitos no banho com uso normal. Não cobre peças amassadas, quebradas ou com pedras perdidas."
+        hint={`O que a garantia cobre e como funciona a troca. Aparece na página Garantia e na mensagem “Compra registrada”. ${(form.warrantyTerms ?? '').length}/${WARRANTY_TERMS_MAX}`}
+        {...field('warrantyTerms')}
+      />
       <Button type="submit" className="self-start" disabled={busy} aria-busy={busy}>
         {busy ? 'Salvando…' : 'Salvar informações'}
       </Button>
