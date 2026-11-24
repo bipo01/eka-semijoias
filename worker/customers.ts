@@ -216,6 +216,7 @@ export async function handleCreateCustomer(ctx: Context): Promise<Response> {
     }
     throw toHttpError(error);
   }
+  ctx.waitUntil(notifyOrders(ctx.env)); // the admin lists refresh on this notice (customers included)
   return json(response, { status: 201 });
 }
 
@@ -255,6 +256,7 @@ export async function handleUpdateCustomer(ctx: Context): Promise<Response> {
       }
       throw toHttpError(error);
     }
+    ctx.waitUntil(notifyOrders(ctx.env)); // the admin lists refresh on this notice (customers included)
     return json({ customer: next });
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');

@@ -361,12 +361,14 @@ export async function handleAnonymizeOrder(ctx: Context): Promise<Response> {
     const at = nextStamp(stamp);
     const { note: _note, ...rest } = order;
     const { receipts: _receipts, ...kept } = rest;
-    const next: Order = { ...kept, customer: { name: ANONYMIZED_NAME, city: '' }, anonymized: true, updatedAt: at };
+    // The link to a registered customer goes too: an anonymized order no longer says whose it was.
+    const { customerId: _customerId, ...unlinked } = kept;
+    const next: Order = { ...unlinked, customer: { name: ANONYMIZED_NAME, city: '' }, anonymized: true, updatedAt: at };
     try {
       await db.batch([
         unchanged(db, order.id, stamp), // a status change landed meanwhile: re-read so neither write is lost
         // The payment link dies too: nothing personal can be sent to an anonymized order.
-        db.prepare('UPDATE orders SET data = ?2, updated_at = ?3, pay_token = NULL WHERE id = ?1').bind(order.id, toData(next), at),
+        db.prepare('UPDATE orders SET data = ?2, updated_at = ?3, pay_token = NULL, customer_id = NULL WHERE id = ?1').bind(order.id, toData(next), at),
         // Receipts carry the payer's name and bank details: erased with the rest.
         db.prepare('DELETE FROM receipts WHERE order_id = ?1').bind(order.id),
         db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'order.anonymize', `Dados da cliente do pedido ${order.number} apagados`),

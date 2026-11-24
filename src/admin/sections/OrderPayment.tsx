@@ -203,7 +203,8 @@ function ReceiptThumb({ receipt, number, index }: { receipt: ReceiptMeta; number
 }
 
 /** Charge status, the message again, and the receipts to check. */
-export function PaymentSection({ order, onCharge }: { order: Order; onCharge: () => void }) {
+/** `phone`: the linked customer's WhatsApp (the charge message then opens straight in her chat). */
+export function PaymentSection({ order, onCharge, phone }: { order: Order; onCharge: () => void; phone?: string | undefined }) {
   const charge = order.charge;
   const receipts = order.receipts ?? [];
   const ready = useChargeMessage(order);
@@ -259,7 +260,7 @@ export function PaymentSection({ order, onCharge }: { order: Order; onCharge: ()
 
       {open && charge && ready && (
         <div className="flex flex-col gap-2 border-t border-line pt-4">
-          <MessageActions text={ready.message} quiet={receipts.length > 0} />
+          <MessageActions text={ready.message} quiet={receipts.length > 0} phone={phone} />
           <div className="flex flex-wrap gap-x-4">
             <button type="button" className="inline-flex min-h-11 items-center gap-1.5 text-sm text-copper underline underline-offset-4" onClick={() => void copy(ready.link, 'Link copiado.')}>
               <Link2 size={15} strokeWidth={1.5} aria-hidden="true" /> Copiar link

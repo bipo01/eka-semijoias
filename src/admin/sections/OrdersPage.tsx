@@ -191,7 +191,7 @@ function OrderDetail({ order, onClose, onPurchase }: { order: Order; onClose: ()
         </div>
       </section>
 
-      <PaymentSection order={order} onCharge={() => setCharging(true)} />
+      <PaymentSection order={order} onCharge={() => setCharging(true)} phone={customer?.whatsapp || undefined} />
 
       <div className="flex flex-col gap-2">
         {chargeFirst ? (

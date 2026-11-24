@@ -78,12 +78,13 @@ function useNewReceiptNotice() {
 /** Toast when a new order arrives while the panel is open. */
 function useNewOrderNotice() {
   const newest = useOrders((s) => (s.state.status === 'ready' ? Math.max(0, ...s.state.orders.map((o) => o.number)) : null));
+  const manual = useOrders((s) => (s.state.status === 'ready' ? s.state.orders.find((o) => o.number === newest)?.source === 'manual' : false));
   const seen = useRef<number | null>(null);
   useEffect(() => {
     if (newest === null) return;
-    if (seen.current !== null && newest > seen.current) toast(`Novo pedido nº ${newest} no site.`, { tone: 'success', action: { label: 'Ver', to: `${ADMIN_BASE}/pedidos` } });
+    if (seen.current !== null && newest > seen.current) toast(manual ? `Pedido nº ${newest} registrado no painel.` : `Novo pedido nº ${newest} no site.`, { tone: 'success', action: { label: 'Ver', to: `${ADMIN_BASE}/pedidos` } });
     seen.current = Math.max(seen.current ?? 0, newest);
-  }, [newest]);
+  }, [newest, manual]);
 }
 
 export function AdminShell() {
