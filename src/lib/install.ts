@@ -3,8 +3,9 @@
  * "not now" memory. Pure functions; the browser wiring lives in src/hooks/useInstallPrompt.ts.
  */
 
-/** Which installable app a page offers: the store ("/"), the owner's panel ("/admin") or the reseller panel ("/revenda"). */
-export type InstallApp = 'store' | 'admin' | 'reseller';
+import { APP_HEAD, type InstallApp } from './appHead';
+
+export { APP_HEAD, appForPath, type InstallApp } from './appHead';
 
 export type InAppBrowser = 'Instagram' | 'Facebook' | 'WhatsApp' | 'LINE' | 'TikTok';
 
@@ -139,13 +140,6 @@ export function clearDismissed(app: InstallApp, storage: StorageLike | null = de
   }
 }
 
-/** Head tags that identify the installable app on a page (manifest, iOS icon and name). */
-export const APP_HEAD: Record<InstallApp, { manifest: string; appleTouchIcon: string; appleTitle: string }> = {
-  store: { manifest: '/manifest.webmanifest', appleTouchIcon: '/apple-touch-icon.png', appleTitle: 'ÉKA' },
-  admin: { manifest: '/admin.webmanifest', appleTouchIcon: '/admin-apple-touch-icon.png', appleTitle: 'Painel ÉKA' },
-  reseller: { manifest: '/revenda.webmanifest', appleTouchIcon: '/apple-touch-icon.png', appleTitle: 'ÉKA Revenda' },
-};
-
 function headElement<T extends HTMLElement>(doc: Document, selector: string, create: () => T): { el: T; created: boolean } {
   const found = doc.head.querySelector<T>(selector);
   if (found) return { el: found, created: false };
@@ -156,25 +150,26 @@ function headElement<T extends HTMLElement>(doc: Document, selector: string, cre
 
 /**
  * Points the page's manifest, apple-touch-icon and iOS home-screen title at `app`.
- * Returns a function that puts the previous values back (used when leaving /admin).
+ * Returns a function that points them back at the store (used when leaving a panel for the store in
+ * the same tab). Not "the previous values": the Worker already serves panel documents with the
+ * panel's tags, so those would keep the store page named after the panel.
  */
 export function applyAppHead(app: InstallApp, doc: Document = document): () => void {
   const target = APP_HEAD[app];
   const restores: Array<() => void> = [];
 
-  const swapAttr = <T extends HTMLElement>(selector: string, create: () => T, attr: string, value: string) => {
+  const store = APP_HEAD.store;
+  const swapAttr = <T extends HTMLElement>(selector: string, create: () => T, attr: string, value: string, storeValue: string) => {
     const { el, created } = headElement(doc, selector, create);
-    const previous = el.getAttribute(attr);
     el.setAttribute(attr, value);
     restores.push(() => {
       if (created) el.remove();
-      else if (previous === null) el.removeAttribute(attr);
-      else el.setAttribute(attr, previous);
+      else el.setAttribute(attr, storeValue);
     });
   };
 
-  swapAttr('link[rel="manifest"]', () => Object.assign(doc.createElement('link'), { rel: 'manifest' }), 'href', target.manifest);
-  swapAttr('link[rel="apple-touch-icon"]', () => Object.assign(doc.createElement('link'), { rel: 'apple-touch-icon' }), 'href', target.appleTouchIcon);
+  swapAttr('link[rel="manifest"]', () => Object.assign(doc.createElement('link'), { rel: 'manifest' }), 'href', target.manifest, store.manifest);
+  swapAttr('link[rel="apple-touch-icon"]', () => Object.assign(doc.createElement('link'), { rel: 'apple-touch-icon' }), 'href', target.appleTouchIcon, store.appleTouchIcon);
   swapAttr(
     'meta[name="apple-mobile-web-app-title"]',
     () => {
@@ -184,6 +179,7 @@ export function applyAppHead(app: InstallApp, doc: Document = document): () => v
     },
     'content',
     target.appleTitle,
+    store.appleTitle,
   );
 
   return () => {

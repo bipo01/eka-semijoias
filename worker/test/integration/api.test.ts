@@ -133,6 +133,22 @@ describe('catalog reads', () => {
     expect(icon.headers.get('X-Request-Id')).toBeNull(); // served by static assets, not the Worker
   });
 
+  it('names each installable app in the document itself (iOS reads the home-screen name from it)', async () => {
+    const head = async (path: string) => {
+      const html = await (await fetch(`${BASE()}${path}`)).text();
+      return {
+        manifest: /<link rel="manifest" href="([^"]+)"/.exec(html)?.[1],
+        icon: /<link rel="apple-touch-icon" href="([^"]+)"/.exec(html)?.[1],
+        title: /<meta name="apple-mobile-web-app-title" content="([^"]+)"/.exec(html)?.[1],
+      };
+    };
+    expect(await head('/')).toEqual({ manifest: '/manifest.webmanifest', icon: '/apple-touch-icon.png', title: 'ÉKA' });
+    expect(await head('/admin')).toEqual({ manifest: '/admin.webmanifest', icon: '/admin-apple-touch-icon.png', title: 'Painel ÉKA' });
+    expect(await head('/admin/pedidos')).toEqual({ manifest: '/admin.webmanifest', icon: '/admin-apple-touch-icon.png', title: 'Painel ÉKA' });
+    expect(await head('/revenda')).toEqual({ manifest: '/revenda.webmanifest', icon: '/apple-touch-icon.png', title: 'ÉKA Revenda' });
+    expect((await head('/administrar')).title).toBe('ÉKA');
+  });
+
   it('marks hashed assets immutable only when they exist (a 404 must never be cached)', async () => {
     const html = await (await fetch(`${BASE()}/`)).text();
     const entry = /src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];

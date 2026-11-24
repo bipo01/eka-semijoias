@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { applyAppHead, DISMISS_DAYS, detectPlatform, dismissKey, installMethod, isDismissed, rememberDismissed } from './install';
+import { appForPath, applyAppHead, DISMISS_DAYS, detectPlatform, dismissKey, installMethod, isDismissed, rememberDismissed } from './install';
 
 /** Real user agents (2025–2026 builds). */
 const UA = {
@@ -140,6 +140,15 @@ describe('applyAppHead', () => {
     document.head.innerHTML = '';
   });
 
+  it('leaving a panel served with its own tags (by the Worker) names the page after the store again', () => {
+    document.head.innerHTML =
+      '<link rel="manifest" href="/admin.webmanifest"><link rel="apple-touch-icon" href="/admin-apple-touch-icon.png"><meta name="apple-mobile-web-app-title" content="Painel ÉKA">';
+    const restore = applyAppHead('admin');
+    expect(head()).toEqual({ manifest: '/admin.webmanifest', icon: '/admin-apple-touch-icon.png', title: 'Painel ÉKA' });
+    restore();
+    expect(head()).toEqual({ manifest: '/manifest.webmanifest', icon: '/apple-touch-icon.png', title: 'ÉKA' });
+  });
+
   it('points the page at the panel app and restores the store tags on leaving', () => {
     document.head.innerHTML =
       '<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><meta name="apple-mobile-web-app-title" content="ÉKA">';
@@ -164,5 +173,19 @@ describe('applyAppHead', () => {
     expect(head().manifest).toBe('/admin.webmanifest');
     second();
     expect(head()).toEqual({ manifest: '/manifest.webmanifest', icon: undefined, title: undefined });
+  });
+});
+
+describe('appForPath', () => {
+  it('maps each page to its installable app', () => {
+    expect(appForPath('/')).toBe('store');
+    expect(appForPath('/catalogo')).toBe('store');
+    expect(appForPath('/admin')).toBe('admin');
+    expect(appForPath('/admin/')).toBe('admin');
+    expect(appForPath('/admin/pedidos')).toBe('admin');
+    expect(appForPath('/administrar')).toBe('store');
+    expect(appForPath('/revenda')).toBe('reseller');
+    expect(appForPath('/revenda/convite/abc')).toBe('reseller');
+    expect(appForPath('/r/bruna')).toBe('store');
   });
 });

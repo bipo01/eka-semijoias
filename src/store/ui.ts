@@ -46,6 +46,10 @@ export const useUi = create<UiState>()((set) => ({
       ...(opts.action ? { action: opts.action } : {}),
     };
     set((s) => ({ toasts: [...s.toasts.slice(-2), toast] }));
+    // The clock runs here, not in the toast's component: a toast is re-mounted whenever the topmost
+    // dialog changes (toasts portal into it) or the panel re-renders on a live update, and a timer
+    // restarted on every re-mount kept a toast on screen, over the button she needed to tap.
+    setTimeout(() => useUi.getState().dismissToast(id), toast.duration);
     return id;
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),

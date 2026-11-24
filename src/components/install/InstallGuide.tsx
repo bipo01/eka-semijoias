@@ -42,12 +42,14 @@ function content(guide: GuideKind, platform: InstallPlatform): GuideContent {
           {
             text: (
               <>
-                Toque em <Share {...icon} /> <strong>Compartilhar</strong>, na barra do Safari.
+                Toque em <MoreButton />, no canto de baixo, e depois em <Share {...icon} /> <strong>Compartilhar</strong>.
               </>
             ),
+            // iOS 26 moved Share into the "•••" menu; older versions keep it on the Safari bar.
+            // Safari 26 freezes the system version in its user agent, so the guide covers both.
             hint: (
               <>
-                Não achou? Toque antes em <MoreButton />.
+                Em iPhones mais antigos, o <Share {...icon} /> fica direto na barra do Safari.
               </>
             ),
           },
@@ -57,7 +59,7 @@ function content(guide: GuideKind, platform: InstallPlatform): GuideContent {
                 Toque em <SquarePlus {...icon} /> <strong>Adicionar à Tela de Início</strong>.
               </>
             ),
-            hint: 'Se não estiver à vista, role a lista para baixo.',
+            hint: 'Não está à vista? Toque em “Ver mais” ou role a lista para baixo.',
           },
           { text: <>Toque em <strong>Adicionar</strong>, no canto de cima.</> },
         ],

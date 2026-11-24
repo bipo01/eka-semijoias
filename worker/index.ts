@@ -2,6 +2,7 @@ import { handleChangePin, handleLogin, handleLogout, handleSessionStatus } from 
 import { handleBackup, handleCatalog, handleChanges, parseSnapshotBody, readSnapshot } from './catalog';
 import type { Catalog } from '../src/data/schema';
 import { isPrivatePath, pageMeta, type PageMeta } from './seo';
+import { APP_HEAD, appForPath } from '../src/lib/appHead';
 import { handleCreateCustomer, handleDeleteCustomer, handleGetCustomer, handleLinkOrderCustomer, handleListCustomers, handleUpdateCustomer } from './customers';
 import { toHttpError } from './db';
 import type { Env } from './env';
@@ -161,7 +162,24 @@ async function serveDocument(request: Request, env: Env, url: URL): Promise<Resp
   response.headers.delete('ETag');
   response.headers.delete('Last-Modified');
   if (request.method !== 'GET' || !response.ok) return response;
-  return withPageMeta(response, pageMeta(url, isPrivatePath(url.pathname) ? null : await catalogForMeta(env)));
+  return withAppHead(withPageMeta(response, pageMeta(url, isPrivatePath(url.pathname) ? null : await catalogForMeta(env))), url);
+}
+
+/**
+ * The panels are installable apps of their own ("Painel ÉKA", "ÉKA Revenda"). Safari on iOS 26 reads
+ * the home-screen name and icon from the document the server sends, not from tags the app swaps in
+ * later, so the panel pages get their manifest, icon and title here (the app keeps them in sync on
+ * in-app navigation).
+ */
+function withAppHead(response: Response, url: URL): Response {
+  const app = appForPath(url.pathname);
+  if (app === 'store') return response;
+  const head = APP_HEAD[app];
+  return new HTMLRewriter()
+    .on('link[rel="manifest"]', { element: (el) => void el.setAttribute('href', head.manifest) })
+    .on('link[rel="apple-touch-icon"]', { element: (el) => void el.setAttribute('href', head.appleTouchIcon) })
+    .on('meta[name="apple-mobile-web-app-title"]', { element: (el) => void el.setAttribute('content', head.appleTitle) })
+    .transform(response);
 }
 
 /**

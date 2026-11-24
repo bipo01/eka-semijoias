@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
@@ -9,10 +9,6 @@ function ToastItem({ toast }: { toast: Toast }) {
   const dismiss = useUi((s) => s.dismissToast);
   const closePanel = useUi((s) => s.closePanel);
   const navigate = useNavigate();
-  useEffect(() => {
-    const t = window.setTimeout(() => dismiss(toast.id), toast.duration);
-    return () => window.clearTimeout(t);
-  }, [toast.id, toast.duration, dismiss]);
   return (
     <div
       role={toast.tone === 'error' ? 'alert' : 'status'}
