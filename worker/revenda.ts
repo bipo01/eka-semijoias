@@ -55,6 +55,7 @@ const SESSION_MS = 30 * DAY;
 const LOGIN_IP_WINDOW = 15 * MINUTE;
 const LOGIN_IP_MAX = 5;
 const LOGIN_RESELLER_MAX = 10;
+const LOGIN_RESELLER_DAY_MAX = 30;
 const CANCEL_WINDOW_MS = DAY;
 
 const cookieName = (env: Env) => (env.DEV_INSECURE_COOKIES === '1' ? 'eka_revenda' : '__Host-eka_revenda');
@@ -245,6 +246,10 @@ export async function handleResellerLogin(ctx: Context): Promise<Response> {
   // (10 / hour) already make guessing a 6-digit PIN impractical.
   const byNumber = await hit(db, `rlogin:n:${input.data.whatsapp}`, HOUR, now);
   if (byNumber.count > LOGIN_RESELLER_MAX) throw retryAfter(byNumber.window_start + HOUR, now, 'Muitas tentativas deste aparelho.');
+  // And per day: a distributed guesser gets at most 30 tries a day at one number (a 6-digit PIN would
+  // take decades). Her open sessions keep working; a new access link from the owner resets it.
+  const byNumberDay = await hit(db, `rlogin:nd:${input.data.whatsapp}`, DAY, now);
+  if (byNumberDay.count > LOGIN_RESELLER_DAY_MAX) throw retryAfter(byNumberDay.window_start + DAY, now, 'Muitas tentativas para este WhatsApp hoje. Peça um novo acesso para a ÉKA.');
   const row = await withReadRetry(() =>
     db.prepare(`SELECT r.id, r.status, c.pin_hash, c.salt FROM resellers r LEFT JOIN reseller_credentials c ON c.reseller_id = r.id WHERE r.whatsapp = ?1`).bind(input.data.whatsapp).first<{ id: string; status: string; pin_hash: string | null; salt: string | null }>(),
   );
@@ -256,7 +261,7 @@ export async function handleResellerLogin(ctx: Context): Promise<Response> {
   const session = await sessionStatements(db, row.id, now);
   // Only this reseller's own counter resets: the network counter keeps running, so logging into
   // one's own account cannot buy more guesses at someone else's.
-  await db.batch([...session.statements, db.prepare('DELETE FROM throttle WHERE key = ?1').bind(`rlogin:n:${input.data.whatsapp}`)]);
+  await db.batch([...session.statements, db.prepare('DELETE FROM throttle WHERE key IN (?1, ?2)').bind(`rlogin:n:${input.data.whatsapp}`, `rlogin:nd:${input.data.whatsapp}`)]);
   return json({ ok: true }, { headers: { 'Set-Cookie': sessionCookie(env, session.token, SESSION_MS / 1000) } });
 }
 

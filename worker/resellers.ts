@@ -364,7 +364,12 @@ export async function handleNewInvite(ctx: Context): Promise<Response> {
   if (reseller.status !== 'ativa') throw new HttpError('conflict', 'Reative a revendedora antes de gerar um novo acesso.');
   const now = Date.now();
   const invite = await inviteStatements(db, reseller.id, now);
-  await db.batch([...invite.statements, db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(new Date(now).toISOString(), 'reseller.invite', `Novo acesso para ${reseller.id}`)]);
+  await db.batch([
+    ...invite.statements,
+    // A new access link from the owner also lifts a login lock on her number.
+    db.prepare('DELETE FROM throttle WHERE key IN (?1, ?2)').bind(`rlogin:n:${reseller.whatsapp}`, `rlogin:nd:${reseller.whatsapp}`),
+    db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(new Date(now).toISOString(), 'reseller.invite', `Novo acesso para ${reseller.id}`),
+  ]);
   return json({ invite: { token: invite.token, expiresAt: invite.expiresAt } });
 }
 
