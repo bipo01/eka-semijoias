@@ -6,12 +6,12 @@ import { cx } from '../ui/cx';
 
 /**
  * Real, authorized testimonials the owner publishes (Painel → Site → Depoimentos).
- * Only visible ones show, in her order; without any the whole section is gone.
+ * All of them show, in her order; without any the whole section is gone.
  * No star rating: the store does not collect scores.
  */
 export function Testimonials() {
   const { titles } = useSection('inicio');
-  const items = useSection('depoimentos').items.filter((t) => t.visible);
+  const items = useSection('depoimentos').items;
   const rail = useRef<HTMLUListElement>(null);
   const [active, setActive] = useState(0);
   const count = items.length;

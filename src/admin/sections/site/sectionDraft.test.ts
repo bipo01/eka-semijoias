@@ -68,7 +68,7 @@ describe('validateSection', () => {
   });
 
   it('requires the authorization of every testimonial', () => {
-    const draft = { items: [{ id: 'd1', text: 'Amei!', name: 'Ana', city: '', visible: true, authorized: false }] };
+    const draft = { items: [{ id: 'd1', text: 'Amei!', name: 'Ana', city: '', authorized: false }] };
     const result = validateSection('depoimentos', draft);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors['items.0.authorized']).toBe('Confirme que a cliente autorizou publicar.');

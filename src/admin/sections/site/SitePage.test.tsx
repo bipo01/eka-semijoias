@@ -184,15 +184,13 @@ describe('Depoimentos', { timeout: 20_000 }, () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
     await screen.findByText(/Depoimentos: alterações salvas/);
     expect(mockServer.catalog.content?.depoimentos?.items).toEqual([
-      expect.objectContaining({ text: 'As peças são lindas e chegaram rápido.', name: 'Ana P.', city: '', visible: true, authorized: true }),
+      expect.objectContaining({ text: 'As peças são lindas e chegaram rápido.', name: 'Ana P.', city: '', authorized: true }),
     ]);
 
-    // Hidden ones stay saved but are not counted as on the site.
-    await userEvent.click(within(dialog).getByRole('switch', { name: 'Mostrar no site' }));
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
-    await waitFor(() => expect(mockServer.catalog.content?.depoimentos?.items[0]?.visible).toBe(false));
+    // No "hidden" state: the public catalog would still carry it. Leaving the site = deleting.
+    expect(within(dialog).queryByRole('switch', { name: /Mostrar no site/ })).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Depoimentos' })).not.toBeInTheDocument());
-    expect(screen.getByText(/1 oculto/)).toBeInTheDocument();
+    expect(screen.getByText('depoimento no site', { exact: false })).toBeInTheDocument();
   });
 });

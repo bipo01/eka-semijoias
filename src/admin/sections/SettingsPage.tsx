@@ -37,7 +37,7 @@ export const DONE_WHEN: Partial<Record<string, (s: Settings, content: SiteConten
   hypoallergenic: (_s, c) => c?.loja != null && c.loja.hypoallergenic !== null,
   reseller: (_s, c) => c?.loja != null && c.loja.consignment !== null && c.loja.noUpfrontInvestment !== null,
   about: (_s, c) => c?.sobre !== undefined,
-  testimonials: (_s, c) => !!c?.depoimentos?.items.some((t) => t.visible),
+  testimonials: (_s, c) => !!c?.depoimentos?.items.length,
 };
 
 interface StoreForm {

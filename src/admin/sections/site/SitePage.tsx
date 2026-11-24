@@ -7,11 +7,9 @@ import { useCatalog } from '../../../store/catalog';
 import { SectionEditor, sectionState } from './SectionEditor';
 import { isSiteSectionId, SITE_GROUPS, SITE_SECTION_INFO, type SiteSectionId } from './siteSections';
 
-/** Published testimonials ("2 no site · 1 oculto"). */
-export function testimonialCount(content: SiteContent | undefined): { shown: number; hidden: number } {
-  const items = content?.depoimentos?.items ?? [];
-  const shown = items.filter((t) => t.visible).length;
-  return { shown, hidden: items.length - shown };
+/** Published testimonials (every saved one is on the site). */
+export function testimonialCount(content: SiteContent | undefined): { shown: number } {
+  return { shown: content?.depoimentos?.items.length ?? 0 };
 }
 
 function SectionCard({ id, content, onEdit }: { id: SiteSectionId; content: SiteContent | undefined; onEdit: () => void }) {
@@ -33,13 +31,12 @@ function SectionCard({ id, content, onEdit }: { id: SiteSectionId; content: Site
         <p className="text-sm">
           {count.shown === 0 ? (
             <span>
-              Nenhum depoimento no site{count.hidden > 0 ? ` agora (${count.hidden === 1 ? '1 oculto' : `${count.hidden} ocultos`})` : ' ainda'}. A seção aparece na página inicial quando
+              Nenhum depoimento no site ainda. A seção aparece na página inicial quando
               houver pelo menos 1.
             </span>
           ) : (
             <span>
               <span className="price font-display text-[1.375rem] leading-none">{count.shown}</span> {count.shown === 1 ? 'depoimento no site' : 'depoimentos no site'}
-              {count.hidden > 0 && <span className="text-ink-muted"> · {count.hidden === 1 ? '1 oculto' : `${count.hidden} ocultos`}</span>}
             </span>
           )}
         </p>

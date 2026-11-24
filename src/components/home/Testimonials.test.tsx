@@ -14,7 +14,7 @@ function show(content?: SiteContent) {
   return render(<Testimonials />);
 }
 
-const item = (id: string, name: string, visible: boolean, city = 'Cuiabá/MT'): Testimonial => ({ id, text: `Amei a peça, ${name}.`, name, city, visible, authorized: true });
+const item = (id: string, name: string, city = 'Cuiabá/MT'): Testimonial => ({ id, text: `Amei a peça, ${name}.`, name, city, authorized: true });
 
 describe('Testimonials', () => {
   it('is gone (title included) until the owner publishes real ones', () => {
@@ -23,13 +23,8 @@ describe('Testimonials', () => {
     expect(screen.queryByRole('heading', { name: 'Quem usa, recomenda' })).not.toBeInTheDocument();
   });
 
-  it('is gone when every saved testimonial is hidden', () => {
-    const { container } = show({ depoimentos: { items: [item('a', 'Ana', false)] } });
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it('shows only the visible ones, in her order, with name and city and no star rating', () => {
-    show({ depoimentos: { items: [item('b', 'Bia', true), item('a', 'Ana', false), item('c', 'Carla', true, '')] } });
+  it('shows them in her order, with name and city and no star rating', () => {
+    show({ depoimentos: { items: [item('b', 'Bia'), item('c', 'Carla', '')] } });
     expect(screen.getByRole('heading', { name: 'Quem usa, recomenda' })).toBeInTheDocument();
     const cards = within(screen.getByRole('list', { name: 'Depoimentos de clientes' })).getAllByRole('listitem');
     expect(cards).toHaveLength(2);
@@ -37,15 +32,14 @@ describe('Testimonials', () => {
     expect(cards[0]).toHaveTextContent('Bia · Cuiabá/MT');
     expect(cards[1]).toHaveAccessibleName('Depoimento 2 de 2');
     expect(cards[1]!.querySelector('figcaption')).toHaveTextContent(/^Carla$/);
-    expect(screen.queryByText(/Ana/)).not.toBeInTheDocument();
     expect(screen.queryByRole('img', { name: /estrelas/ })).not.toBeInTheDocument();
   });
 
   it('uses the section title the owner saved', () => {
-    const base = show({ depoimentos: { items: [item('b', 'Bia', true)] } });
+    const base = show({ depoimentos: { items: [item('b', 'Bia')] } });
     base.unmount();
     const inicio = { ...defaultInicio(), titles: { ...defaultInicio().titles, testimonials: 'Clientes ÉKA' } };
-    show({ inicio, depoimentos: { items: [item('b', 'Bia', true)] } });
+    show({ inicio, depoimentos: { items: [item('b', 'Bia')] } });
     expect(screen.getByRole('heading', { name: 'Clientes ÉKA' })).toBeInTheDocument();
   });
 });

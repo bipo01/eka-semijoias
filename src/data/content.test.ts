@@ -60,7 +60,7 @@ describe('facts', () => {
 });
 
 describe('section schemas', () => {
-  const testimonial = { id: 't1', text: 'Amei o brinco!', name: 'Ana', city: 'Cuiabá/MT', visible: true, authorized: true };
+  const testimonial = { id: 't1', text: 'Amei o brinco!', name: 'Ana', city: 'Cuiabá/MT', authorized: true };
 
   it('trim texts and enforce the limits', () => {
     const r = parseSection('contato', { header: { eyebrow: ' Contato ', title: '  Fale  ', highlight: '', intro: '' }, quickTitle: 'x' });

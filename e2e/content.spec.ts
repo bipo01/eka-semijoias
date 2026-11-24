@@ -2,8 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 
 /*
  * Site content edited in Painel → Site (docs/conteudo/PLAN.md): a testimonial
- * added in the admin reaches an open visitor page live, hiding it removes the
- * section, and "Restaurar o texto original" brings the built-in state back.
+ * added in the admin reaches an open visitor page live, deleting it removes the
+ * section (and its data from the public catalog), and "Restaurar o texto original" brings the built-in state back.
  * The writes run in one project only: the four projects share one database and
  * the same section edited in parallel would (correctly) conflict.
  */
@@ -20,7 +20,7 @@ async function unlock(page: Page) {
   await expect(page.getByRole('heading', { name: 'Pedidos', level: 1 })).toBeVisible();
 }
 
-test('site content: a testimonial added in the admin shows live, hides and is restored', async ({ page, browser }, testInfo) => {
+test('site content: a testimonial added in the admin shows live, is deleted and the section restored', async ({ page, browser }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'writes run in one project (shared database)');
   const visitorContext = await browser.newContext();
   const visitor = await visitorContext.newPage();
@@ -52,11 +52,14 @@ test('site content: a testimonial added in the admin shows live, hides and is re
   await expect(section.getByText('Uso a argola todos os dias e continua linda.')).toBeVisible();
   await expect(section.getByText(/Bruna S\..*Cuiabá\/MT/)).toBeVisible();
 
-  // Hidden: kept in the admin, gone from the site.
-  await editor.getByRole('switch', { name: /Mostrar no site/ }).click();
+  // Deleted (there is no "hidden" state: the public catalog would still carry it): gone from the site.
+  await editor.getByRole('button', { name: /Apagar Bruna S\.|Apagar depoimento 1/ }).click();
+  await page.getByRole('dialog', { name: /Apagar/ }).getByRole('button', { name: /Apagar/ }).click();
   await editor.getByRole('button', { name: 'Salvar' }).click();
   await expect(page.getByText(/Depoimentos: alterações salvas/).last()).toBeVisible();
   await expect(visitor.getByRole('heading', { name: 'Quem usa, recomenda' })).toHaveCount(0, { timeout: 15_000 });
+  const published = await (await page.request.get('/api/catalog')).json();
+  expect(JSON.stringify(published)).not.toContain('Bruna S.');
 
   // Back to the built-in state.
   await editor.getByRole('button', { name: /Restaurar o texto original/ }).click();

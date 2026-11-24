@@ -72,8 +72,7 @@ export const testimonialSchema = z.object({
   text: req(400),
   name: req(40),
   city: text(40),
-  /** Shown on the site; hidden ones stay saved. */
-  visible: z.boolean(),
+  // No "hidden" state on purpose: the snapshot is public, so a testimonial that leaves the site is deleted.
   /** The customer agreed to the publication (required to save). */
   authorized: z.literal(true, { error: 'Confirme que a cliente autorizou publicar.' }),
 });

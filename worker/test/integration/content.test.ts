@@ -162,7 +162,7 @@ describe('site content', () => {
     const empty = await send(a, c.version, [upsert('geral', { ...defaults.geral, bagEmptyTitle: '   ' })]);
     expect(empty.status).toBe(400);
     expect(empty.json.error.message).toContain('Preencha este campo.');
-    const fake = await send(a, c.version, [upsert('depoimentos', { items: [{ id: 't1', text: 'Amei', name: 'Ana', city: '', visible: true, authorized: false }] })]);
+    const fake = await send(a, c.version, [upsert('depoimentos', { items: [{ id: 't1', text: 'Amei', name: 'Ana', city: '', authorized: false }] })]);
     expect(fake.status).toBe(400);
     // Not signed in: no writes.
     expect((await send(new Client(), c.version, [upsert('geral', defaults.geral)])).status).toBe(401);

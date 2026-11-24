@@ -71,8 +71,8 @@ describe('checklist', () => {
 
   it('counts testimonials when at least one is on the site, and Sobre once it was edited', () => {
     const t = { id: 'd1', text: 'Amei', name: 'Ana', city: '', authorized: true as const };
-    expect(done('testimonials', { depoimentos: { items: [{ ...t, visible: false }] } })).toBe(false);
-    expect(done('testimonials', { depoimentos: { items: [{ ...t, visible: true }] } })).toBe(true);
+    expect(done('testimonials', { depoimentos: { items: [] } })).toBe(false);
+    expect(done('testimonials', { depoimentos: { items: [t] } })).toBe(true);
     expect(done('about', undefined)).toBe(false);
     const sobre = { header: { eyebrow: '', title: 'Oi', highlight: '', intro: '' }, story: 'História', signature: '', image: null, valuesTitle: 'Valores', values: [] };
     expect(done('about', { sobre })).toBe(true);
