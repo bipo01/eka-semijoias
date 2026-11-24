@@ -48,7 +48,7 @@ export function linePrice(catalog: Catalog, line: OrderLine, agreed?: ReadonlyMa
   return product ? effectivePrice(product) : null;
 }
 
-function Picker({ catalog, onAdd, onClose }: { catalog: Catalog; onAdd: (line: OrderLine) => void; onClose: () => void }) {
+function Picker({ catalog, onAdd, onClose, addLabel }: { catalog: Catalog; onAdd: (line: OrderLine) => void; onClose: () => void; addLabel: string }) {
   const [query, setQuery] = useState('');
   const [product, setProduct] = useState<Product | null>(null);
   const [variant, setVariant] = useState<Variant | null>(null);
@@ -132,7 +132,7 @@ function Picker({ catalog, onAdd, onClose }: { catalog: Catalog; onAdd: (line: O
               onClose();
             }}
           >
-            {needsSize ? 'Escolha o tamanho' : 'Adicionar ao pedido'}
+            {needsSize ? 'Escolha o tamanho' : addLabel}
           </Button>
           <Button variant="ghost" onClick={onClose}>
             Fechar
@@ -188,13 +188,26 @@ function Picker({ catalog, onAdd, onClose }: { catalog: Catalog; onAdd: (line: O
   );
 }
 
-export function OrderItemsEditor({ lines, onChange, agreed }: { lines: OrderLine[]; onChange: (lines: OrderLine[]) => void; agreed?: ReadonlyMap<string, number> }) {
+export function OrderItemsEditor({
+  lines,
+  onChange,
+  agreed,
+  label = 'Peças do pedido',
+  addLabel = 'Adicionar ao pedido',
+}: {
+  lines: OrderLine[];
+  onChange: (lines: OrderLine[]) => void;
+  agreed?: ReadonlyMap<string, number>;
+  /** Accessible name of the list ("Peças da maleta" in a kit). */
+  label?: string;
+  addLabel?: string;
+}) {
   const catalog = useCatalog((s) => s.data);
   const [picking, setPicking] = useState(lines.length === 0);
   const total = lines.reduce((sum, l) => sum + (linePrice(catalog, l, agreed) ?? 0) * l.qty, 0);
 
   return (
-    <section aria-label="Peças do pedido" className="flex flex-col gap-3">
+    <section aria-label={label} className="flex flex-col gap-3">
       {lines.length > 0 && (
         <ul className="divide-y divide-line border-y border-line">
           {lines.map((line) => {
@@ -234,7 +247,7 @@ export function OrderItemsEditor({ lines, onChange, agreed }: { lines: OrderLine
         </ul>
       )}
       {picking ? (
-        <Picker catalog={catalog} onAdd={(line) => onChange(addLine(lines, line))} onClose={() => setPicking(false)} />
+        <Picker catalog={catalog} addLabel={addLabel} onAdd={(line) => onChange(addLine(lines, line))} onClose={() => setPicking(false)} />
       ) : (
         lines.length < MAX_ORDER_ITEMS && (
           <Button variant="secondary" block onClick={() => setPicking(true)}>

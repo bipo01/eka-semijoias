@@ -308,7 +308,7 @@ export const PRESET_TEMPLATES: readonly PresetTemplate[] = [
     id: 'convite_revendedora.classica',
     type: 'convite_revendedora',
     name: 'Clássica',
-    text: 'Oi[, {primeiro_nome}]! Seu cadastro de revendedora {loja} foi aprovado. 🎉\n\n1. Leia e aceite o contrato e crie seu PIN de acesso:\n{link_convite}\n\n[2. Este é o seu mostruário digital, para enviar às suas clientes:\n{link_mostruario}]\n\nO link de acesso vale por 7 dias.',
+    text: 'Oi[, {primeiro_nome}]! Seu cadastro de revendedora {loja} foi aprovado. 🎉\n\n1. Leia e aceite o contrato e crie seu PIN de acesso:\n{link_convite}\n\n[2. Seu mostruário digital, para enviar às suas clientes: {link_mostruario}]\n\nO link de acesso vale por 7 dias.',
   },
   {
     id: 'convite_revendedora.carinhosa',

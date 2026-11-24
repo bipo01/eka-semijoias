@@ -78,3 +78,10 @@ describe('warranty helpers', () => {
     expect(warrantyUntil('2027-01-31T12:00:00', 1)).toBe('28/02/2027');
   });
 });
+
+describe('reseller message templates', () => {
+  it('never leave an optional part across lines (it would show its brackets)', async () => {
+    const { PRESET_TEMPLATES } = await import('./messages');
+    for (const t of PRESET_TEMPLATES) expect(/\[[^\]]*\n[^\]]*\]/.test(t.text), t.id).toBe(false);
+  });
+});

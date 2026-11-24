@@ -3,7 +3,7 @@ import { AlertTriangle, ChevronRight, Copy, ExternalLink, KeyRound, Plus } from 
 import { Button, ButtonAnchor } from '../../components/ui/Button';
 import { TextArea, TextField } from '../../components/ui/Field';
 import { WhatsAppIcon } from '../../components/ui/Icons';
-import { Chip, Switch } from '../../components/ui/Misc';
+import { Chip } from '../../components/ui/Misc';
 import { Sheet } from '../../components/ui/Sheet';
 import { cx } from '../../components/ui/cx';
 import { sizeLabel } from '../../data/catalog';
@@ -26,7 +26,7 @@ import { FINISH_LABEL, type ResellerLead } from '../../data/schema';
 import { formatBRL } from '../../lib/format';
 import { whatsappUrl } from '../../lib/whatsapp';
 import { toast } from '../../store/ui';
-import { EmptyState } from '../FormBits';
+import { EmptyState, SwitchRow } from '../FormBits';
 import { formatDateTime, formatPhone } from '../lib/contact';
 import { checkContract, isError, markKitPaid, newInvite, patchReseller, saveProgram, showcaseLink, useProgram, useResellerDetail, useResellers, type ResellerSummary } from '../lib/resellers';
 import { LeadsPage } from './LeadsPage';
@@ -283,13 +283,13 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
                   Vendeu {formatBRL(k.settlement?.soldCents ?? 0)} · comissão {k.settlement?.percent}% ({formatBRL(k.settlement?.commissionCents ?? 0)})
                   {k.settlement?.missingCents ? ` · faltaram ${formatBRL(k.settlement.missingCents)}` : ''}
                 </p>
-                <div className="mt-2">
-                  <Switch
-                    checked={!!k.settlement?.paidAt}
-                    label="Repasse recebido"
-                    onChange={(paid) => void markKitPaid(k, paid).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : reload()))}
-                  />
-                </div>
+                <SwitchRow
+                  className="mt-2"
+                  label="Repasse recebido"
+                  {...(k.settlement?.paidAt ? { hint: `Marcado em ${formatDateTime(k.settlement.paidAt)}` } : {})}
+                  checked={!!k.settlement?.paidAt}
+                  onChange={(paid) => void markKitPaid(k, paid).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : reload()))}
+                />
               </li>
             ))}
           </ul>
@@ -389,8 +389,8 @@ function EditReseller({ reseller, program, onDone }: { reseller: Reseller; progr
     <div className="flex flex-col gap-4">
       <TextField label="Nome completo" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
       <TextField label="Endereço do mostruário" value={slug} maxLength={40} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} hint={`eka…/r/${slug}`} />
-      <Switch checked={showWhatsapp} onChange={setShowWhatsapp} label="Mostrar o WhatsApp dela no mostruário" />
-      <Switch checked={ownTiers} onChange={setOwnTiers} label="Comissão própria (fixa) em vez das faixas do programa" />
+      <SwitchRow checked={showWhatsapp} onChange={setShowWhatsapp} label="Mostrar o WhatsApp dela no mostruário" hint="Sem ele, os pedidos do mostruário vão para o WhatsApp da loja." />
+      <SwitchRow checked={ownTiers} onChange={setOwnTiers} label="Comissão própria (fixa)" hint="Em vez das faixas do programa. Vale a partir da próxima maleta." />
       {ownTiers && <TextField label="Comissão fixa (%)" inputMode="decimal" value={percent} onChange={(e) => setPercent(e.target.value.replace(/[^\d,.]/g, ''))} wrapperClassName="max-w-40" hint="Vale a partir da próxima maleta." />}
       {program.contract.mode === 'link' && <TextField label="Link do contrato dela" optional value={contractUrl} onChange={(e) => setContractUrl(e.target.value)} hint="Se vazio, usa o link geral do programa." />}
       <TextArea label="Observação interna" optional value={note} maxLength={600} rows={3} onChange={(e) => setNote(e.target.value)} />

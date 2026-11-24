@@ -128,7 +128,7 @@ export function KitEditor({ resellerId, kit, onDone }: { resellerId: string; kit
 
   return (
     <div className="flex flex-col gap-4">
-      <OrderItemsEditor lines={lines} onChange={setLines} agreed={agreed} />
+      <OrderItemsEditor lines={lines} onChange={setLines} agreed={agreed} label="Peças da maleta" addLabel="Adicionar à maleta" />
       <ul className="flex flex-col gap-1 text-sm text-ink-muted">
         <li>Os preços são os de venda: o do catálogo hoje (as peças que já estavam na maleta mantêm o preço).</li>
         <li>Peças com controle de estoque saem do estoque agora e voltam no acerto, se não forem vendidas.</li>
