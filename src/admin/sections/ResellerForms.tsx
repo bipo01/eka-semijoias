@@ -5,7 +5,7 @@ import { SelectField, TextField } from '../../components/ui/Field';
 import { WhatsAppIcon } from '../../components/ui/Icons';
 import { Stepper } from '../../components/ui/Misc';
 import { firstNameOf } from '../../data/messages';
-import { commissionFor, kitState, settle, type Kit, type Reseller, type ResellerSale } from '../../data/revenda';
+import { commissionFor, kitDiscounts, kitState, settle, type Kit, type Reseller, type ResellerSale } from '../../data/revenda';
 import type { ResellerLead } from '../../data/schema';
 import { sizeLabel } from '../../data/catalog';
 import { FINISH_LABEL } from '../../data/schema';
@@ -192,6 +192,7 @@ export function SettleForm({ kit, sales, onDone }: { kit: Kit; sales: ResellerSa
   const returned = lines.map((l) => ({ productId: l.productId, variantId: l.variantId, size: l.size, qty: back[keyOf(l)] ?? 0 }));
   const preview = settle(kit, sales, returned);
   const commission = commissionFor('error' in preview ? 0 : preview.soldCents, kit.tiers);
+  const discounts = kitDiscounts(kit, sales);
 
   async function confirmSettlement() {
     if (busy) return;
@@ -239,6 +240,12 @@ export function SettleForm({ kit, sales, onDone }: { kit: Kit; sales: ResellerSa
         <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 rounded-[12px] border border-line bg-white p-4 text-sm">
           <dt>Vendido no ciclo</dt>
           <dd className="price text-right">{formatBRL(preview.soldCents)}</dd>
+          {discounts.cents > 0 && (
+            <>
+              <dt className="text-danger">Descontos dados ({discounts.sales === 1 ? '1 venda' : `${discounts.sales} vendas`}), já fora do vendido</dt>
+              <dd className="price text-right text-danger">{formatBRL(discounts.cents)}</dd>
+            </>
+          )}
           <dt>Comissão ({commission.percent}%)</dt>
           <dd className="price text-right">−{formatBRL(preview.commissionCents)}</dd>
           {preview.missingCents > 0 && (

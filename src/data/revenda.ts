@@ -267,6 +267,32 @@ export function kitState(kit: Pick<Kit, 'items'>, sales: Pick<ResellerSale, 'sta
 export const kitValueCents = (items: Pick<KitItem, 'qty' | 'unitCents'>[]) => items.reduce((sum, i) => sum + i.qty * i.unitCents, 0);
 export const salesTotalCents = (sales: Pick<ResellerSale, 'status' | 'totalCents'>[]) => sales.reduce((sum, s) => sum + (s.status === 'ativa' ? s.totalCents : 0), 0);
 
+/** What a sale would have been at the kit price (lines no longer in the kit count at the price sold). */
+export function saleKitPriceCents(kit: Pick<Kit, 'items'>, sale: Pick<ResellerSale, 'lines'>): number {
+  const price = new Map(kit.items.map((i) => [lineKey(i), i.unitCents]));
+  return sale.lines.reduce((sum, l) => sum + l.qty * Math.max(l.unitCents, price.get(lineKey(l)) ?? l.unitCents), 0);
+}
+
+/** How much below the kit price a sale went; 0 when sold at (or above) it. */
+export function saleDiscountCents(kit: Pick<Kit, 'items'>, sale: Pick<ResellerSale, 'lines'>): number {
+  return saleKitPriceCents(kit, sale) - sale.lines.reduce((sum, l) => sum + l.qty * l.unitCents, 0);
+}
+
+/** Discounts given in the active sales of a kit: total and how many sales had one. */
+export function kitDiscounts(kit: Pick<Kit, 'items'>, sales: Pick<ResellerSale, 'status' | 'lines'>[]): { cents: number; sales: number } {
+  let cents = 0;
+  let count = 0;
+  for (const s of sales) {
+    if (s.status !== 'ativa') continue;
+    const d = saleDiscountCents(kit, s);
+    if (d > 0) {
+      cents += d;
+      count += 1;
+    }
+  }
+  return { cents, sales: count };
+}
+
 export interface CommissionState {
   percent: number;
   commissionCents: number;

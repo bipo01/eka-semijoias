@@ -12,10 +12,12 @@ import { firstNameOf } from '../../data/messages';
 import {
   commissionFor,
   daysLeft,
+  kitDiscounts,
   kitState,
   kitValueCents,
   PAYMENT_LABEL,
   RESELLER_STATUS_LABEL,
+  saleDiscountCents,
   salesTotalCents,
   type Kit,
   type Program,
@@ -138,6 +140,7 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
   const { reseller, kits, sales, acceptances, invitePendingUntil } = state.data;
   const open = kits.find((k) => k.status === 'aberta') ?? null;
   const openSales = open ? sales.filter((s) => s.kitId === open.id) : [];
+  const discounts = open ? kitDiscounts(open, openSales) : { cents: 0, sales: 0 };
   const closed = kits.filter((k) => k.status === 'fechada');
   const contractDue = !reseller.contract || reseller.contract.version < program.contract.version || reseller.contract.mode !== program.contract.mode;
   const eraseBlocked = erasureBlocker(reseller, kits);
@@ -260,20 +263,33 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
           <h3 id="sales-title" className="mb-2 font-display text-title">
             Vendas deste ciclo
           </h3>
+          {open && discounts.cents > 0 && (
+            <p className="mb-2 rounded-[10px] bg-[#f6e9e6] px-3 py-2 text-sm text-danger">
+              Descontos no ciclo: <span className="price font-medium">{formatBRL(discounts.cents)}</span> em {discounts.sales === 1 ? '1 venda' : `${discounts.sales} vendas`}.
+            </p>
+          )}
           <ul className="flex flex-col gap-2">
-            {openSales.map((s) => (
-              <li key={s.id} className={cx('rounded-[10px] border border-line bg-white p-3 text-sm', s.status === 'cancelada' && 'opacity-60')}>
-                <div className="flex justify-between gap-3">
-                  <span>{formatDateTime(s.createdAt)}</span>
-                  <span className="price font-medium">{formatBRL(s.totalCents)}</span>
-                </div>
-                <p className="text-ink-muted">
-                  {s.lines.map((l) => `${l.qty}× ${l.name}`).join(', ')} · {PAYMENT_LABEL[s.payment]}
-                  {s.customer?.name && ` · ${s.customer.name}`}
-                  {s.status === 'cancelada' && ' · desfeita'}
-                </p>
-              </li>
-            ))}
+            {openSales.map((s) => {
+              const discount = open ? saleDiscountCents(open, s) : 0;
+              return (
+                <li key={s.id} className={cx('rounded-[10px] border border-line bg-white p-3 text-sm', s.status === 'cancelada' && 'opacity-60')}>
+                  <div className="flex justify-between gap-3">
+                    <span>{formatDateTime(s.createdAt)}</span>
+                    <span className="price font-medium">{formatBRL(s.totalCents)}</span>
+                  </div>
+                  <p className="text-ink-muted">
+                    {s.lines.map((l) => `${l.qty}× ${l.name}`).join(', ')} · {PAYMENT_LABEL[s.payment]}
+                    {s.customer?.name && ` · ${s.customer.name}`}
+                    {s.status === 'cancelada' && ' · desfeita'}
+                  </p>
+                  {discount > 0 && (
+                    <p className="mt-1 font-medium text-danger">
+                      Desconto de <span className="price">{formatBRL(discount)}</span> · preço da maleta <span className="price">{formatBRL(s.totalCents + discount)}</span>
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

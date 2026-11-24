@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commissionFor, DEFAULT_PROGRAM, earnings, kitState, programSchema, readProgram, settle, uniqueSlug, type Kit, type ResellerSale } from './revenda';
+import { commissionFor, DEFAULT_PROGRAM, earnings, kitDiscounts, kitState, saleDiscountCents, programSchema, readProgram, settle, uniqueSlug, type Kit, type ResellerSale } from './revenda';
 import { warrantyText, warrantyUntil } from './customers';
 
 const tiers = DEFAULT_PROGRAM.tiers;
@@ -83,5 +83,36 @@ describe('reseller message templates', () => {
   it('never leave an optional part across lines (it would show its brackets)', async () => {
     const { PRESET_TEMPLATES } = await import('./messages');
     for (const t of PRESET_TEMPLATES) expect(/\[[^\]]*\n[^\]]*\]/.test(t.text), t.id).toBe(false);
+  });
+});
+
+describe('discounts on reseller sales', () => {
+  const kit = {
+    items: [
+      { productId: 'p1', variantId: 'v1', size: '', qty: 3, unitCents: 21990, name: 'Anel', finish: 'rose' as const },
+      { productId: 'p2', variantId: 'v2', size: '18', qty: 1, unitCents: 10000, name: 'Brinco', finish: 'dourado' as const },
+    ],
+  };
+  const line = (productId: string, variantId: string, size: string, qty: number, unitCents: number) => ({ productId, variantId, size, qty, unitCents, name: 'x', finish: 'rose' as const });
+
+  it('is the difference to the kit price, per unit sold', () => {
+    expect(saleDiscountCents(kit, { lines: [line('p1', 'v1', '', 2, 15000)] })).toBe(2 * (21990 - 15000));
+    expect(saleDiscountCents(kit, { lines: [line('p1', 'v1', '', 1, 21990), line('p2', 'v2', '18', 1, 9000)] })).toBe(1000);
+  });
+
+  it('is zero at or above the kit price, and never negative', () => {
+    expect(saleDiscountCents(kit, { lines: [line('p1', 'v1', '', 1, 21990)] })).toBe(0);
+    expect(saleDiscountCents(kit, { lines: [line('p1', 'v1', '', 1, 25000), line('p2', 'v2', '18', 1, 9000)] })).toBe(1000);
+    expect(saleDiscountCents(kit, { lines: [line('p9', 'v9', '', 1, 100)] })).toBe(0);
+  });
+
+  it('sums the active sales of the cycle only', () => {
+    const sales = [
+      { status: 'ativa' as const, lines: [line('p1', 'v1', '', 1, 20000)] },
+      { status: 'ativa' as const, lines: [line('p1', 'v1', '', 1, 21990)] },
+      { status: 'cancelada' as const, lines: [line('p2', 'v2', '18', 1, 1)] },
+      { status: 'ativa' as const, lines: [line('p2', 'v2', '18', 1, 8000)] },
+    ];
+    expect(kitDiscounts(kit, sales)).toEqual({ cents: 1990 + 2000, sales: 2 });
   });
 });

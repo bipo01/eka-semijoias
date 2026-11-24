@@ -9,6 +9,7 @@ import {
   kitState,
   kitValueCents,
   resellerSaleSchema,
+  saleDiscountCents,
   saleRequestSchema,
   salesTotalCents,
   type Kit,
@@ -481,7 +482,16 @@ export async function handleResellerSale(ctx: Context): Promise<Response> {
       throw toHttpError(error);
     }
     ctx.waitUntil(notifyLeads(ctx.env));
-    ctx.waitUntil(notifyOwner(ctx.env, ctx.url.origin, { title: `Venda de revendedora · ${reseller.name.split(/\s+/)[0]}`, body: `${formatBRL(totalCents)} · ${saleLines.reduce((n, l) => n + l.qty, 0)} ${saleLines.length === 1 && saleLines[0]!.qty === 1 ? 'peça' : 'peças'}.`, url: '/admin/revendedoras', tag: `rev-${reseller.id}` }));
+    const pieces = `${saleLines.reduce((n, l) => n + l.qty, 0)} ${saleLines.length === 1 && saleLines[0]!.qty === 1 ? 'peça' : 'peças'}`;
+    const discount = saleDiscountCents(kit, { lines: saleLines });
+    ctx.waitUntil(
+      notifyOwner(ctx.env, ctx.url.origin, {
+        title: `Venda de revendedora · ${reseller.name.split(/\s+/)[0]}`,
+        body: `${formatBRL(totalCents)} · ${pieces}${discount > 0 ? ` · desconto de ${formatBRL(discount)}` : ''}.`,
+        url: '/admin/revendedoras',
+        tag: `rev-${reseller.id}`,
+      }),
+    );
     return json(response, { status: 201 });
   }
   throw new HttpError('unavailable', 'Muitas vendas ao mesmo tempo. Tente de novo.');
