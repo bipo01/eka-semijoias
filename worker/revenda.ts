@@ -55,7 +55,6 @@ const SESSION_MS = 30 * DAY;
 const LOGIN_IP_WINDOW = 15 * MINUTE;
 const LOGIN_IP_MAX = 5;
 const LOGIN_RESELLER_MAX = 10;
-const LOGIN_GLOBAL_MAX = 300;
 const CANCEL_WINDOW_MS = DAY;
 
 const cookieName = (env: Env) => (env.DEV_INSECURE_COOKIES === '1' ? 'eka_revenda' : '__Host-eka_revenda');
@@ -241,11 +240,11 @@ export async function handleResellerLogin(ctx: Context): Promise<Response> {
   if (byIp.count > LOGIN_IP_MAX) throw retryAfter(byIp.window_start + LOGIN_IP_WINDOW, now, 'Muitas tentativas deste aparelho.');
   const input = loginSchema.safeParse(await readJson(ctx.request, 1024));
   if (!input.success) throw new HttpError('invalid_pin', 'WhatsApp ou PIN incorretos.');
-  // Per number (registered or not, so the limit does not reveal who is a reseller) and overall.
+  // Per number, registered or not (the limit does not reveal who is a reseller). No overall cap: a
+  // distributed flood would otherwise lock every reseller out; per network (5 / 15 min) and per number
+  // (10 / hour) already make guessing a 6-digit PIN impractical.
   const byNumber = await hit(db, `rlogin:n:${input.data.whatsapp}`, HOUR, now);
   if (byNumber.count > LOGIN_RESELLER_MAX) throw retryAfter(byNumber.window_start + HOUR, now, 'Muitas tentativas deste aparelho.');
-  const global = await hit(db, 'rlogin:global', HOUR, now);
-  if (global.count > LOGIN_GLOBAL_MAX) throw retryAfter(global.window_start + HOUR, now, 'Muitas tentativas agora.');
   const row = await withReadRetry(() =>
     db.prepare(`SELECT r.id, r.status, c.pin_hash, c.salt FROM resellers r LEFT JOIN reseller_credentials c ON c.reseller_id = r.id WHERE r.whatsapp = ?1`).bind(input.data.whatsapp).first<{ id: string; status: string; pin_hash: string | null; salt: string | null }>(),
   );
