@@ -61,7 +61,20 @@ self.addEventListener('push', (event) => {
     options.tag = tag;
     options.renotify = true;
   }
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    (async () => {
+      let shown = true;
+      try {
+        await self.registration.showNotification(title, options);
+      } catch {
+        shown = false; // the system refused to show it (notifications blocked for the app)
+      }
+      // Tells an open panel that this device received the notice ("Enviar aviso de teste" uses it to
+      // say whether the notice arrived, so a notice the phone hides can be told from one never delivered).
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const w of windows) w.postMessage({ type: 'eka-push', tag: tag || null, shown });
+    })(),
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {

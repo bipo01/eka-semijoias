@@ -74,6 +74,90 @@ function handleError(error: unknown): string {
 }
 
 /** The server's view plus which listed device is this one. */
+// ---------------------------------------------------------------------------
+// "Enviar aviso de teste": did the notice reach this device?
+// ---------------------------------------------------------------------------
+
+/** waiting · arrived (and handed to the system) · refused (the system did not let it show) · missing (never arrived). */
+export type TestResult = 'waiting' | 'arrived' | 'refused' | 'missing';
+export const ARRIVAL_WAIT_MS = 20_000;
+
+/** A new sw.js (the one that reports arrivals) takes over before the test, at most a few seconds. */
+async function serviceWorkerUpToDate(): Promise<void> {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration('/');
+    await reg?.update();
+    const next = reg?.installing ?? reg?.waiting;
+    if (!next) return;
+    await new Promise<void>((resolve) => {
+      const done = () => resolve();
+      next.addEventListener('statechange', () => next.state === 'activated' && done());
+      setTimeout(done, 5000);
+    });
+  } catch {
+    /* offline or no service worker: the test still goes out */
+  }
+}
+
+/** Resolves with what the service worker reports for the test notice (tag "teste"), or "missing" after `ms`. */
+export function waitForTestNotice(ms: number): { result: Promise<TestResult>; cancel: () => void } {
+  let cancel = () => {};
+  const result = new Promise<TestResult>((resolve) => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; tag?: string | null; shown?: boolean } | null;
+      if (data?.type !== 'eka-push' || data.tag !== 'teste') return;
+      stop();
+      resolve(data.shown === false ? 'refused' : 'arrived');
+    };
+    const timer = setTimeout(() => {
+      stop();
+      resolve('missing');
+    }, ms);
+    const stop = () => {
+      clearTimeout(timer);
+      navigator.serviceWorker?.removeEventListener('message', onMessage);
+    };
+    cancel = () => {
+      stop();
+      resolve('missing');
+    };
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+  });
+  return { result, cancel };
+}
+
+const time = (d: Date) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+/** What the test found, and what to do on the phone when the notice did not show. */
+function TestOutcome({ result, at }: { result: TestResult; at: Date }) {
+  if (result === 'waiting')
+    return (
+      <p role="status" className="text-sm text-ink-muted">
+        Esperando o aviso chegar neste aparelho (até 20 segundos)…
+      </p>
+    );
+  if (result === 'arrived')
+    return (
+      <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-champagne/60 p-3 text-sm">
+        <p className="font-medium">O aviso chegou neste aparelho às {time(at)}.</p>
+        <p>Se ele não apareceu na barra de notificações, o celular está escondendo os avisos. Nas configurações do Android, abra Apps → Painel ÉKA (ou Chrome, se você usa o painel pelo navegador) → Notificações e ligue tudo, inclusive a categoria “Sites”, com som e na tela de bloqueio.</p>
+      </div>
+    );
+  if (result === 'refused')
+    return (
+      <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-[#f6e9e6] p-3 text-sm">
+        <p className="font-medium text-danger">O aviso chegou, mas o celular não deixou mostrar.</p>
+        <p>Nas configurações do Android, abra Apps → Painel ÉKA (ou Chrome) → Notificações e permita as notificações. Depois envie o teste de novo.</p>
+      </div>
+    );
+  return (
+    <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-[#f6e9e6] p-3 text-sm">
+      <p className="font-medium text-danger">O aviso saiu do site, mas não chegou a este aparelho em 20 segundos.</p>
+      <p>Em celulares Xiaomi, Samsung e Motorola, a economia de bateria costuma segurar os avisos. Nas configurações do Android, abra Apps → Painel ÉKA e também Chrome: em Bateria, escolha “Sem restrições”, e ligue o “Início automático”. Confira também se a internet está ligada e envie o teste de novo.</p>
+    </div>
+  );
+}
+
 async function fetchStatus(): Promise<{ status: PushStatus; thisId: string | null }> {
   const status = await api<PushStatus>('/api/admin/push', { retries: 2 });
   let thisId: string | null = null;
@@ -93,6 +177,8 @@ export function PushSettings() {
   const [thisId, setThisId] = useState<string | null>(null);
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() => (supported() ? Notification.permission : 'unsupported'));
   const [busy, setBusy] = useState<'on' | 'off' | 'test' | string | null>(null);
+  /** Result of the last test on this device: did the notice reach it? */
+  const [check, setCheck] = useState<{ result: TestResult; at: Date } | null>(null);
 
   const apply = useCallback((r: { status: PushStatus; thisId: string | null }) => {
     setStatus(r.status);
@@ -180,12 +266,23 @@ export function PushSettings() {
   async function test() {
     if (busy) return;
     setBusy('test');
+    setCheck({ result: 'waiting', at: new Date() });
     try {
+      await serviceWorkerUpToDate();
+      // Listen before sending: the notice can arrive before the server answers.
+      const arrival = waitForTestNotice(ARRIVAL_WAIT_MS);
       const r = await api<{ sent: number; removed: number; failed: number }>('/api/admin/push/test', { json: {}, timeoutMs: 20_000 });
       if (r.sent) toast(`Aviso de teste enviado para ${r.sent} ${r.sent === 1 ? 'aparelho' : 'aparelhos'}.`, { tone: 'success' });
       else toast('Nenhum aparelho recebeu o aviso. Ative os avisos de novo no celular.', { tone: 'error' });
       await load();
+      if (!r.sent) {
+        arrival.cancel();
+        setCheck(null);
+        return;
+      }
+      setCheck({ result: await arrival.result, at: new Date() });
     } catch (error) {
+      setCheck(null);
       toast(handleError(error), { tone: 'error' });
     } finally {
       setBusy(null);
@@ -213,9 +310,10 @@ export function PushSettings() {
           <p className="text-sm text-success">Avisos ativados neste aparelho.</p>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" disabled={!!busy} aria-busy={busy === 'test'} onClick={() => void test()}>
-              {busy === 'test' ? 'Enviando…' : 'Enviar aviso de teste'}
+              {busy === 'test' ? (check?.result === 'waiting' ? 'Esperando o aviso…' : 'Enviando…') : 'Enviar aviso de teste'}
             </Button>
           </div>
+          {check && <TestOutcome result={check.result} at={check.at} />}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
