@@ -186,7 +186,7 @@ export function SectionEditor({ id, onClose }: { id: SiteSectionId; onClose: () 
       footer={
         <div className="flex flex-col gap-2">
           {serverError && (
-            <p role="alert" className="rounded-[10px] bg-[#f6e9e6] px-3 py-2 text-sm text-danger">
+            <p role="alert" className="rounded-[10px] bg-danger-tint px-3 py-2 text-sm text-danger">
               {serverError}
             </p>
           )}
@@ -220,7 +220,7 @@ export function SectionEditor({ id, onClose }: { id: SiteSectionId; onClose: () 
             <p className="text-sm text-ink-muted">Enquanto você não salvar, este texto se ajusta sozinho às informações da loja (garantia, envio, banho…). Depois de salvo, ele fica como você escreveu.</p>
           )}
           {formError && (
-            <p role="alert" className="rounded-[10px] bg-[#f6e9e6] px-3 py-2 text-sm text-danger">
+            <p role="alert" className="rounded-[10px] bg-danger-tint px-3 py-2 text-sm text-danger">
               {formError}
             </p>
           )}

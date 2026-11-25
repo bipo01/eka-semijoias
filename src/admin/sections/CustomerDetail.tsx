@@ -98,7 +98,7 @@ export function CustomerDetail({ id, onClose }: { id: string; onClose: () => voi
 
   return (
     <div className="flex flex-col gap-5">
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-[12px] border border-line bg-white p-4 text-sm">
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4 text-sm">
         <dt className="text-ink-muted">WhatsApp</dt>
         <dd className="price">{customer.whatsapp ? formatPhone(customer.whatsapp) : '—'}</dd>
         <dt className="text-ink-muted">Cidade</dt>

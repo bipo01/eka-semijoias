@@ -219,7 +219,7 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
       )}
 
       {selected && (
-        <div className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-3">
+        <div className="flex flex-col gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-3">
           <TextField
             label={`Descrição da foto ${selectedIndex + 1}`}
             required

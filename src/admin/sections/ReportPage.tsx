@@ -53,7 +53,7 @@ export function reportCsv(orders: Order[]): string {
 
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string | undefined }) {
   return (
-    <div className="rounded-[12px] border border-line bg-white p-4">
+    <div className="rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
       <p className="text-sm text-ink-muted">{label}</p>
       <p className="price mt-1 text-[1.5rem] leading-tight text-ink">{value}</p>
       {hint && <p className="mt-0.5 text-xs text-ink-muted">{hint}</p>}
@@ -72,7 +72,7 @@ function SalesChart({ buckets, monthly }: { buckets: Bucket[]; monthly: boolean 
   const every = Math.ceil(buckets.length / 7);
 
   return (
-    <section aria-labelledby="chart-title" className="rounded-[12px] border border-line bg-white p-4">
+    <section aria-labelledby="chart-title" className="rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
         <h2 id="chart-title" className="font-display text-title">Vendas {monthly ? 'por mês' : 'por dia'}</h2>
         <p className="text-sm text-ink-muted" aria-live="polite">
@@ -134,7 +134,7 @@ function RankList({ title, rows, unit, limit = 8 }: { title: string; rows: Ranke
   const shown = rows.slice(0, limit);
   const max = Math.max(1, ...shown.map((r) => r.cents));
   return (
-    <section aria-label={title} className="rounded-[12px] border border-line bg-white p-4">
+    <section aria-label={title} className="rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
       <h2 className="mb-3 font-display text-title">{title}</h2>
       {shown.length ? (
         <ol className="flex flex-col gap-3">
@@ -243,7 +243,7 @@ export function ReportPage() {
             <RankList title="Cidades" rows={report.cities} unit={ordersUnit} />
           </div>
 
-          <section aria-labelledby="stale-title" className="rounded-[12px] border border-line bg-white p-4">
+          <section aria-labelledby="stale-title" className="rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
             <h2 id="stale-title" className="font-display text-title">Pedidos parados</h2>
             <p className="mb-3 text-sm text-ink-muted">Em negociação há mais de 2 dias, de qualquer período. Vale chamar a cliente ou cancelar.</p>
             {report.stale.length ? (

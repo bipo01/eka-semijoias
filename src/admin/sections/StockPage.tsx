@@ -1,5 +1,6 @@
-import { useMemo, useState, type FormEvent } from 'react';
-import { ChevronRight, Minus, Plus, Search } from 'lucide-react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { AlertCircle, ChevronRight, Minus, PackageX, Plus, Search } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { Img } from '../../components/ui/Img';
@@ -18,6 +19,7 @@ import { EmptyState, SwitchRow } from '../FormBits';
 import { QuantityStepper } from '../QuantityStepper';
 import { holdingKey, matchesFilter, productStock, saveStock, STOCK_FILTERS, stockOverview, useStockData, type MoveKind, type ProductStock, type StockData, type StockFilter } from '../lib/stock';
 import { MovementList, StockHistory } from './StockHistory';
+import { CARD } from '../ui';
 import { StockMoveSheet, type MoveRequestState } from './StockMoveSheet';
 
 /*
@@ -93,7 +95,7 @@ function StockEditor({ product, data, onClose }: { product: Product; data: Stock
         product.variants.map((v) => {
           const combos = v.sizes?.length ? v.sizes : [''];
           return (
-            <fieldset key={v.id} className="rounded-[12px] border border-line bg-white p-4">
+            <fieldset key={v.id} className="rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
               <legend className="px-1 font-medium">
                 {FINISH_LABEL[v.finish]}
                 {!v.available && <span className="font-normal text-ink-muted"> · indisponível no site</span>}
@@ -150,15 +152,6 @@ function StockEditor({ product, data, onClose }: { product: Product; data: Stock
   );
 }
 
-function Kpi({ label, value, hint, tone, className }: { label: string; value: string; hint?: string | undefined; tone?: 'danger' | 'copper' | undefined; className?: string }) {
-  return (
-    <div className={cx('min-w-0 rounded-[12px] border border-line bg-white px-3 py-2.5 md:p-4', className)}>
-      <p className="truncate text-sm text-ink-muted">{label}</p>
-      <p className={cx('price mt-0.5 text-[1.375rem] leading-tight whitespace-nowrap md:text-[1.5rem]', tone === 'danger' ? 'text-danger' : tone === 'copper' ? 'text-copper' : 'text-ink')}>{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-ink-muted">{hint}</p>}
-    </div>
-  );
-}
 
 /** "3 em casa · 2 nas maletas" (or the sold-out / no-control wording) for a product row. */
 export function stockLine(stock: ProductStock): string {
@@ -185,7 +178,7 @@ function Whereabouts({ product, data }: { product: Product; data: StockData }) {
       <h3 id={`where-${product.id}`} className="mb-2 text-[1.25rem] leading-tight">
         Onde estão as peças
       </h3>
-      <ul className="divide-y divide-line rounded-[12px] border border-line bg-white text-sm">
+      <ul className="divide-y divide-line rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] text-sm">
         {lines.map((l) => (
           <li key={l.key} className="flex items-start justify-between gap-3 px-4 py-2.5">
             <span className="min-w-0">
@@ -247,7 +240,19 @@ export function StockPage() {
   const [filter, setFilter] = useState<StockFilter>('todas');
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
-  const [move, setMove] = useState<MoveRequestState | null>(null);
+  // Início's "Entrada no estoque" links here with ?entrada=1: the entry sheet opens with the page.
+  const [params, setParams] = useSearchParams();
+  const [move, setMove] = useState<MoveRequestState | null>(() => (params.get('entrada') === '1' ? { kind: 'entrada', productId: null, session: ++moveSession } : null));
+  useEffect(() => {
+    if (params.has('entrada'))
+      setParams(
+        (p) => {
+          p.delete('entrada');
+          return p;
+        },
+        { replace: true },
+      );
+  }, [params, setParams]);
   const data = state.status === 'ready' ? state.data : null;
   const rows = useMemo(() => (data ? [...products].sort(byOrder).map((p) => ({ product: p, stock: productStock(p, data, threshold) })) : []), [products, data, threshold]);
 
@@ -281,18 +286,34 @@ export function StockPage() {
 
   return (
     <>
-      <p className="mb-4 text-sm text-ink-muted">
-        Com o controle ligado, o site mostra “Esgotado” sozinho quando a peça acaba. Pedidos confirmados e maletas tiram do estoque; cancelamentos e acertos devolvem.
-      </p>
-
-      {/* Phone: units in a row of three, the value on its own line, then the alerts; wide screens: one row. */}
-      <section aria-label="Resumo do estoque" className="mb-4 grid grid-cols-6 gap-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1.4fr)]">
-        <Kpi className="col-span-2 lg:col-span-1" label="Em casa" value={String(overview.home)} hint="unidades" />
-        <Kpi className="col-span-2 lg:col-span-1" label="Nas maletas" value={String(overview.inKits)} hint="unidades" />
-        <Kpi className="col-span-2 lg:col-span-1" label="Total registrado" value={String(overview.total)} hint="das peças com controle" />
-        <Kpi className="col-span-6 lg:col-span-1" label="Valor em estoque" value={formatBRL(overview.valueCents)} hint="a preço de venda, com as maletas" />
-        <Kpi className="col-span-3 lg:col-span-1" label="Esgotadas" value={String(overview.soldOut)} tone={overview.soldOut ? 'danger' : undefined} hint="sem unidades em casa" />
-        <Kpi className="col-span-3 lg:col-span-1" label="Poucas unidades" value={String(overview.low)} tone={overview.low ? 'copper' : undefined} hint={`até ${threshold} por acabamento`} />
+      <section aria-label="Resumo do estoque" className="mb-4 flex flex-col gap-3">
+        <div className={cx(CARD, 'grid grid-cols-3 divide-x divide-line')}>
+          {[
+            { label: 'Em casa', value: overview.home },
+            { label: 'Nas maletas', value: overview.inKits },
+            { label: 'Total', value: overview.total },
+          ].map((k) => (
+            <div key={k.label} className="px-3 py-3.5 text-center">
+              <p className="price text-[1.5rem] leading-tight font-semibold">{k.value}</p>
+              <p className="text-xs text-ink-muted">{k.label}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="mr-auto text-sm text-ink-muted">
+            Valor em estoque <span className="price font-semibold text-ink">{formatBRL(overview.valueCents)}</span>
+          </p>
+          {overview.soldOut > 0 && (
+            <button type="button" onClick={() => setFilter('esgotadas')} className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-danger-tint px-3 text-sm font-medium text-danger">
+              <PackageX size={15} strokeWidth={1.75} aria-hidden="true" /> {overview.soldOut} {overview.soldOut === 1 ? 'esgotada' : 'esgotadas'}
+            </button>
+          )}
+          {overview.low > 0 && (
+            <button type="button" onClick={() => setFilter('poucas')} className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-warning-tint px-3 text-sm font-medium text-warning">
+              <AlertCircle size={15} strokeWidth={1.75} aria-hidden="true" /> {overview.low} com poucas unidades
+            </button>
+          )}
+        </div>
       </section>
 
       <div className="mb-5 grid grid-cols-2 gap-2 sm:flex">
@@ -336,7 +357,7 @@ export function StockPage() {
                 <button
                   type="button"
                   onClick={() => setOpenId(product.id)}
-                  className="flex w-full items-center gap-3 rounded-[12px] border border-line bg-white p-3 text-left transition-colors hover:border-copper focus-visible:outline-2 focus-visible:outline-copper"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-3 text-left transition-colors hover:border-copper focus-visible:outline-2 focus-visible:outline-copper"
                 >
                   {image ? (
                     <Img {...productImageSources(image, true)} alt="" ratio="4 / 5" frameClassName="w-12 shrink-0 rounded-[8px]" width={48} height={60} />

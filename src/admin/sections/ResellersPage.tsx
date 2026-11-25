@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { AlertTriangle, ChevronRight, Copy, Download, ExternalLink, KeyRound, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { AlertTriangle, Award, BarChart3, BellRing, BriefcaseBusiness, CalendarDays, ChevronRight, CircleOff, Info, Layers, Users, Wallet, Copy, Download, ExternalLink, HandCoins, KeyRound, Pause, Pencil, Play, Plus, Trash2, UserPlus } from 'lucide-react';
 import { Button, ButtonAnchor } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TextArea, TextField } from '../../components/ui/Field';
@@ -30,7 +31,10 @@ import { FINISH_LABEL, type ResellerLead } from '../../data/schema';
 import { formatBRL, parseBRL } from '../../lib/format';
 import { whatsappUrl } from '../../lib/whatsapp';
 import { toast } from '../../store/ui';
-import { EmptyState, SwitchRow } from '../FormBits';
+import { SwitchRow } from '../FormBits';
+import { Avatar, Card, CARD, Empty, Pill, Tabs, type Tone } from '../ui';
+import { useLeads } from '../lib/leads';
+import { asset } from '../../lib/assets';
 import { formatDateTime, formatPhone } from '../lib/contact';
 import { downloadText, fileDate } from '../lib/download';
 import { checkContract, clearRepasseReport, eraseReseller, erasureBlocker, isError, markKitPaid, newInvite, patchReseller, saveProgram, settlementsCsv, showcaseLink, useProgram, useResellerDetail, useResellers, type ResellerSummary } from '../lib/resellers';
@@ -46,87 +50,138 @@ import { countInput } from '../../lib/countInput';
  */
 
 type Tab = 'revendedoras' | 'fichas' | 'programa';
+type DetailTab = 'resumo' | 'maleta' | 'vendas' | 'acertos' | 'dados';
+const TABS: Tab[] = ['revendedoras', 'fichas', 'programa'];
 
-const STATUS_STYLE: Record<ResellerStatus, string> = {
-  ativa: 'bg-[#e4ece6] text-success',
-  pausada: 'bg-champagne text-ink',
-  encerrada: 'bg-[#f6e9e6] text-danger',
-};
+const STATUS_TONE: Record<ResellerStatus, Tone> = { ativa: 'success', pausada: 'warning', encerrada: 'muted' };
 
 function StatusPill({ status }: { status: ResellerStatus }) {
-  return <span className={cx('inline-flex min-h-6 items-center rounded-full px-2.5 text-xs font-medium', STATUS_STYLE[status])}>{RESELLER_STATUS_LABEL[status]}</span>;
+  return (
+    <Pill tone={STATUS_TONE[status]} dot>
+      {RESELLER_STATUS_LABEL[status]}
+    </Pill>
+  );
 }
 
-function dueLabel(kit: Kit): { text: string; late: boolean } {
+function dueLabel(kit: Kit): { text: string; late: boolean; tone: Tone } {
   const d = daysLeft(kit.dueAt);
-  if (d < 0) return { text: `Acerto atrasado ${-d} ${d === -1 ? 'dia' : 'dias'}`, late: true };
-  if (d === 0) return { text: 'Acerto hoje', late: true };
-  return { text: `Acerto em ${d} ${d === 1 ? 'dia' : 'dias'}`, late: d <= 3 };
+  if (d < 0) return { text: `Acerto atrasado ${-d} ${d === -1 ? 'dia' : 'dias'}`, late: true, tone: 'danger' };
+  if (d === 0) return { text: 'Acerto hoje', late: true, tone: 'danger' };
+  return { text: `Acerto em ${d} ${d === 1 ? 'dia' : 'dias'}`, late: d <= 3, tone: d <= 3 ? 'warning' : 'info' };
 }
 
-function ResellerRow({ item, onOpen }: { item: ResellerSummary; onOpen: () => void }) {
+const pieces = (n: number) => `${n} ${n === 1 ? 'peça' : 'peças'}`;
+
+/** Units in the kit and units sold (active sales). */
+function kitCounts(kit: Kit, sales: ResellerSale[]) {
+  const lines = kitState(kit, sales);
+  return { total: lines.reduce((n, l) => n + l.qty, 0), sold: lines.reduce((n, l) => n + l.sold, 0) };
+}
+
+function Progress({ value, className, label }: { value: number; className?: string; label?: string }) {
+  return (
+    <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)} className={cx('h-1.5 overflow-hidden rounded-full bg-[#efe4dc]', className)}>
+      <div className="h-full rounded-full bg-gradient-to-r from-rose to-copper transition-[width] duration-500" style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }} />
+    </div>
+  );
+}
+
+function ResellerCard({ item, onOpen }: { item: ResellerSummary; onOpen: () => void }) {
   const { reseller, kit, sales } = item;
   const sold = salesTotalCents(sales);
   const due = kit ? dueLabel(kit) : null;
+  const counts = kit ? kitCounts(kit, sales) : null;
+  const owed = item.unpaidCents - item.reportedCents;
   return (
-    <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 rounded-[12px] border border-line bg-white p-4 text-left transition-colors hover:border-copper focus-visible:outline-2 focus-visible:outline-copper">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{reseller.name}</span>
-          <StatusPill status={reseller.status} />
-          {!reseller.hasPin && reseller.status === 'ativa' && <span className="inline-flex min-h-6 items-center rounded-full border border-copper px-2.5 text-xs text-copper">Convite pendente</span>}
+    <button type="button" onClick={onOpen} className={cx(CARD, 'flex w-full flex-col gap-3.5 p-4 text-left transition-[border-color,box-shadow] hover:border-copper hover:shadow-[0_6px_18px_-8px_rgb(48_33_28/0.25)] focus-visible:outline-2 focus-visible:outline-copper')}>
+      <div className="flex w-full items-center gap-3 border-b border-line/70 pb-3">
+        <Avatar name={reseller.name} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">{reseller.name}</p>
+          <p className="truncate text-sm text-ink-muted">{[reseller.city, reseller.uf].filter(Boolean).join('/') || 'Cidade não informada'}</p>
         </div>
-        <p className="mt-1 text-sm text-ink-muted">
-          {[reseller.city, reseller.uf].filter(Boolean).join('/') || '—'}
-          {kit ? ` · maleta ${formatBRL(kitValueCents(kit.items))} · vendeu ${formatBRL(sold)}` : ' · sem maleta'}
-        </p>
-        {due && <p className={cx('text-sm', due.late ? 'text-danger' : 'text-ink-muted')}>{due.text}</p>}
-        {item.unpaidCents > 0 && <p className="text-sm text-danger">A receber de acertos: {formatBRL(item.unpaidCents)}</p>}
-        {item.reportedCents > 0 && <p className="text-sm font-medium text-copper">Ela avisou que repassou {formatBRL(item.reportedCents)}: confira e marque como recebido.</p>}
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <StatusPill status={reseller.status} />
+          {!reseller.hasPin && reseller.status === 'ativa' && <Pill tone="warning">Convite pendente</Pill>}
+        </div>
+        <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" className="-mr-1 shrink-0 text-ink-muted" />
       </div>
-      <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-muted" />
+      {kit && counts ? (
+        <>
+          <dl className="grid w-full grid-cols-2 divide-x divide-line">
+            <div className="pr-3">
+              <dt className="text-xs text-ink-muted">Na maleta</dt>
+              <dd className="price text-[1.0625rem] font-semibold">{formatBRL(kitValueCents(kit.items))}</dd>
+            </div>
+            <div className="pl-4">
+              <dt className="text-xs text-ink-muted">Vendido</dt>
+              <dd className="price text-[1.0625rem] font-semibold">{formatBRL(sold)}</dd>
+            </div>
+          </dl>
+          <div className="w-full">
+            <Progress value={counts.total ? counts.sold / counts.total : 0} label="Peças vendidas da maleta" />
+            <div className="mt-2 flex items-center justify-between gap-2 text-sm">
+              <span className="text-ink-muted">
+                {counts.sold} de {pieces(counts.total)}
+              </span>
+              {due && (
+                <Pill tone={due.tone === 'info' ? 'success' : due.tone}>
+                  <CalendarDays size={13} strokeWidth={1.75} aria-hidden="true" /> {due.text}
+                </Pill>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        <p className="w-full rounded-xl border border-dashed border-line px-3 py-2.5 text-sm text-ink-muted">Sem maleta no momento</p>
+      )}
+      {item.reportedCents > 0 && (
+        <p className="flex w-full items-center gap-2 rounded-xl bg-warning-tint px-3 py-2 text-sm text-warning">
+          <BellRing size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+          <span>
+            Avisou que fez o repasse de <span className="price font-semibold">{formatBRL(item.reportedCents)}</span>
+          </span>
+        </p>
+      )}
+      {owed > 0 && (
+        <p className="flex w-full items-center gap-2 rounded-xl bg-danger-tint px-3 py-2 text-sm text-danger">
+          <HandCoins size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+          <span>
+            Repasse a receber: <span className="price font-semibold">{formatBRL(owed)}</span>
+          </span>
+        </p>
+      )}
     </button>
   );
 }
 
-function KitSummary({ kit, sales }: { kit: Kit; sales: ResellerSale[] }) {
-  const lines = kitState(kit, sales);
-  const sold = salesTotalCents(sales);
-  const c = commissionFor(sold, kit.tiers);
-  const due = dueLabel(kit);
+/** The network at a glance, above the list. */
+function NetworkSummary({ list }: { list: ResellerSummary[] }) {
+  const active = list.filter((r) => r.reseller.status === 'ativa');
+  const inKits = list.reduce((s, r) => s + (r.kit ? kitValueCents(r.kit.items) : 0), 0);
+  const sold = list.reduce((s, r) => s + (r.kit ? salesTotalCents(r.sales) : 0), 0);
+  const toReceive = list.reduce((s, r) => s + r.unpaidCents, 0);
+  const cells = [
+    { label: active.length === 1 ? 'Ativa' : 'Ativas', value: String(active.length), icon: Users },
+    { label: 'Em maletas', value: formatBRL(inKits), icon: BriefcaseBusiness },
+    { label: 'Vendido no ciclo', value: formatBRL(sold), icon: BarChart3 },
+    { label: 'A receber', value: formatBRL(toReceive), icon: Wallet },
+  ];
   return (
-    <div className="flex flex-col gap-3">
-      <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-        {[
-          ['Maleta', formatBRL(kitValueCents(kit.items))],
-          ['Vendido', formatBRL(sold)],
-          [`Comissão (${c.percent}%)`, formatBRL(c.commissionCents)],
-          ['Prazo', due.text],
-        ].map(([k, v]) => (
-          <div key={k} className="rounded-[10px] bg-champagne/50 p-3">
-            <dt className="text-xs text-ink-muted">{k}</dt>
-            <dd className={cx('price font-medium', k === 'Prazo' && due.late && 'text-danger')}>{v}</dd>
+    <section aria-label="Resumo das revendas" className="on-dark relative isolate overflow-hidden rounded-[22px] bg-[linear-gradient(115deg,#4a2f24_0%,#6e4635_60%,#94654f_100%)] text-white shadow-[0_18px_36px_-20px_rgb(48_33_28/0.6)]">
+      <img src={asset('images/admin/revenda-hero-640.webp')} alt="" aria-hidden="true" className="absolute inset-y-0 right-0 -z-10 h-full w-1/2 object-cover object-right opacity-70 [mask-image:linear-gradient(90deg,transparent,black_60%)]" />
+      <dl className="grid grid-cols-2 sm:grid-cols-4">
+        {cells.map((c, i) => (
+          <div key={c.label} className={cx('flex min-w-0 items-center gap-3 px-4 py-4 sm:px-5', i % 2 === 1 && 'border-l border-white/15', i > 1 && 'border-t border-white/15 sm:border-t-0', i === 2 && 'sm:border-l')}>
+            <c.icon size={22} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-rose-light" />
+            <div className="flex min-w-0 flex-col-reverse">
+              <dt className="text-xs text-white/75">{c.label}</dt>
+              <dd className="price truncate text-[1.125rem] leading-tight font-semibold">{c.value}</dd>
+            </div>
           </div>
         ))}
       </dl>
-      {c.next && <p className="text-sm text-ink-muted">Faltam {formatBRL(c.next.missingCents)} para {c.next.percent}% de comissão.</p>}
-      <ul className="divide-y divide-line border-y border-line text-sm">
-        {lines.map((l) => (
-          <li key={`${l.productId}|${l.variantId}|${l.size}`} className="flex items-start justify-between gap-3 py-2.5">
-            <div className="min-w-0">
-              <p className="leading-snug">{l.name}</p>
-              <p className="text-ink-muted">
-                {FINISH_LABEL[l.finish]}
-                {l.size && ` · ${sizeLabel(l.size)}`} · {formatBRL(l.unitCents)}
-              </p>
-            </div>
-            <p className="shrink-0 text-right text-ink-muted">
-              {l.sold}/{l.qty} vendidas
-            </p>
-          </li>
-        ))}
-      </ul>
-    </div>
+    </section>
   );
 }
 
@@ -137,6 +192,8 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
   const [erasing, setErasing] = useState(false);
   const [invite, setInvite] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // null = not chosen yet: opens on Acertos while a repasse waits, otherwise on Resumo.
+  const [chosenTab, setTab] = useState<DetailTab | null>(null);
   if (state.status === 'loading') return <p className="py-8 text-center text-ink-muted" aria-busy="true">Carregando…</p>;
   if (state.status === 'error') return <p role="alert" className="py-8 text-center text-danger">{state.message}</p>;
   const { reseller, kits, sales, acceptances, invitePendingUntil } = state.data;
@@ -173,216 +230,374 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
     reload();
   }
 
+  const first = firstNameOf(reseller.name);
+  const city = [reseller.city, reseller.uf].filter(Boolean).join('/');
+  const since = new Date(reseller.createdAt).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }).replace('.', '').replace(' de ', '/');
+  const sold = salesTotalCents(openSales);
+  const commission = open ? commissionFor(sold, open.tiers) : null;
+  const counts = open ? kitCounts(open, openSales) : null;
+  const due = open ? dueLabel(open) : null;
+  const activeSales = openSales.filter((s) => s.status === 'ativa').length;
+  const repasseOpen = closed.filter((k) => k.settlement && ['pending', 'reported'].includes(repasseState(k.settlement))).length;
+  const panelId = `reseller-${reseller.id}-panel`;
+  const tab: DetailTab = chosenTab ?? (repasseOpen > 0 && !open ? 'acertos' : 'resumo');
+
+  const makeKit =
+    reseller.status === 'ativa' ? (
+      <Button onClick={() => setSheet('kit')}>
+        <Plus size={18} strokeWidth={1.5} /> Montar maleta
+      </Button>
+    ) : null;
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusPill status={reseller.status} />
-        <span className="text-sm text-ink-muted">Desde {formatDateTime(reseller.createdAt)}</span>
-      </div>
-
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-[12px] border border-line bg-white p-4 text-sm">
-        <dt className="text-ink-muted">WhatsApp</dt>
-        <dd className="price">{formatPhone(reseller.whatsapp)}</dd>
-        <dt className="text-ink-muted">Cidade</dt>
-        <dd>{[reseller.city, reseller.uf].filter(Boolean).join('/') || '—'}</dd>
-        <dt className="text-ink-muted">Mostruário</dt>
-        <dd className="break-all">
-          <a className="text-copper underline underline-offset-4" href={`/r/${reseller.slug}`} target="_blank" rel="noopener noreferrer">
-            /r/{reseller.slug}
-          </a>
-        </dd>
-        <dt className="text-ink-muted">Contrato</dt>
-        <dd>
-          {reseller.contract ? `Aceito em ${formatDateTime(reseller.contract.acceptedAt)} (versão ${reseller.contract.version})` : 'Ainda não aceito'}
-          {reseller.contract?.mode === 'link' && !reseller.contract.checkedAt && (
-            <button type="button" className="ml-2 text-copper underline underline-offset-4" onClick={() => void checkContract(reseller.id).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : reload()))}>
-              Marcar assinatura conferida
-            </button>
-          )}
-          {contractDue && reseller.contract && <span className="block text-danger">O contrato mudou: ela aceita a versão nova no painel dela (as vendas ficam bloqueadas até lá).</span>}
-        </dd>
-        <dt className="text-ink-muted">Acesso</dt>
-        <dd>{reseller.status !== 'ativa' ? (reseller.status === 'pausada' ? 'Acesso pausado' : 'Acesso encerrado') : reseller.hasPin ? `Painel ativo${reseller.lastSeenAt ? ` · visto ${formatDateTime(reseller.lastSeenAt)}` : ''}` : invitePendingUntil ? `Convite válido até ${formatDateTime(invitePendingUntil)}` : 'Sem convite válido'}</dd>
-      </dl>
-      {acceptances[0] && (
-        <details className="group text-sm text-ink-muted">
-          <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
-            <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="transition-transform group-open:rotate-90" /> Registro do aceite
-          </summary>
-          <p className="mt-2 break-all">
-            Nome digitado: {acceptances[0].typedName} · {formatDateTime(acceptances[0].acceptedAt)} · versão {acceptances[0].version} · SHA-256 do texto: {acceptances[0].textSha256}
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <Avatar name={reseller.name} size={52} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm text-ink-muted">
+            {city || 'Cidade não informada'} · desde {since}
           </p>
-        </details>
-      )}
-
-      <div className="flex flex-col gap-2">
-        {invite ? (
-          <InviteMessage reseller={reseller} token={invite} />
-        ) : (
-          reseller.status === 'ativa' && (
-            <>
-              <Button variant="secondary" block disabled={busy} onClick={() => void regenerate()}>
-                <KeyRound size={18} strokeWidth={1.5} /> {reseller.hasPin ? 'Gerar novo acesso' : 'Gerar novo convite'}
-              </Button>
-              {reseller.hasPin && <p className="text-center text-sm text-ink-muted">Use se ela esqueceu o PIN.</p>}
-            </>
-          )
-        )}
-        <Button variant="ghost" block onClick={() => void copyText(showcaseLink(reseller.slug), 'Link do mostruário copiado.')}>
-          <Copy size={18} strokeWidth={1.5} /> Copiar link do mostruário
-        </Button>
-        <ButtonAnchor href={whatsappUrl(`55${reseller.whatsapp}`, `Oi, ${firstNameOf(reseller.name)}!`)} variant="ghost" block>
-          <WhatsAppIcon size={18} /> Conversar no WhatsApp
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            <StatusPill status={reseller.status} />
+            {!reseller.hasPin && reseller.status === 'ativa' && <Pill tone="warning">Convite pendente</Pill>}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <ButtonAnchor href={whatsappUrl(`55${reseller.whatsapp}`, `Oi, ${first}!`)} variant="secondary" size="sm">
+          <WhatsAppIcon size={17} /> WhatsApp
         </ButtonAnchor>
+        <Button variant="secondary" size="sm" onClick={() => void copyText(showcaseLink(reseller.slug), 'Link do mostruário copiado.')}>
+          <Copy size={17} strokeWidth={1.5} /> Mostruário
+        </Button>
       </div>
 
-      <section aria-labelledby="kit-title" className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <h3 id="kit-title" className="font-display text-title">
-            Maleta
-          </h3>
-          {open && (
-            <button type="button" className="min-h-9 text-sm text-copper underline underline-offset-4" onClick={() => setSheet('kit')}>
-              Ajustar peças
-            </button>
-          )}
-        </div>
-        {open ? (
-          <>
-            <KitSummary kit={open} sales={openSales} />
-            <Button size="lg" block onClick={() => setSheet('settle')}>
-              Fazer acerto
-            </Button>
-          </>
-        ) : reseller.status === 'ativa' ? (
-          <>
-            <p className="text-sm text-ink-muted">Sem maleta aberta. Monte a maleta com as peças que ela vai levar.</p>
-            <Button block onClick={() => setSheet('kit')}>
-              <Plus size={18} strokeWidth={1.5} /> Montar maleta
-            </Button>
-          </>
-        ) : (
-          <p className="text-sm text-ink-muted">Revendedora {RESELLER_STATUS_LABEL[reseller.status].toLowerCase()}.</p>
-        )}
-      </section>
-
-      {openSales.length > 0 && (
-        <section aria-labelledby="sales-title">
-          <h3 id="sales-title" className="mb-2 font-display text-title">
-            Vendas deste ciclo
-          </h3>
-          {open && discounts.cents > 0 && (
-            <p className="mb-2 rounded-[10px] bg-[#f6e9e6] px-3 py-2 text-sm text-danger">
-              Descontos no ciclo: <span className="price font-medium">{formatBRL(discounts.cents)}</span> em {discounts.sales === 1 ? '1 venda' : `${discounts.sales} vendas`}.
-            </p>
-          )}
-          <ul className="flex flex-col gap-2">
-            {openSales.map((s) => {
-              const discount = open ? saleDiscountCents(open, s) : 0;
-              return (
-                <li key={s.id} className={cx('rounded-[10px] border border-line bg-white p-3 text-sm', s.status === 'cancelada' && 'opacity-60')}>
-                  <div className="flex justify-between gap-3">
-                    <span>{formatDateTime(s.createdAt)}</span>
-                    <span className="price font-medium">{formatBRL(s.totalCents)}</span>
-                  </div>
-                  <p className="text-ink-muted">
-                    {s.lines.map((l) => `${l.qty}× ${l.name}`).join(', ')} · {PAYMENT_LABEL[s.payment]}
-                    {s.customer?.name && ` · ${s.customer.name}`}
-                    {s.status === 'cancelada' && ' · desfeita'}
-                  </p>
-                  {discount > 0 && (
-                    <p className="mt-1 font-medium text-danger">
-                      Desconto de <span className="price">{formatBRL(discount)}</span> · preço da maleta <span className="price">{formatBRL(s.totalCents + discount)}</span>
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+      {contractDue && reseller.contract && (
+        <p className="flex items-start gap-2 rounded-xl bg-warning-tint px-3 py-2.5 text-sm text-warning">
+          <AlertTriangle size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0" /> O contrato mudou: as vendas dela ficam paradas até ela aceitar a versão nova.
+        </p>
       )}
 
-      {closed.length > 0 && (
-        <section aria-labelledby="hist-title">
-          <h3 id="hist-title" className="mb-2 font-display text-title">
-            Acertos
-          </h3>
-          <ul className="flex flex-col gap-2">
-            {closed.map((k) => (
-              <li key={k.id} className="rounded-[10px] border border-line bg-white p-3 text-sm">
-                <div className="flex justify-between gap-3">
-                  <span>{formatDateTime(k.closedAt ?? k.updatedAt)}</span>
-                  <span className="price font-medium">{formatBRL(k.settlement?.dueCents ?? 0)}</span>
-                </div>
-                <p className="text-ink-muted">
-                  Vendeu {formatBRL(k.settlement?.soldCents ?? 0)} · comissão {k.settlement?.percent}% ({formatBRL(k.settlement?.commissionCents ?? 0)})
-                  {k.settlement?.missingCents ? ` · faltaram ${formatBRL(k.settlement.missingCents)}` : ''}
+      <div className="sticky top-0 z-10 -mx-5 bg-ivory/95 px-5 backdrop-blur supports-[backdrop-filter]:bg-ivory/85">
+        <Tabs
+          label={`Ficha de ${first}`}
+          panelId={panelId}
+          variant="underline"
+          value={tab}
+          onChange={setTab}
+          items={[
+            { id: 'resumo', label: 'Resumo' },
+            { id: 'maleta', label: 'Maleta' },
+            { id: 'vendas', label: 'Vendas', count: open ? activeSales : undefined },
+            { id: 'acertos', label: 'Acertos', count: repasseOpen || undefined, alert: true },
+            { id: 'dados', label: 'Dados' },
+          ]}
+        />
+      </div>
+
+      <div id={panelId} role="tabpanel" className="flex flex-col gap-4">
+        {tab === 'resumo' &&
+          (open && commission && counts && due ? (
+            <>
+              <Card className="p-4">
+                <p className="flex items-center gap-2.5 font-display text-[1.375rem] leading-tight font-semibold">
+                  <span className="inline-flex size-8 items-center justify-center rounded-lg bg-champagne text-copper">
+                    <Wallet size={17} strokeWidth={1.6} aria-hidden="true" />
+                  </span>
+                  Acerto atual
                 </p>
-                {k.settlement && repasseState(k.settlement) === 'reported' && (
-                  <div role="status" className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-[10px] bg-champagne/70 px-3 py-2">
-                    <span>Ela avisou que pagou em {formatDateTime(k.settlement.reportedAt!)}. Confira no banco.</span>
-                    <button
-                      type="button"
-                      className="min-h-11 text-sm text-copper underline underline-offset-4"
-                      onClick={() => void clearRepasseReport(k).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : (toast('Aviso desfeito. O repasse voltou a aparecer como pendente para ela.', { tone: 'success' }), reload())))}
-                    >
-                      Desfazer aviso
-                    </button>
+                <dl className="mt-3 flex flex-col gap-2 text-[0.9375rem]">
+                  <div className="flex justify-between gap-3">
+                    <dt>Total vendido</dt>
+                    <dd className="price">{formatBRL(sold)}</dd>
                   </div>
-                )}
-                {k.settlement && repasseState(k.settlement) === 'none' ? (
-                  <p className="mt-2 text-ink-muted">Sem repasse neste acerto.</p>
+                  <div className="flex justify-between gap-3 text-ink-muted">
+                    <dt>
+                      Comissão da {first} ({commission.percent}%)
+                    </dt>
+                    <dd className="price">− {formatBRL(commission.commissionCents)}</dd>
+                  </div>
+                  <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-line pt-3">
+                    <dt className="font-medium">A ÉKA recebe</dt>
+                    <dd className="price font-display text-[1.875rem] leading-none font-semibold text-copper-dark">{formatBRL(sold - commission.commissionCents)}</dd>
+                  </div>
+                </dl>
+                <p className="mt-3 flex items-center gap-2 rounded-xl bg-[#f8f1ec] px-3 py-2 text-sm text-ink-muted">
+                  <Info size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" /> A comissão fica com a {first}; o restante vem para a ÉKA.
+                </p>
+              </Card>
+              <Card className="p-4">
+                <p className="mb-2 flex items-center gap-2 text-sm">
+                  <Award size={18} strokeWidth={1.6} aria-hidden="true" className="shrink-0 text-copper" />
+                  <span className="font-medium">
+                    {commission.percent}%{commission.next && ` → ${commission.next.percent}%`}
+                  </span>
+                  <span className="text-ink-muted">{commission.next ? `faltam ${formatBRL(commission.next.missingCents)}` : '· faixa máxima'}</span>
+                </p>
+                <Progress value={commission.progress} label="Caminho até a próxima faixa de comissão" />
+              </Card>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { icon: BriefcaseBusiness, label: 'Maleta', value: formatBRL(kitValueCents(open.items)), late: false },
+                  { icon: Layers, label: 'Peças', value: `${counts.sold} de ${counts.total}`, late: false },
+                  { icon: CalendarDays, label: 'Acerto', value: due.text.replace('Acerto ', ''), late: due.late },
+                ].map((t) => (
+                  <div key={t.label} className={cx(CARD, 'flex flex-col items-center gap-0.5 px-1.5 py-3 text-center')}>
+                    <t.icon size={19} strokeWidth={1.5} aria-hidden="true" className="mb-1 text-copper" />
+                    <p className="text-xs text-ink-muted">{t.label}</p>
+                    <p className={cx('price text-[0.875rem] font-semibold whitespace-nowrap', t.late && 'text-danger')}>{t.value}</p>
+                  </div>
+                ))}
+              </div>
+              <Button size="lg" block onClick={() => setSheet('settle')}>
+                <Wallet size={19} strokeWidth={1.6} aria-hidden="true" /> Fazer acerto
+              </Button>
+            </>
+          ) : (
+            <Empty title="Sem maleta no momento" image={<img src={asset('images/admin/maleta-320.webp')} alt="" width={96} height={96} className="mb-1 size-24 rounded-2xl object-cover" />} action={makeKit}>
+              {reseller.status === 'ativa' ? 'Monte a maleta com as peças que ela vai levar.' : `Revendedora ${RESELLER_STATUS_LABEL[reseller.status].toLowerCase()}.`}
+            </Empty>
+          ))}
+
+        {tab === 'maleta' &&
+          (open ? (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-ink-muted">
+                  {pieces(counts?.total ?? 0)} · <span className="price">{formatBRL(kitValueCents(open.items))}</span>
+                </p>
+                <Button variant="secondary" size="sm" onClick={() => setSheet('kit')}>
+                  Ajustar peças
+                </Button>
+              </div>
+              <ul className={cx(CARD, 'divide-y divide-line/70 overflow-hidden')}>
+                {kitState(open, openSales).map((l) => (
+                  <li key={`${l.productId}|${l.variantId}|${l.size}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{l.name}</p>
+                      <p className="text-ink-muted">
+                        {FINISH_LABEL[l.finish]}
+                        {l.size && ` · ${sizeLabel(l.size)}`} · <span className="price">{formatBRL(l.unitCents)}</span>
+                      </p>
+                    </div>
+                    <Pill tone={l.sold >= l.qty ? 'success' : l.sold > 0 ? 'info' : 'muted'}>
+                      {l.sold}/{l.qty} vendidas
+                    </Pill>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <Empty title="Sem maleta no momento" action={makeKit}>
+              Quando ela levar peças, elas aparecem aqui.
+            </Empty>
+          ))}
+
+        {tab === 'vendas' &&
+          (openSales.length ? (
+            <>
+              {open && discounts.cents > 0 && (
+                <p className="rounded-xl bg-danger-tint px-3 py-2 text-sm text-danger">
+                  Descontos no ciclo: <span className="price font-medium">{formatBRL(discounts.cents)}</span> em {discounts.sales === 1 ? '1 venda' : `${discounts.sales} vendas`}.
+                </p>
+              )}
+              <ul className={cx(CARD, 'divide-y divide-line/70 overflow-hidden')}>
+                {openSales.map((s) => {
+                  const discount = open ? saleDiscountCents(open, s) : 0;
+                  return (
+                    <li key={s.id} className={cx('px-4 py-3 text-sm', s.status === 'cancelada' && 'opacity-60')}>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-ink-muted">{formatDateTime(s.createdAt)}</span>
+                        <span className="price font-semibold">{formatBRL(s.totalCents)}</span>
+                      </div>
+                      <p className="mt-0.5">{s.lines.map((l) => `${l.qty}× ${l.name}`).join(', ')}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <Pill tone="muted">{PAYMENT_LABEL[s.payment]}</Pill>
+                        {s.customer?.name && <Pill tone="neutral">{s.customer.name}</Pill>}
+                        {s.status === 'cancelada' && <Pill tone="danger">Desfeita</Pill>}
+                      </div>
+                      {discount > 0 && (
+                        <p className="mt-1.5 font-medium text-danger">
+                          Desconto de <span className="price">{formatBRL(discount)}</span> · preço da maleta <span className="price">{formatBRL(s.totalCents + discount)}</span>
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          ) : (
+            <Empty title="Nenhuma venda neste ciclo">As vendas que ela registrar no painel dela aparecem aqui na hora.</Empty>
+          ))}
+
+        {tab === 'acertos' &&
+          (closed.length ? (
+            <ul className="flex flex-col gap-3">
+              {closed.map((k) => {
+                const st = k.settlement ? repasseState(k.settlement) : 'none';
+                return (
+                  <li key={k.id} className={cx(CARD, 'p-4 text-sm')}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-ink-muted">{formatDateTime(k.closedAt ?? k.updatedAt)}</p>
+                        <p className="price mt-0.5 font-display text-[1.625rem] leading-tight font-semibold">{formatBRL(k.settlement?.dueCents ?? 0)}</p>
+                        <p className="text-xs text-ink-muted">a ÉKA recebe</p>
+                      </div>
+                      <Pill tone={st === 'paid' ? 'success' : st === 'reported' ? 'warning' : st === 'pending' ? 'danger' : 'muted'} dot>
+                        {st === 'paid' ? 'Recebido' : st === 'reported' ? 'Ela avisou' : st === 'pending' ? 'A receber' : 'Sem repasse'}
+                      </Pill>
+                    </div>
+                    <dl className="mt-3 flex flex-col gap-1 border-t border-line pt-3">
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-ink-muted">Vendeu</dt>
+                        <dd className="price">{formatBRL(k.settlement?.soldCents ?? 0)}</dd>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-ink-muted">
+                          Comissão da {first} ({k.settlement?.percent}%)
+                        </dt>
+                        <dd className="price">− {formatBRL(k.settlement?.commissionCents ?? 0)}</dd>
+                      </div>
+                      {!!k.settlement?.missingCents && (
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-ink-muted">Peças que faltaram</dt>
+                          <dd className="price">+ {formatBRL(k.settlement.missingCents)}</dd>
+                        </div>
+                      )}
+                    </dl>
+                    {k.settlement && st === 'reported' && (
+                      <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-warning-tint px-3 py-2 text-warning">
+                        <span>Ela avisou que pagou em {formatDateTime(k.settlement.reportedAt!)}. Confira no banco.</span>
+                        <button
+                          type="button"
+                          className="min-h-11 text-sm underline underline-offset-4"
+                          onClick={() => void clearRepasseReport(k).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : (toast('Aviso desfeito. O repasse voltou a aparecer como pendente para ela.', { tone: 'success' }), reload())))}
+                        >
+                          Desfazer aviso
+                        </button>
+                      </div>
+                    )}
+                    {k.settlement && st !== 'none' && (
+                      <SwitchRow
+                        className="mt-3 border-t border-line pt-3"
+                        label="Repasse recebido"
+                        {...(k.settlement.paidAt ? { hint: `Marcado em ${formatDateTime(k.settlement.paidAt)}${k.settlement.reportedAt ? ` · ela avisou em ${formatDateTime(k.settlement.reportedAt)}` : ''}` } : {})}
+                        checked={!!k.settlement.paidAt}
+                        onChange={(paid) => void markKitPaid(k, paid).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : reload()))}
+                      />
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <Empty title="Nenhum acerto ainda">Quando você fizer o acerto da maleta, ele fica guardado aqui.</Empty>
+          ))}
+
+        {tab === 'dados' && (
+          <>
+            <Card className="p-4">
+              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
+                <dt className="text-ink-muted">WhatsApp</dt>
+                <dd className="price">{formatPhone(reseller.whatsapp)}</dd>
+                <dt className="text-ink-muted">Cidade</dt>
+                <dd>{city || '—'}</dd>
+                <dt className="text-ink-muted">Mostruário</dt>
+                <dd className="break-all">
+                  <a className="text-copper underline underline-offset-4" href={`/r/${reseller.slug}`} target="_blank" rel="noopener noreferrer">
+                    /r/{reseller.slug}
+                  </a>
+                </dd>
+                <dt className="text-ink-muted">Comissão</dt>
+                <dd>{reseller.tiers ? `${reseller.tiers[0]?.percent}% fixa` : 'Faixas do programa'}</dd>
+                <dt className="text-ink-muted">Contrato</dt>
+                <dd>
+                  {reseller.contract ? `Aceito em ${formatDateTime(reseller.contract.acceptedAt)} (versão ${reseller.contract.version})` : 'Ainda não aceito'}
+                  {reseller.contract?.mode === 'link' && !reseller.contract.checkedAt && (
+                    <button type="button" className="ml-2 text-copper underline underline-offset-4" onClick={() => void checkContract(reseller.id).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : reload()))}>
+                      Marcar assinatura conferida
+                    </button>
+                  )}
+                </dd>
+                <dt className="text-ink-muted">Acesso</dt>
+                <dd>{reseller.status !== 'ativa' ? (reseller.status === 'pausada' ? 'Acesso pausado' : 'Acesso encerrado') : reseller.hasPin ? `Painel ativo${reseller.lastSeenAt ? ` · visto ${formatDateTime(reseller.lastSeenAt)}` : ''}` : invitePendingUntil ? `Convite válido até ${formatDateTime(invitePendingUntil)}` : 'Sem convite válido'}</dd>
+              </dl>
+              {acceptances[0] && (
+                <details className="group mt-3 border-t border-line pt-2 text-sm text-ink-muted">
+                  <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+                    <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="transition-transform group-open:rotate-90" /> Registro do aceite
+                  </summary>
+                  <p className="mt-1 break-all">
+                    Nome digitado: {acceptances[0].typedName} · {formatDateTime(acceptances[0].acceptedAt)} · versão {acceptances[0].version} · SHA-256 do texto: {acceptances[0].textSha256}
+                  </p>
+                </details>
+              )}
+            </Card>
+
+            {invite ? (
+              <InviteMessage reseller={reseller} token={invite} />
+            ) : (
+              reseller.status === 'ativa' && (
+                <Card className="flex items-center gap-3 p-4">
+                  <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-champagne text-copper">
+                    <KeyRound size={19} strokeWidth={1.6} aria-hidden="true" />
+                  </span>
+                  <p className="min-w-0 flex-1 text-sm">{reseller.hasPin ? 'Ela esqueceu o PIN?' : 'Ela ainda não entrou no painel.'}</p>
+                  <Button variant="secondary" size="sm" disabled={busy} onClick={() => void regenerate()}>
+                    {reseller.hasPin ? 'Novo acesso' : 'Novo convite'}
+                  </Button>
+                </Card>
+              )
+            )}
+
+            <ul className={cx(CARD, 'divide-y divide-line/70 overflow-hidden text-sm')}>
+              <li>
+                <button type="button" className="flex min-h-12 w-full items-center gap-3 px-4 text-left hover:bg-[#fcf8f5]" onClick={() => setSheet('edit')}>
+                  <Pencil size={17} strokeWidth={1.6} aria-hidden="true" className="text-copper" /> <span className="flex-1">Editar dados e comissão</span>
+                  <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="text-ink-muted" />
+                </button>
+              </li>
+              <li>
+                {reseller.status === 'ativa' ? (
+                  <button type="button" className="flex min-h-12 w-full items-center gap-3 px-4 text-left hover:bg-[#fcf8f5]" disabled={busy} onClick={() => void setStatus('pausada')}>
+                    <Pause size={17} strokeWidth={1.6} aria-hidden="true" className="text-warning" /> <span className="flex-1">Pausar revendedora</span>
+                    <span className="text-xs text-ink-muted">encerra o acesso</span>
+                  </button>
                 ) : (
-                  <SwitchRow
-                    className="mt-2"
-                    label="Repasse recebido"
-                    {...(k.settlement?.paidAt ? { hint: `Marcado em ${formatDateTime(k.settlement.paidAt)}${k.settlement.reportedAt ? ` · ela avisou em ${formatDateTime(k.settlement.reportedAt)}` : ''}` } : {})}
-                    checked={!!k.settlement?.paidAt}
-                    onChange={(paid) => void markKitPaid(k, paid).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : reload()))}
-                  />
+                  <button type="button" className="flex min-h-12 w-full items-center gap-3 px-4 text-left hover:bg-[#fcf8f5]" disabled={busy} onClick={() => void setStatus('ativa')}>
+                    <Play size={17} strokeWidth={1.6} aria-hidden="true" className="text-success" /> <span className="flex-1">Reativar revendedora</span>
+                  </button>
                 )}
               </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <div className="flex flex-col gap-1 border-t border-line pt-4">
-        <button type="button" className="min-h-11 self-start text-sm text-copper underline underline-offset-4" onClick={() => setSheet('edit')}>
-          Editar dados e comissão
-        </button>
-        {reseller.status === 'ativa' ? (
-          <button type="button" className="min-h-11 self-start text-sm text-ink-muted underline underline-offset-4" disabled={busy} onClick={() => void setStatus('pausada')}>
-            Pausar revendedora (encerra o acesso dela)
-          </button>
-        ) : (
-          <button type="button" className="min-h-11 self-start text-sm text-copper underline underline-offset-4" disabled={busy} onClick={() => void setStatus('ativa')}>
-            Reativar revendedora
-          </button>
-        )}
-        {reseller.status !== 'encerrada' && !open && owedCents === 0 && (
-          <button type="button" className="min-h-11 self-start text-sm text-danger underline underline-offset-4" disabled={busy} onClick={() => setEnding(true)}>
-            Encerrar parceria
-          </button>
-        )}
-        {reseller.status !== 'encerrada' && !open && owedCents > 0 && (
-          <p className="text-sm text-ink-muted">
-            Para encerrar a parceria, marque antes o repasse de <span className="price">{formatBRL(owedCents)}</span> como recebido em “Acertos”. Encerrar tira o acesso dela, e ela deixaria de ver o Pix do repasse.
-          </p>
+              {reseller.status !== 'encerrada' && !open && owedCents === 0 && (
+                <li>
+                  <button type="button" className="flex min-h-12 w-full items-center gap-3 px-4 text-left text-danger hover:bg-danger-tint" disabled={busy} onClick={() => setEnding(true)}>
+                    <CircleOff size={17} strokeWidth={1.6} aria-hidden="true" /> <span className="flex-1">Encerrar parceria</span>
+                  </button>
+                </li>
+              )}
+            </ul>
+            {reseller.status !== 'encerrada' && !open && owedCents > 0 && (
+              <p className="text-sm text-ink-muted">
+                Para encerrar a parceria, marque antes o repasse de <span className="price">{formatBRL(owedCents)}</span> como recebido em “Acertos”.
+              </p>
+            )}
+            {reseller.status === 'encerrada' && (
+              <Card as="section" aria-labelledby="erase-title" className="flex flex-col gap-2 p-4">
+                <h3 id="erase-title" className="font-display text-title font-semibold">
+                  Dados pessoais
+                </h3>
+                <p className="text-sm text-ink-muted">A parceria terminou. Se ela pedir, ou quando você não precisar mais do histórico dela, dá para apagar os dados dela do sistema.</p>
+                {eraseBlocked && <p className="text-sm text-danger">{eraseBlocked}</p>}
+                <Button variant="secondary" className="self-start" disabled={!!eraseBlocked} onClick={() => setErasing(true)}>
+                  <Trash2 size={18} strokeWidth={1.5} aria-hidden="true" /> Apagar os dados de {first}
+                </Button>
+              </Card>
+            )}
+          </>
         )}
       </div>
-      {reseller.status === 'encerrada' && (
-        <section aria-labelledby="erase-title" className="flex flex-col gap-2 rounded-[12px] border border-line bg-white p-4">
-          <h3 id="erase-title" className="font-display text-title">
-            Dados pessoais
-          </h3>
-          <p className="text-sm text-ink-muted">A parceria terminou. Se ela pedir, ou quando você não precisar mais do histórico dela, dá para apagar os dados dela do sistema.</p>
-          {eraseBlocked && <p className="text-sm text-danger">{eraseBlocked}</p>}
-          <Button variant="secondary" className="self-start" disabled={!!eraseBlocked} onClick={() => setErasing(true)}>
-            <Trash2 size={18} strokeWidth={1.5} aria-hidden="true" /> Apagar os dados de {firstNameOf(reseller.name)}
-          </Button>
-        </section>
-      )}
+
       {erasing && <EraseResellerDialog reseller={reseller} kits={kits} onCancel={() => setErasing(false)} onErased={onClose} />}
       <ConfirmDialog
         open={ending}
@@ -550,7 +765,7 @@ function EditReseller({ reseller, program, onDone }: { reseller: Reseller; progr
       {program.contract.mode === 'link' && <TextField label="Link do contrato dela" optional value={contractUrl} onChange={(e) => setContractUrl(e.target.value)} hint="Se vazio, usa o link geral do programa." />}
       <TextArea label="Observação interna" optional value={note} maxLength={600} rows={3} onChange={(e) => setNote(e.target.value)} />
       {error && (
-        <p role="alert" className="rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
+        <p role="alert" className="rounded-[10px] bg-danger-tint p-3 text-sm text-danger">
           {error}
         </p>
       )}
@@ -599,7 +814,7 @@ function ProgramForm({ program, onSaved }: { program: Program; onSaved: () => vo
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4" aria-labelledby="tiers-title">
+      <section className="flex flex-col gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4" aria-labelledby="tiers-title">
         <h2 id="tiers-title" className="font-display text-title">
           Comissão por faixas
         </h2>
@@ -623,7 +838,7 @@ function ProgramForm({ program, onSaved }: { program: Program; onSaved: () => vo
         <TextField label="Prazo do acerto (dias)" inputMode="numeric" value={cycleDays} onChange={(e) => setCycleDays(countInput(e.target.value, { allowZero: false, maxDigits: 3 }))} wrapperClassName="max-w-48" />
       </section>
 
-      <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4" aria-labelledby="contract-title">
+      <section className="flex flex-col gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4" aria-labelledby="contract-title">
         <h2 id="contract-title" className="font-display text-title">
           Contrato
         </h2>
@@ -648,7 +863,7 @@ function ProgramForm({ program, onSaved }: { program: Program; onSaved: () => vo
         </p>
       </section>
       {error && (
-        <p role="alert" className="rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
+        <p role="alert" className="rounded-[10px] bg-danger-tint p-3 text-sm text-danger">
           {error}
         </p>
       )}
@@ -660,27 +875,59 @@ function ProgramForm({ program, onSaved }: { program: Program; onSaved: () => vo
 }
 
 export function ResellersPage() {
-  const [tab, setTab] = useState<Tab>('revendedoras');
+  // Links from Início: ?aba=fichas, ?r=<reseller id> (opens her), ?nova=1 (new reseller).
+  const [params, setParams] = useSearchParams();
+  const asked = params.get('aba');
+  const [tab, setTabState] = useState<Tab>(TABS.includes(asked as Tab) ? (asked as Tab) : 'revendedoras');
   const { state } = useResellers();
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [creating, setCreating] = useState<{ lead?: ResellerLead } | null>(null);
+  const { state: leadsState } = useLeads();
+  const [openId, setOpenId] = useState<string | null>(params.get('r'));
+  const [creating, setCreating] = useState<{ lead?: ResellerLead } | null>(params.get('nova') ? {} : null);
   const [created, setCreated] = useState<{ reseller: Reseller; token: string | null } | null>(null);
   const list = state.status === 'ready' ? state.data.resellers : [];
   const program = state.status === 'ready' ? state.data.program : null;
   const open = list.find((r) => r.reseller.id === openId);
+  const freshLeads = leadsState.status === 'ready' ? leadsState.leads.filter((l) => (l.status ?? 'nova') === 'nova').length : 0;
+  const shown = list.filter((r) => r.reseller.status !== 'encerrada');
+  const ended = list.filter((r) => r.reseller.status === 'encerrada');
+
+  // The link did its job: drop it so a reload or "back" does not reopen the same thing.
+  useEffect(() => {
+    if (params.has('aba') || params.has('r') || params.has('nova'))
+      setParams(
+        (p) => {
+          p.delete('aba');
+          p.delete('r');
+          p.delete('nova');
+          return p;
+        },
+        { replace: true },
+      );
+  }, [params, setParams]);
+
+  function setTab(t: Tab) {
+    setTabState(t);
+  }
 
   return (
-    <>
-      <div role="group" aria-label="Seção" className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1">
-        <Chip selected={tab === 'revendedoras'} onClick={() => setTab('revendedoras')}>
-          Revendedoras <span className="price text-xs">{list.filter((r) => r.reseller.status !== 'encerrada').length}</span>
-        </Chip>
-        <Chip selected={tab === 'fichas'} onClick={() => setTab('fichas')}>
-          Fichas de cadastro
-        </Chip>
-        <Chip selected={tab === 'programa'} onClick={() => setTab('programa')}>
-          Programa e contrato
-        </Chip>
+    <div className="flex flex-col gap-5">
+      {state.status === 'ready' && list.length > 0 && <NetworkSummary list={list} />}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs
+          label="Revendas"
+          value={tab}
+          onChange={setTab}
+          items={[
+            { id: 'revendedoras', label: 'Revendedoras', count: shown.length },
+            { id: 'fichas', label: 'Fichas', count: freshLeads || undefined, alert: true },
+            { id: 'programa', label: 'Programa' },
+          ]}
+        />
+        {tab === 'revendedoras' && (
+          <Button onClick={() => setCreating({})} className="shrink-0 whitespace-nowrap max-sm:w-full">
+            <UserPlus size={18} strokeWidth={1.75} aria-hidden="true" /> Nova revendedora
+          </Button>
+        )}
       </div>
 
       {tab === 'revendedoras' &&
@@ -692,32 +939,48 @@ export function ResellersPage() {
           <p role="alert" className="py-10 text-center text-danger">
             {state.message}
           </p>
-        ) : (
+        ) : list.length ? (
           <>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="text-sm text-ink-muted">Aprove uma ficha ou cadastre direto.</p>
-              <Button size="sm" onClick={() => setCreating({})} className="shrink-0 whitespace-nowrap">
-                <Plus size={18} strokeWidth={1.75} aria-hidden="true" /> Nova revendedora
-              </Button>
-            </div>
-            {list.length ? (
-              <ul className="flex flex-col gap-2">
-                {list.map((item) => (
-                  <li key={item.reseller.id}>
-                    <ResellerRow item={item} onOpen={() => setOpenId(item.reseller.id)} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState>Nenhuma revendedora ainda. Aprove uma ficha em “Fichas de cadastro” e toque em “Efetivar”.</EmptyState>
+            <ul className="grid gap-3 md:grid-cols-2">
+              {shown.map((item) => (
+                <li key={item.reseller.id}>
+                  <ResellerCard item={item} onOpen={() => setOpenId(item.reseller.id)} />
+                </li>
+              ))}
+            </ul>
+            {ended.length > 0 && (
+              <details className="group">
+                <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm text-ink-muted [&::-webkit-details-marker]:hidden">
+                  <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="transition-transform group-open:rotate-90" /> Parcerias encerradas ({ended.length})
+                </summary>
+                <ul className="mt-2 grid gap-3 md:grid-cols-2">
+                  {ended.map((item) => (
+                    <li key={item.reseller.id}>
+                      <ResellerCard item={item} onOpen={() => setOpenId(item.reseller.id)} />
+                    </li>
+                  ))}
+                </ul>
+              </details>
             )}
           </>
+        ) : (
+          <Empty
+            title="Sua rede começa aqui"
+            image={<img src={asset('images/admin/revenda-vazia-320.webp')} alt="" width={112} height={112} className="mb-1 size-28 rounded-2xl object-cover" />}
+            action={
+              <Button variant="secondary" onClick={() => setTab('fichas')}>
+                Ver fichas de cadastro
+              </Button>
+            }
+          >
+            Aprove uma ficha ou toque em “Nova revendedora”.
+          </Empty>
         ))}
 
       {tab === 'fichas' && <LeadsPage onEffectivate={(lead) => setCreating({ lead })} />}
       {tab === 'programa' && <ProgramPanel />}
 
-      <Sheet open={!!open && !!program} onClose={() => setOpenId(null)} title={open ? open.reseller.name : 'Revendedora'} side="right">
+      <Sheet open={!!open && !!program} onClose={() => setOpenId(null)} title={open ? open.reseller.name : 'Revendedora'} side="right" className="!w-[min(100vw,520px)]">
         {open && program && <ResellerDetailView key={open.reseller.id} id={open.reseller.id} program={program} onClose={() => setOpenId(null)} />}
       </Sheet>
       <Sheet
@@ -760,6 +1023,6 @@ export function ResellersPage() {
           )
         )}
       </Sheet>
-    </>
+    </div>
   );
 }

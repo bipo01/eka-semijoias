@@ -98,7 +98,7 @@ function RotationFields({ count }: { count: number }) {
         hint={rotate ? 'As fotos se revezam no topo, nesta ordem.' : 'Só a Foto 1 aparece, parada. As outras ficam guardadas aqui para quando você quiser.'}
         checked={rotate}
         onChange={(v) => set(ROTATE, v)}
-        className="rounded-[12px] border border-line bg-white px-4 py-3"
+        className="rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] px-4 py-3"
       />
       {rotate && <IntervalField />}
     </div>
@@ -113,7 +113,7 @@ function IntervalField() {
   const value = Number(getIn(draft, path) ?? INTERVAL_DEFAULT);
   const error = errors[pathKey(path)];
   return (
-    <div className="flex flex-col gap-2 rounded-[12px] border border-line bg-white px-4 pt-3 pb-4">
+    <div className="flex flex-col gap-2 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] px-4 pt-3 pb-4">
       <div className="flex items-baseline justify-between gap-3">
         <label htmlFor={`${uid}-interval`} className="font-medium">
           Trocar de foto a cada

@@ -11,7 +11,7 @@ test.beforeEach(async ({ context }) => {
 async function unlock(page: Page) {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
-  await expect(page.getByRole('heading', { name: /^(Produtos|Pedidos)$/, level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeAttached();
 }
 
 async function axe(page: Page) {
@@ -38,8 +38,8 @@ test('admin: PIN gate, edit a price and see it on the public site', async ({ pag
   for (const d of '000001') await page.getByRole('button', { name: d, exact: true }).click();
   await expect(page.getByRole('alert')).toContainText(/PIN/);
   for (const d of PIN) await page.keyboard.press(d);
-  await expect(page.getByRole('heading', { name: 'Pedidos', level: 1 })).toBeVisible();
-  await page.getByRole('link', { name: 'Produtos', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeAttached();
+  await page.goto('/admin/produtos');
   await expect(page.getByRole('heading', { name: 'Produtos', level: 1 })).toBeVisible();
 
   await page.locator(`a[href="/admin/produtos/${product.id}"]`).first().click();
@@ -165,7 +165,7 @@ test('admin: stock, order and confirmation; the visitor page sells out live', as
   // 1. Stock control on, one unit.
   await page.goto('/admin');
   await unlock(page);
-  await page.getByRole('link', { name: 'Estoque', exact: true }).click();
+  await page.goto('/admin/estoque');
   await page.getByRole('button', { name: new RegExp(product.name) }).first().click();
   const editor = page.getByRole('dialog', { name: product.name });
   await editor.getByRole('switch', { name: 'Controlar estoque desta peça' }).click();
@@ -238,8 +238,8 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   // 2. The owner sets the Pix key (shared by the parallel projects: same value) and charges with shipping.
   await page.goto('/admin');
   await unlock(page);
-  await page.getByRole('link', { name: 'Configurações', exact: true }).click();
-  await page.getByRole('button', { name: 'Pix', exact: true }).click();
+  await page.goto('/admin/configuracoes');
+  await page.getByRole('tab', { name: 'Pix', exact: true }).click();
   await page.getByRole('combobox', { name: 'Tipo de chave' }).selectOption('phone');
   await page.getByRole('textbox', { name: 'Chave Pix' }).fill('(65) 99999-8888');
   await page.getByRole('textbox', { name: 'Nome do recebedor' }).fill('ÉKA Semijoias');
@@ -295,7 +295,7 @@ test('messages: the owner creates her own variation and the site uses it', async
   test.skip(testInfo.project.name !== 'desktop-chromium', 'edits shared settings');
   await page.goto('/admin');
   await unlock(page);
-  await page.getByRole('link', { name: 'Mensagens', exact: true }).click();
+  await page.goto('/admin/mensagens');
   await expect(page.getByRole('heading', { name: 'Mensagens das clientes' })).toBeVisible();
   const card = page.locator('li').filter({ has: page.getByRole('heading', { name: 'Dúvida sobre uma peça' }) });
   await card.getByRole('button', { name: /Personalizar/ }).click();

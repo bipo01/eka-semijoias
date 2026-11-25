@@ -67,6 +67,8 @@
     html { scrollbar-width: auto; scrollbar-color: var(--c-rose) var(--c-ivory); }
   }
   dialog { color: inherit; }
+  /* The panel's headings use the semibold cut (loaded with the admin chunk). */
+  .admin-ui :is(h2, h3) { font-weight: 600; }
   dialog::backdrop { background: rgb(43 29 24 / 0.42); }
 }
 
@@ -85,7 +87,8 @@
   font-weight: 500;
 }
 @utility price {
-  font-variant-numeric: tabular-nums;
+  /* Lining figures: Cormorant's default old-style digits read as letters in amounts ("1" like "I"). */
+  font-variant-numeric: tabular-nums lining-nums;
   font-weight: 500;
 }
 @utility link-underline {

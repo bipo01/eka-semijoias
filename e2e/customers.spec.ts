@@ -12,7 +12,7 @@ test.beforeEach(async ({ context }) => {
 async function unlock(page: Page) {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Pedidos', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeAttached();
 }
 
 // A piece no other spec renames, reprices or puts under stock control (no sizes: one tap to add).
@@ -25,7 +25,7 @@ test('customers: register a customer, sell to her and open "Compra registrada" w
 
   await page.goto('/admin');
   await unlock(page);
-  await page.getByRole('link', { name: 'Clientes', exact: true }).click();
+  await page.goto('/admin/clientes');
   await expect(page.getByRole('heading', { name: 'Clientes', level: 1 })).toBeVisible();
 
   // Nova cliente

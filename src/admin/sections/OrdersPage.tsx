@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronRight, Search } from 'lucide-react';
+import { Search, ShoppingBag, Store } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { Chip } from '../../components/ui/Misc';
@@ -18,6 +18,7 @@ import { FINISH_LABEL } from '../../data/schema';
 import { formatBRL } from '../../lib/format';
 import { toast } from '../../store/ui';
 import { EmptyState } from '../FormBits';
+import { CARD, Pill, type Tone } from '../ui';
 import { formatDateTime } from '../lib/contact';
 import { useCustomer, type Customer } from '../lib/customers';
 import { anonymizeOrder, changeOrderStatus, deleteOrder, useOrders } from '../lib/orders';
@@ -49,16 +50,21 @@ const ACTIVE: ReadonlySet<OrderStatus> = new Set(['enviado', 'confirmado', 'pago
 const matchesFilter = (order: Order, filter: Filter) =>
   filter === 'todos' ? true : filter === 'ativos' ? ACTIVE.has(order.status) : filter === 'comprovantes' ? awaitingReview(order) : order.status === filter;
 
-const STATUS_STYLE: Record<OrderStatus, string> = {
-  enviado: 'bg-champagne text-ink',
-  confirmado: 'border border-copper text-copper',
-  pago: 'bg-copper text-white',
-  entregue: 'bg-[#e4ece6] text-success',
-  cancelado: 'bg-[#f6e9e6] text-danger',
+/** Each status has its own color: waiting = amber, confirmed = blue-grey, paid = green, cancelled = red. */
+const STATUS_TONE: Record<OrderStatus, Tone> = {
+  enviado: 'warning',
+  confirmado: 'info',
+  pago: 'success',
+  entregue: 'neutral',
+  cancelado: 'danger',
 };
 
 export function StatusPill({ status, className }: { status: OrderStatus; className?: string }) {
-  return <span className={cx('inline-flex min-h-6 items-center rounded-full px-2.5 text-xs font-medium whitespace-nowrap', STATUS_STYLE[status], className)}>{STATUS_LABEL[status]}</span>;
+  return (
+    <Pill tone={STATUS_TONE[status]} dot {...(className ? { className } : {})}>
+      {STATUS_LABEL[status]}
+    </Pill>
+  );
 }
 
 const unitsOf = (order: Order) => order.items.reduce((sum, i) => sum + i.qty, 0);
@@ -138,7 +144,7 @@ function OrderDetail({ order, onClose, onPurchase }: { order: Order; onClose: ()
         <span className="text-sm text-ink-muted">{formatDateTime(order.createdAt)}</span>
       </div>
 
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-[12px] border border-line bg-white p-4 text-sm">
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4 text-sm">
         <dt className="text-ink-muted">Cliente</dt>
         <dd className="break-words">{order.customer.name || '—'}</dd>
         <dt className="text-ink-muted">Cidade</dt>
@@ -304,7 +310,22 @@ function OrderDetail({ order, onClose, onPurchase }: { order: Order; onClose: ()
 export function OrdersPage() {
   const state = useOrders((s) => s.state);
   const load = useOrders((s) => s.load);
-  const [filter, setFilter] = useState<Filter>('ativos');
+  // Links from Início: ?filtro=<filter> picks the list, ?novo=1 opens "Novo pedido".
+  const [params, setParams] = useSearchParams();
+  const askedFilter = params.get('filtro');
+  const [filter, setFilter] = useState<Filter>(FILTERS.some((f) => f.id === askedFilter) ? (askedFilter as Filter) : 'ativos');
+  useEffect(() => {
+    if (params.has('filtro') || params.has('novo'))
+      setParams(
+        (p) => {
+          p.delete('filtro');
+          p.delete('novo');
+          return p;
+        },
+        { replace: true },
+      );
+  }, [params, setParams]);
+  const [autoNew] = useState(params.get('novo') === '1');
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   // "Compra registrada" waiting to open over its order: a confirmed manual sale or an order just paid,
@@ -315,7 +336,6 @@ export function OrdersPage() {
   const q = query.trim().toLowerCase().replace(/^n[ºo°]?\s*/, '');
   const visible = orders.filter((o) => matchesFilter(o, filter) && (!q || String(o.number).includes(q) || o.customer.name.toLowerCase().includes(q) || o.customer.city.toLowerCase().includes(q)));
   // A notice on the phone opens /admin/pedidos?pedido=<número>: that order opens on arrival.
-  const [params, setParams] = useSearchParams();
   const linked = params.get('pedido');
   const open = orders.find((o) => o.id === openId) ?? (linked ? (orders.find((o) => String(o.number) === linked) ?? null) : null);
   const close = () => {
@@ -338,9 +358,12 @@ export function OrdersPage() {
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-sm text-ink-muted">Venda fechada pelo WhatsApp ou pessoalmente? Registre aqui.</p>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-sm text-ink-muted">
+          {counts.ativos ? `${counts.ativos} ${counts.ativos === 1 ? 'pedido em andamento' : 'pedidos em andamento'}` : 'Nenhum pedido em andamento'}
+        </p>
         <NewOrderButton
+          autoOpen={autoNew}
           onCreated={(order, customer) => {
             const target = order.status === 'confirmado' ? purchaseTarget(customer) : null;
             setPurchase(target ? { orderId: order.id, target } : null);
@@ -379,28 +402,28 @@ export function OrdersPage() {
               <button
                 type="button"
                 onClick={() => setOpenId(order.id)}
-                className="flex w-full items-center gap-3 rounded-[12px] border border-line bg-white p-4 text-left transition-colors hover:border-copper focus-visible:outline-2 focus-visible:outline-copper"
+                className={cx(CARD, 'flex w-full items-center gap-3 p-4 text-left transition-[border-color,box-shadow] hover:border-copper hover:shadow-[0_6px_18px_-8px_rgb(48_33_28/0.25)] focus-visible:outline-2 focus-visible:outline-copper')}
               >
+                <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-champagne text-copper">
+                  {order.source === 'manual' ? <Store size={19} strokeWidth={1.6} aria-hidden="true" /> : <ShoppingBag size={19} strokeWidth={1.6} aria-hidden="true" />}
+                </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="price font-medium">nº {order.number}</span>
-                    <StatusPill status={order.status} />
-                    {awaitingReview(order) && (
-                      <span className="inline-flex min-h-6 items-center gap-1 rounded-full bg-rose-light/60 px-2.5 text-xs font-medium text-ink">
-                        <ReceiptText size={13} strokeWidth={1.75} aria-hidden="true" /> Comprovante
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 truncate">
-                    {order.customer.name || '—'}
-                    {order.customer.city && <span className="text-ink-muted"> · {order.customer.city}</span>}
+                  <p className="truncate font-medium">{order.customer.name || 'Cliente sem nome'}</p>
+                  <p className="truncate text-sm text-ink-muted">
+                    <span className="price">nº {order.number}</span> · {unitsOf(order)} {unitsOf(order) === 1 ? 'peça' : 'peças'}
+                    {order.customer.city && ` · ${order.customer.city}`}
                   </p>
-                  <p className="text-sm text-ink-muted">
-                    <span className="whitespace-nowrap">{formatDateTime(order.createdAt)}</span><span className="whitespace-nowrap"> · {unitsOf(order)} {unitsOf(order) === 1 ? 'peça' : 'peças'}</span>
-                  </p>
+                  <p className="text-xs text-ink-muted">{formatDateTime(order.createdAt)}</p>
                 </div>
-                <span className="price shrink-0 text-lg">{formatBRL(order.charge?.amountCents ?? order.totalCents)}</span>
-                <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-muted" />
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <span className="price text-[1.0625rem] font-semibold">{formatBRL(order.charge?.amountCents ?? order.totalCents)}</span>
+                  <StatusPill status={order.status} />
+                  {awaitingReview(order) && (
+                    <Pill tone="copper">
+                      <ReceiptText size={12} strokeWidth={1.75} aria-hidden="true" /> Comprovante
+                    </Pill>
+                  )}
+                </div>
               </button>
             </li>
           ))}

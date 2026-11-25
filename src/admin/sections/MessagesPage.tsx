@@ -266,7 +266,7 @@ function TemplateEditor({ type, settings, onClose }: { type: MessageType; settin
           maxLength={MAX_TEMPLATE_CHARS}
           onChange={(e) => setText(selected, e.target.value)}
           rows={9}
-          className="w-full resize-y rounded-[12px] border border-line bg-white p-3.5 font-mono text-[0.8125rem] leading-relaxed text-ink focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"
+          className="w-full resize-y rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-3.5 font-mono text-[0.8125rem] leading-relaxed text-ink focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"
         />
         {missing.length > 0 && (
           <p role="alert" className="text-sm text-danger">
@@ -300,7 +300,7 @@ function TemplateEditor({ type, settings, onClose }: { type: MessageType; settin
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 rounded-[12px] border border-line bg-white p-3">
+      <div className="flex flex-col gap-2 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-3">
         {selected.id === activeId ? (
           <p className="flex items-center gap-2 text-sm text-success">
             <Check size={17} strokeWidth={2} aria-hidden="true" /> Esta é a variação em uso.
@@ -325,7 +325,7 @@ function TemplateEditor({ type, settings, onClose }: { type: MessageType; settin
       </div>
 
       {invalid.length > 0 && (
-        <p role="alert" className="rounded-[10px] bg-[#f6e9e6] px-4 py-3 text-sm text-danger">
+        <p role="alert" className="rounded-[10px] bg-danger-tint px-4 py-3 text-sm text-danger">
           Corrija {invalid.map((t) => `“${t.name}”`).join(', ')} antes de salvar.
         </p>
       )}
@@ -349,7 +349,7 @@ function Group({ title, intro, children }: { title: string; intro: string; child
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="font-display text-display-m">{title}</h2>
+        <h2 className="font-display text-[1.625rem] leading-tight">{title}</h2>
         <p className="text-sm text-ink-muted">{intro}</p>
       </div>
       <ul className="grid gap-3 md:grid-cols-2">{children}</ul>
@@ -364,19 +364,19 @@ export function MessagesPage() {
   return (
     <div className="flex flex-col gap-8">
       <p className="text-sm text-ink-muted">
-        Escolha como cada mensagem sai. Cada uma tem variações prontas (Clássica, Carinhosa, Direta…) e você pode criar as suas. As informações de cada pedido entram sozinhas.
+        Cada mensagem tem variações prontas e aceita as suas. Os dados do pedido entram sozinhos.
       </p>
-      <Group title="Mensagens das clientes" intro="Abrem no WhatsApp da cliente já escritas, nos botões do site. Ela ainda pode mudar o texto antes de enviar.">
+      <Group title="Mensagens das clientes" intro="Saem dos botões do site, já escritas, no WhatsApp da cliente.">
         {typesOf('cliente').map((t) => (
           <MessageCard key={t} type={t} settings={settings} onEdit={() => setEditing(t)} />
         ))}
       </Group>
-      <Group title="Suas mensagens" intro="Saem prontas no painel (nos pedidos, nas clientes e nas revendedoras) para você copiar ou abrir no WhatsApp.">
+      <Group title="Suas mensagens" intro="Prontas no painel para você copiar ou enviar.">
         {typesOf('loja').map((t) => (
           <MessageCard key={t} type={t} settings={settings} onEdit={() => setEditing(t)} />
         ))}
       </Group>
-      <Group title="Revendedoras" intro="Usadas no painel das revendedoras e no mostruário digital de cada uma.">
+      <Group title="Revendedoras" intro="No painel e no mostruário de cada revendedora.">
         {typesOf('revenda').map((t) => (
           <MessageCard key={t} type={t} settings={settings} onEdit={() => setEditing(t)} />
         ))}

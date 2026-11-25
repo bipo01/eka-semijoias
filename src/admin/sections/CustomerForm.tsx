@@ -136,7 +136,7 @@ export function CustomerFields({ draft, errors, onChange, short }: { draft: Cust
 /** Error box; for a WhatsApp already registered, offers that customer instead. */
 export function CustomerFailureBox({ failure, existingLabel, onExisting }: { failure: CustomerFailure; existingLabel: string; onExisting?: ((c: Customer) => void) | undefined }) {
   return (
-    <div role="alert" className="flex flex-col items-start gap-2 rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
+    <div role="alert" className="flex flex-col items-start gap-2 rounded-[10px] bg-danger-tint p-3 text-sm text-danger">
       <p>{failure.error}</p>
       {failure.existing && onExisting && (
         <button type="button" className="min-h-9 text-copper underline underline-offset-4" onClick={() => onExisting(failure.existing!)}>

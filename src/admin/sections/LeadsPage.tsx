@@ -42,8 +42,8 @@ export function leadsCsv(leads: ResellerLead[]): string {
 const LEAD_STYLE: Record<LeadStatus, string> = {
   nova: 'bg-copper text-white',
   analise: 'bg-champagne text-ink',
-  aprovada: 'bg-[#e4ece6] text-success',
-  recusada: 'bg-[#f6e9e6] text-danger',
+  aprovada: 'bg-success-tint text-success',
+  recusada: 'bg-danger-tint text-danger',
   efetivada: 'border border-copper text-copper',
 };
 type LeadFilter = 'abertas' | LeadStatus | 'todas';
@@ -122,7 +122,7 @@ export function LeadsPage({ onEffectivate }: { onEffectivate?: (lead: ResellerLe
           {sorted.map((lead) => {
             const digits = whatsappDigits(lead.whatsapp);
             return (
-              <li key={lead.id} className="rounded-[12px] border border-line bg-white p-4">
+              <li key={lead.id} className="rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">

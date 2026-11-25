@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+// The panel's headings and numbers use the semibold cuts (only in this lazy chunk, not in the store).
+import '@fontsource/cormorant-garamond/latin-600.css';
+import '@fontsource/jost/latin-600.css';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Sheet } from '../components/ui/Sheet';
@@ -9,7 +12,8 @@ import { applyAppHead } from '../lib/install';
 import { reconnectLive } from '../store/catalog';
 import { toast } from '../store/ui';
 import { AdminSessionContext, type AdminSession } from './AdminContext';
-import { AdminShell } from './AdminShell';
+import { AdminShell, MorePage } from './AdminShell';
+import { HomePage } from './sections/HomePage';
 import { ADMIN_BASE } from './lib/paths';
 import { fetchSession, logout, SESSION_LOST_EVENT } from './lib/session';
 import { PinGate } from './PinGate';
@@ -118,7 +122,8 @@ export default function AdminApp() {
       {relogin}
       <Routes>
         <Route element={<AdminShell />}>
-          <Route index element={<Navigate to={`${ADMIN_BASE}/pedidos`} replace />} />
+          <Route index element={<HomePage />} />
+          <Route path="mais" element={<MorePage />} />
           <Route path="pedidos" element={<OrdersPage />} />
           <Route path="clientes" element={<CustomersPage />} />
           <Route path="estoque" element={<StockPage />} />
@@ -132,7 +137,7 @@ export default function AdminApp() {
           <Route path="revendedoras" element={<ResellersPage />} />
           <Route path="configuracoes" element={<SettingsPage />} />
           <Route path="backup" element={<BackupPage />} />
-          <Route path="*" element={<Navigate to={`${ADMIN_BASE}/pedidos`} replace />} />
+          <Route path="*" element={<Navigate to={ADMIN_BASE} replace />} />
         </Route>
       </Routes>
       </>
@@ -142,7 +147,7 @@ export default function AdminApp() {
   return (
     <AdminSessionContext.Provider value={session}>
       {content}
-      <Toaster />
+      <Toaster raised={gate.state === 'open'} />
     </AdminSessionContext.Provider>
   );
 }

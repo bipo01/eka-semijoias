@@ -184,7 +184,7 @@ function NewOrderForm({ onDone }: { onDone: (order: Order, customer: Customer | 
         onChange={setConfirmed}
       />
       {error && (
-        <p role="alert" className="rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
+        <p role="alert" className="rounded-[10px] bg-danger-tint p-3 text-sm text-danger">
           {error}
         </p>
       )}
@@ -196,8 +196,8 @@ function NewOrderForm({ onDone }: { onDone: (order: Order, customer: Customer | 
 }
 
 /** "Novo pedido" button + sheet (the form is mounted per opening, so it always starts empty). */
-export function NewOrderButton({ onCreated }: { onCreated: (order: Order, customer: Customer | null) => void }) {
-  const [open, setOpen] = useState(false);
+export function NewOrderButton({ onCreated, autoOpen = false }: { onCreated: (order: Order, customer: Customer | null) => void; autoOpen?: boolean }) {
+  const [open, setOpen] = useState(autoOpen);
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)} className="shrink-0 whitespace-nowrap">
@@ -256,7 +256,7 @@ function EditItemsForm({ order, onDone }: { order: Order; onDone: () => void }) 
         {order.charge && amountChanges && <li className="text-danger">O valor muda para {formatBRL(total)}: o link de pagamento atual deixa de valer e você gera uma nova cobrança.</li>}
       </ul>
       {error && (
-        <p role="alert" className="rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
+        <p role="alert" className="rounded-[10px] bg-danger-tint p-3 text-sm text-danger">
           {error}
         </p>
       )}

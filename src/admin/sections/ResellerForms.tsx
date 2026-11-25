@@ -96,7 +96,7 @@ export function NewResellerForm({ lead, onDone }: { lead?: ResellerLead; onDone:
         onBlur={() => setInstagram(normalizeInstagram(instagram))}
       />
       {error && (
-        <p role="alert" className="rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
+        <p role="alert" className="rounded-[10px] bg-danger-tint p-3 text-sm text-danger">
           {error}
         </p>
       )}
@@ -116,7 +116,7 @@ export function InviteMessage({ reseller, token }: { reseller: Reseller; token: 
       <p className="rounded-[10px] bg-champagne/60 p-3 text-sm">
         Envie o convite para {firstNameOf(reseller.name)}. O link de acesso vale por 7 dias e funciona uma vez; se ela perder, gere um novo na ficha dela.
       </p>
-      <pre className="max-h-64 overflow-auto rounded-[12px] border border-line bg-white p-4 text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{text}</pre>
+      <pre className="max-h-64 overflow-auto rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4 text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{text}</pre>
       <ButtonAnchor href={whatsappUrl(`55${reseller.whatsapp}`, text)} block>
         <WhatsAppIcon size={19} /> Enviar no WhatsApp dela
       </ButtonAnchor>
@@ -166,7 +166,7 @@ export function KitEditor({ resellerId, kit, onDone }: { resellerId: string; kit
         <li>Peças com controle de estoque saem do estoque agora e voltam no acerto, se não forem vendidas.</li>
       </ul>
       {error && (
-        <p role="alert" className="rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
+        <p role="alert" className="rounded-[10px] bg-danger-tint p-3 text-sm text-danger">
           {error}
         </p>
       )}
@@ -238,7 +238,7 @@ export function SettleForm({ kit, sales, onDone }: { kit: Kit; sales: ResellerSa
           {preview.error}
         </p>
       ) : (
-        <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 rounded-[12px] border border-line bg-white p-4 text-sm">
+        <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4 text-sm">
           <dt>Vendido no ciclo</dt>
           <dd className="price text-right">{formatBRL(preview.soldCents)}</dd>
           {discounts.cents > 0 && (
@@ -268,7 +268,7 @@ export function SettleForm({ kit, sales, onDone }: { kit: Kit; sales: ResellerSa
         </p>
       )}
       {error && (
-        <p role="alert" className="rounded-[10px] bg-[#f6e9e6] p-3 text-sm text-danger">
+        <p role="alert" className="rounded-[10px] bg-danger-tint p-3 text-sm text-danger">
           {error}
         </p>
       )}

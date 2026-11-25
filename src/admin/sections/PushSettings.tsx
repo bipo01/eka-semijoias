@@ -145,13 +145,13 @@ function TestOutcome({ result, at }: { result: TestResult; at: Date }) {
     );
   if (result === 'refused')
     return (
-      <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-[#f6e9e6] p-3 text-sm">
+      <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-danger-tint p-3 text-sm">
         <p className="font-medium text-danger">O aviso chegou, mas o celular não deixou mostrar.</p>
         <p>Nas configurações do Android, abra Apps → Painel ÉKA (ou Chrome) → Notificações e permita as notificações. Depois envie o teste de novo.</p>
       </div>
     );
   return (
-    <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-[#f6e9e6] p-3 text-sm">
+    <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-danger-tint p-3 text-sm">
       <p className="font-medium text-danger">O aviso saiu do site, mas não chegou a este aparelho em 20 segundos.</p>
       <p>Em celulares Xiaomi, Samsung e Motorola, a economia de bateria costuma segurar os avisos. Nas configurações do Android, abra Apps → Painel ÉKA e também Chrome: em Bateria, escolha “Sem restrições”, e ligue o “Início automático”. Confira também se a internet está ligada e envie o teste de novo.</p>
     </div>
@@ -201,7 +201,7 @@ export function PushSettings() {
 
   if (loadError) {
     return (
-      <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4" aria-labelledby="push-title">
+      <section className="flex flex-col gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4" aria-labelledby="push-title">
         <h2 id="push-title" className="font-display text-title">Avisos no celular</h2>
         <p role="alert" className="text-sm text-danger">{loadError}</p>
         <Button variant="secondary" className="self-start" onClick={() => void load()}>
@@ -290,7 +290,7 @@ export function PushSettings() {
   }
 
   return (
-    <section className="flex flex-col gap-4 rounded-[12px] border border-line bg-white p-4" aria-labelledby="push-title">
+    <section className="flex flex-col gap-4 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4" aria-labelledby="push-title">
       <div className="flex items-start gap-3">
         <BellRing size={22} strokeWidth={1.5} aria-hidden="true" className="mt-1 shrink-0 text-copper" />
         <div>

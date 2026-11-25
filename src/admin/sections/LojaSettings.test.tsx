@@ -41,7 +41,7 @@ describe('“O que a loja oferece”', { timeout: 20_000 }, () => {
     await waitFor(() => expect(save).toBeDisabled());
 
     // The checklist (tab Loja) marks what was answered.
-    await userEvent.click(screen.getByRole('button', { name: 'Loja' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Loja' }));
     const checklist = await screen.findByRole('region', { name: 'Complete as informações da loja' });
     const item = (label: string) => within(checklist).getAllByRole('listitem').find((li) => li.textContent?.includes(label));
     expect(item('Se as peças são antialérgicas/sem níquel')).toHaveTextContent(/^Feito:/);

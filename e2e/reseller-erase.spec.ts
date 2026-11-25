@@ -20,7 +20,7 @@ test.beforeEach(async ({ context }) => {
 /** The run's admin session (e2e/admin-session.setup.ts): no PIN typed, so the panel's attempt cap is never hit. */
 async function unlock(page: Page) {
   await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: /^(Produtos|Pedidos)$/, level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeAttached();
 }
 
 test('admin: ends a partnership and erases the reseller data for good', async ({ page }, testInfo) => {
@@ -42,6 +42,7 @@ test('admin: ends a partnership and erases the reseller data for good', async ({
   const detail = page.getByRole('dialog', { name });
   await expect(detail).toBeVisible();
   // While she is active there is nothing to erase.
+  await detail.getByRole('tab', { name: 'Dados' }).click();
   await expect(detail.getByRole('heading', { name: 'Dados pessoais' })).toHaveCount(0);
 
   await detail.getByRole('button', { name: 'Encerrar parceria' }).click();
@@ -96,6 +97,7 @@ test('admin: the settlements spreadsheet downloads before erasing', async ({ pag
 
   await page.goto('/admin/revendedoras');
   await page.getByRole('button', { name: new RegExp(name) }).first().click();
+  await page.getByRole('tab', { name: 'Dados' }).click();
   await page.getByRole('button', { name: /^Apagar os dados de Teca/ }).click();
   const confirm = page.getByRole('dialog', { name: 'Apagar os dados de Teca?' });
   const download = page.waitForEvent('download');

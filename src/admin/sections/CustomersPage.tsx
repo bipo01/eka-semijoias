@@ -92,7 +92,7 @@ export function CustomersPage() {
               <button
                 type="button"
                 onClick={() => open(c.id)}
-                className="flex w-full items-center gap-3 rounded-[12px] border border-line bg-white p-4 text-left transition-colors hover:border-copper focus-visible:outline-2 focus-visible:outline-copper"
+                className="flex w-full items-center gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4 text-left transition-colors hover:border-copper focus-visible:outline-2 focus-visible:outline-copper"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{c.name}</p>

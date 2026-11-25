@@ -187,7 +187,7 @@ export function OrderMessageComposer({ order, types, initialType, phone }: { ord
         value={text}
         onChange={(e) => setDraft(e.target.value)}
         rows={Math.min(16, Math.max(4, text.split('\n').length + Math.ceil(text.length / 48)))}
-        className="w-full resize-y rounded-[12px] border border-line bg-white p-4 text-sm leading-relaxed text-ink focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"
+        className="w-full resize-y rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4 text-sm leading-relaxed text-ink focus:border-copper focus:outline-none focus-visible:outline-2 focus-visible:outline-copper"
       />
       {draft !== null && draft !== generated && (
         <div className="-mt-2 flex flex-col gap-1 text-sm">

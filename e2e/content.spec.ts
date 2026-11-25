@@ -17,7 +17,7 @@ test.beforeEach(async ({ context }) => {
 async function unlock(page: Page) {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Pedidos', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeAttached();
 }
 
 test('site content: a testimonial added in the admin shows live, is deleted and the section restored', async ({ page, browser }, testInfo) => {
@@ -31,7 +31,7 @@ test('site content: a testimonial added in the admin shows live, is deleted and 
 
   await page.goto('/admin');
   await unlock(page);
-  await page.getByRole('link', { name: 'Site', exact: true }).click();
+  await page.goto('/admin/site');
   await page.getByRole('button', { name: 'Editar depoimentos' }).click();
   const editor = page.getByRole('dialog', { name: 'Depoimentos' });
   await editor.getByRole('button', { name: 'Novo depoimento' }).click();

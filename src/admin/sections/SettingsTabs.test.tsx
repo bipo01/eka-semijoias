@@ -99,10 +99,10 @@ describe('Configurações in tabs', () => {
     renderAdmin('/admin/configuracoes');
     expect(await screen.findByRole('heading', { name: 'Informações da loja' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pix para receber os pedidos' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Pix' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Pix' }));
     expect(screen.getByRole('heading', { name: 'Pix para receber os pedidos' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Informações da loja' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pix' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('tab', { name: 'Pix' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('a pending item of the checklist leads to the tab where it is filled', async () => {

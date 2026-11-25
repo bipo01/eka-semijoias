@@ -35,7 +35,7 @@ async function ensureStorePix(api: APIRequestContext, origin: string) {
 
 async function unlock(page: Page) {
   await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: /^(Produtos|Pedidos)$/, level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeAttached();
 }
 
 test('repasse: she sees the amount and the store Pix, says she paid, the owner confirms', async ({ page, browser }, testInfo) => {
@@ -98,7 +98,7 @@ test('repasse: she sees the amount and the store Pix, says she paid, the owner c
   // The owner sees it in the list and in her sheet, clears it once (money not there yet)…
   await page.goto('/admin/revendedoras');
   const row = page.getByRole('button', { name: new RegExp(name) }).first();
-  await expect(row).toContainText('Ela avisou que repassou');
+  await expect(row).toContainText('Avisou que fez o repasse');
   await row.click();
   const detail = page.getByRole('dialog', { name });
   await expect(detail.getByText(/Ela avisou que pagou em/)).toBeVisible();

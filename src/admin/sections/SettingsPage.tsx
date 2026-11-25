@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Circle } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Circle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { TextArea, TextField } from '../../components/ui/Field';
-import { Chip } from '../../components/ui/Misc';
 import { cx } from '../../components/ui/cx';
 import { business, pendingChecklist } from '../../config/business';
 import type { SiteContent } from '../../data/content';
@@ -18,6 +17,7 @@ import { toast } from '../../store/ui';
 import { useAdminSession } from '../AdminContext';
 import { maskPhone, parseInstagram, parsePhone } from '../lib/contact';
 import { adminPath } from '../lib/paths';
+import { Tabs } from '../ui';
 import { save } from '../lib/persist';
 import { LojaSettings } from './LojaSettings';
 import { PixKeyField } from './PixKeyField';
@@ -136,7 +136,7 @@ function StoreSettings() {
   }
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-[12px] border border-line bg-white p-4">
+    <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
       <h2 className="font-display text-title">Informações da loja</h2>
       <TextField label="Aviso no topo do site" maxLength={140} hint={`${form.announcement.length}/140 caracteres`} {...field('announcement')} />
       <TextField
@@ -231,7 +231,7 @@ function PixSettings() {
   }
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-[12px] border border-line bg-white p-4">
+    <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
       <div>
         <h2 className="font-display text-title">Pix para receber os pedidos</h2>
         <p className="mt-1 text-sm text-ink-muted">
@@ -286,7 +286,7 @@ function StockSettings() {
   }
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-[12px] border border-line bg-white p-4">
+    <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
       <h2 className="font-display text-title">Estoque</h2>
       <TextField
         label="Mostrar “Últimas unidades” quando restarem até"
@@ -343,7 +343,7 @@ function PinSettings() {
 
   const digitsOnly = (v: string) => v.replace(/\D/g, '').slice(0, PIN_MAX);
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-[12px] border border-line bg-white p-4">
+    <form noValidate onSubmit={submit} className="flex flex-col gap-4 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
       <h2 className="font-display text-title">Alterar PIN</h2>
       <TextField
         label="PIN atual"
@@ -398,14 +398,23 @@ function StoreChecklist() {
   const items = pendingChecklist.map((item) => ({ ...item, done: DONE_WHEN[item.key]?.(settings, content) ?? false }));
   const done = items.filter((i) => i.done).length;
   return (
-    <section aria-labelledby="checklist-title" className="rounded-[12px] border border-line bg-champagne/50 p-4">
-      <h2 id="checklist-title" className="font-display text-title">
-        Complete as informações da loja
-      </h2>
-      <p className="mt-1 text-sm text-ink-muted">
-        {done} de {items.length} concluídos. Os itens são marcados sozinhos quando você preenche os campos: aqui embaixo, nas outras abas de Configurações ou na aba Site (Sobre e Depoimentos).
-      </p>
-      <ul className="mt-3 flex flex-col gap-2">
+    <section aria-labelledby="checklist-title" className="rounded-2xl border border-line bg-white p-4 shadow-[0_2px_8px_rgb(48_33_28/0.04)]">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id="checklist-title" className="font-display text-title">
+          Complete as informações da loja
+        </h2>
+        <span className="price shrink-0 text-sm text-ink-muted">
+          {done} de {items.length}
+        </span>
+      </div>
+      <div aria-hidden="true" className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#efe4dc]">
+        <div className="h-full rounded-full bg-gradient-to-r from-rose to-copper" style={{ width: `${(done / items.length) * 100}%` }} />
+      </div>
+      <details className="group mt-2">
+        <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm text-copper [&::-webkit-details-marker]:hidden">
+          <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="transition-transform group-open:rotate-90" /> Ver o que falta
+        </summary>
+      <ul className="mt-1 flex flex-col gap-2">
         {items.map((item) => (
           <li key={item.key} className="flex items-start gap-2.5 text-sm">
             {item.done ? (
@@ -436,6 +445,7 @@ function StoreChecklist() {
           </li>
         ))}
       </ul>
+      </details>
     </section>
   );
 }
@@ -470,13 +480,7 @@ export function SettingsPage() {
     );
   return (
     <div className="flex flex-col gap-4">
-      <div role="group" aria-label="Assunto" className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
-        {SETTINGS_TABS.map((t) => (
-          <Chip key={t.id} selected={tab === t.id} onClick={() => go(t.id)}>
-            {t.label}
-          </Chip>
-        ))}
-      </div>
+      <Tabs label="Assunto" value={tab} onChange={go} items={SETTINGS_TABS.map((t) => ({ id: t.id, label: t.label }))} />
       {tab === 'loja' && (
         <>
           <StoreChecklist />

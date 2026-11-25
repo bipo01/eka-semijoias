@@ -70,7 +70,7 @@ export function ProductList({ products, categoryName, onReorder }: ProductListPr
           <li
             key={p.id}
             className={cx(
-              'relative rounded-[12px] border border-line bg-white p-3',
+              'relative rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-3',
               dragging ? 'z-10 shadow-[var(--shadow-1)]' : 'transition-transform duration-[160ms]',
             )}
             style={{ transform: `translateY(${dragging ? drag.offset : rowShift(i)}px)` }}

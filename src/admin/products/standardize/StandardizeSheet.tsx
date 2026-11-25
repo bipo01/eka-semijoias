@@ -436,7 +436,7 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
                 </li>
               ))}
             </ul>
-            <p className="flex items-start gap-3 rounded-[12px] border border-line bg-white p-3 text-sm text-ink-muted">
+            <p className="flex items-start gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-3 text-sm text-ink-muted">
               <Wifi size={18} strokeWidth={1.5} aria-hidden="true" className="mt-0.5 shrink-0 text-copper" />
               Na primeira vez, o padronizador baixa cerca de {downloadMb(DEFAULT_MODEL, 'wasm')} MB e depois fica guardado neste aparelho. Use o Wi-Fi. O recorte é feito aqui mesmo: a foto só sai do aparelho quando você salva a peça.
             </p>
@@ -500,7 +500,7 @@ export default function StandardizeSheet({ source, onApply, onClose }: Standardi
                 </figure>
               </div>
               <div className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0">
-                <div className="flex flex-col gap-2 rounded-[12px] border border-line bg-white px-4 pt-3 pb-4">
+                <div className="flex flex-col gap-2 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] px-4 pt-3 pb-4">
                   <div className="flex items-baseline justify-between gap-3">
                     <label htmlFor={`${headingId}-realce`} className="font-medium">
                       Realce de cor

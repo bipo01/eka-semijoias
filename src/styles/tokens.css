@@ -13,6 +13,15 @@
   --c-on-dark: #fbf8f5;
   --c-success: #3f6b4e;
   --c-danger: #9a3b2e;
+  /* Panel (admin) supporting tones: a deep band for the sidebar and hero, tints for meaning. */
+  --c-espresso: #30211c;
+  --c-cocoa: #493128;
+  --c-success-tint: #e7efe7;
+  --c-warning: #8a5a12;
+  --c-warning-tint: #faeed7;
+  --c-danger-tint: #f8e5e1;
+  --c-info: #3e5361;
+  --c-info-tint: #e8edf0;
 
   --shadow-1: 0 1px 2px rgb(43 29 24 / 0.06), 0 4px 16px rgb(43 29 24 / 0.06);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -44,6 +53,14 @@
   --color-on-dark: var(--c-on-dark);
   --color-success: var(--c-success);
   --color-danger: var(--c-danger);
+  --color-espresso: var(--c-espresso);
+  --color-cocoa: var(--c-cocoa);
+  --color-success-tint: var(--c-success-tint);
+  --color-warning: var(--c-warning);
+  --color-warning-tint: var(--c-warning-tint);
+  --color-danger-tint: var(--c-danger-tint);
+  --color-info: var(--c-info);
+  --color-info-tint: var(--c-info-tint);
 
   --font-display: 'Cormorant Garamond', 'Times New Roman', serif;
   --font-sans: 'Jost', system-ui, -apple-system, 'Segoe UI', sans-serif;

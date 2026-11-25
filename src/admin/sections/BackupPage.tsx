@@ -199,7 +199,7 @@ export function BackupPage() {
         </p>
       )}
 
-      <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4">
+      <section className="flex flex-col gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
         <h2 className="font-display text-title">Exportar</h2>
         <p className="text-sm text-ink-muted">
           Baixa um arquivo com o catálogo do site (peças, fotos enviadas, categorias, textos do site e informações da loja) e as fichas de cadastro de revendedoras. Atualmente:{' '}
@@ -223,7 +223,7 @@ export function BackupPage() {
         </Button>
       </section>
 
-      <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4">
+      <section className="flex flex-col gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
         <h2 className="font-display text-title">Importar</h2>
         <p className="text-sm text-ink-muted">Substitui o catálogo e os textos do site pelos de um backup, para todas as clientes. O PIN e os cadastros de revendedoras não mudam.</p>
         <label className="inline-flex min-h-12 cursor-pointer items-center gap-2 self-start rounded-full border border-copper px-6 font-medium text-copper hover:bg-champagne focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-copper">
@@ -237,7 +237,7 @@ export function BackupPage() {
         )}
       </section>
 
-      <section className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4">
+      <section className="flex flex-col gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
         <h2 className="font-display text-title">Restaurar catálogo inicial</h2>
         <p className="text-sm text-ink-muted">Volta às peças, categorias e textos originais do site. O PIN e os cadastros de revendedoras continuam os mesmos.</p>
         <Button variant="danger" onClick={() => setConfirmReset(true)} className="self-start" disabled={!!progress}>

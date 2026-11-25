@@ -106,7 +106,7 @@ export function LojaSettings() {
 
   const platingError = error ?? overLimit(form.plating, 120);
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-5 rounded-[12px] border border-line bg-white p-4">
+    <form noValidate onSubmit={submit} className="flex flex-col gap-5 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
       <div>
         <h2 className="font-display text-title">O que a loja oferece</h2>
         <p className="mt-1 text-sm text-ink-muted">

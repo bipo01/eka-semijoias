@@ -171,7 +171,7 @@ export function CategoriesPage() {
             const image = categoryImage(data, c);
             const n = count(c.id);
             return (
-              <li key={c.id} className="flex items-center gap-3 rounded-[12px] border border-line bg-white p-3">
+              <li key={c.id} className="flex items-center gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-3">
                 {image ? (
                   <Img {...productImageSources(image, true)} alt="" ratio="4 / 5" frameClassName="w-12 shrink-0 rounded-[8px]" width={48} height={60} />
                 ) : (

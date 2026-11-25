@@ -55,7 +55,7 @@ export function VariantsEditor({ draft, update, errors }: VariantsEditorProps) {
       )}
 
       {draft.variants.map((v) => (
-        <fieldset key={v.id} className="flex flex-col gap-4 rounded-[12px] border border-line bg-white p-3">
+        <fieldset key={v.id} className="flex flex-col gap-4 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-3">
           <legend className="flex items-center gap-2 px-1 font-medium">
             <SwatchDot finish={v.finish} size={14} /> {FINISH_LABEL[v.finish]}
           </legend>

@@ -89,13 +89,12 @@ export function SitePage() {
   return (
     <div className="flex flex-col gap-8">
       <p className="text-sm text-ink-muted">
-        Tudo o que as clientes leem no site se edita aqui: textos, fotos, depoimentos e perguntas. Ao salvar, a mudança aparece na hora para todo mundo, e dá para voltar ao texto
-        original quando quiser.
+        Textos e fotos do site. Ao salvar, muda na hora para todo mundo, e dá para voltar ao original.
       </p>
       {SITE_GROUPS.map((group) => (
         <section key={group.title} aria-labelledby={`site-${group.title}`} className="flex flex-col gap-3">
           <div>
-            <h2 id={`site-${group.title}`} className="font-display text-display-m">
+            <h2 id={`site-${group.title}`} className="font-display text-[1.625rem] leading-tight">
               {group.title}
             </h2>
             <p className="text-sm text-ink-muted">{group.intro}</p>

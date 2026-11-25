@@ -147,7 +147,7 @@ export function ListEditor<T extends { id: string }>({
       ) : (
         <ol className="flex flex-col gap-3">
           {items.map((item, i) => (
-            <li key={item.id} data-item={`${uid}-${item.id}`} className="min-w-0 rounded-[12px] border border-line bg-white p-3">
+            <li key={item.id} data-item={`${uid}-${item.id}`} className="min-w-0 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-3">
               <div className="-mt-1 -mr-1 flex items-center gap-1">
                 <h4 className="min-w-0 flex-1 font-medium [overflow-wrap:anywhere]">{renderTitle ? renderTitle(item, i) : cap(label(i))}</h4>
                 <IconButton id={`${uid}-${item.id}-up`} label={`Mover ${label(i)} para cima`} disabled={i === 0} onClick={() => moveItem(i, i - 1)} className="disabled:opacity-30">
