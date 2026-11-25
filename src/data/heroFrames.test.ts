@@ -91,13 +91,15 @@ describe('hero slides schema', () => {
   });
 
   it('reads a section saved with the old single photo as one slide (nothing she saved breaks)', () => {
-    const { slides: _slides, interval: _interval, ...texts } = inicio().hero;
+    const { slides: _slides, interval: _interval, rotate: _rotate, ...texts } = inicio().hero;
     const old = { ...inicio(), hero: { ...texts, image: { src: MEDIA, alt: 'Colar Ponto de Luz no colo' } } };
     const r = parseSection('inicio', old);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data.hero.slides).toEqual([{ id: 'principal', name: '', alt: 'Colar Ponto de Luz no colo', image: { src: MEDIA, alt: 'Colar Ponto de Luz no colo' }, frames: {} }]);
     expect(r.data.hero.interval).toBe(6);
+    // Saved before the "Revezar as fotos" switch existed: it rotated, so it stays on.
+    expect(r.data.hero.rotate).toBe(true);
     expect('image' in r.data.hero).toBe(false);
     // Through the public catalog too, and the site shows her photo (never the built-in ones).
     const content = siteContentSchema.parse({ inicio: old });
@@ -112,6 +114,10 @@ describe('hero slides schema', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data.hero.interval).toBe(9);
+    expect(r.data.hero.rotate).toBe(true);
+    const still = parseSection('inicio', withSlides([slide(), slide({ id: 's2' })], { rotate: false }));
+    expect(still.ok && still.data.hero.rotate).toBe(false);
+    expect(still.ok && still.data.hero.slides).toHaveLength(2);
     expect(r.data.hero.slides[0]!.frames).toEqual({ celular: { x: 12, y: 88, zoom: 1.75 }, tablet: { image: { src: MEDIA, alt: '' }, x: 50, y: 50, zoom: 1 } });
     expect(parseSection('inicio', r.data)).toEqual(r);
     // A slide without frames is the main photo everywhere.

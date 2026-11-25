@@ -165,7 +165,8 @@ function Controls({ count, names, current, playing, slidesId, onPick, onToggle, 
 
 export function Hero() {
   const { hero } = useSection('inicio');
-  const slides = hero.slides;
+  // With rotation off she keeps the other photos saved, but the site shows the first one, still.
+  const slides = hero.rotate ? hero.slides : hero.slides.slice(0, 1);
   const count = slides.length;
   const many = count > 1;
   const slidesId = useId();

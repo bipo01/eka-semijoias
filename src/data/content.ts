@@ -144,6 +144,8 @@ export const sectionSchemas = {
         primaryCta: req(30),
         secondaryCta: text(30),
         slides: z.array(heroSlideSchema).min(1, 'Deixe pelo menos 1 foto.').max(SLIDES_MAX, `No máximo ${SLIDES_MAX} fotos.`),
+        /** Off: only the first photo shows, still (the others stay saved for later). */
+        rotate: z.boolean().default(true),
         /** Seconds between slides. */
         interval: z
           .number()

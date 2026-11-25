@@ -22,6 +22,7 @@ import {
 import { siteImageSources } from '../../../lib/assets';
 import { toast } from '../../../store/ui';
 import { TextInput, useEditor } from './fields';
+import { SwitchRow } from '../../FormBits';
 import { AddPhoto, ImageField, photoFromFile } from './ImageField';
 import { ListField } from './ListEditor';
 import { getIn, pathKey, textLimit, type Path } from './sectionDraft';
@@ -34,6 +35,7 @@ import { getIn, pathKey, textLimit, type Path } from './sectionDraft';
  */
 
 const SLIDES: Path = ['hero', 'slides'];
+const ROTATE: Path = ['hero', 'rotate'];
 /** Tallest preview box, so a portrait frame stays comfortable on a phone. */
 const PREVIEW_MAX_H = 360;
 const KEY_STEP = 2;
@@ -60,7 +62,7 @@ export function HeroSlides() {
         deleteText={(s) => (s.name.trim() || s.alt.trim() ? `“${s.name.trim() || s.alt.trim()}”` : '')}
         renderItem={(slide, _i, p) => <SlideFields slide={slide} path={p} />}
       />
-      <IntervalField count={slides.length} />
+      <RotationFields count={slides.length} />
       <AddPhoto
         open={adding}
         profile="wide"
@@ -83,13 +85,32 @@ function slideTitle(slide: HeroSlide, i: number) {
   );
 }
 
+/** "Revezar as fotos" (on/off) and, while on, "Trocar de foto a cada". */
+function RotationFields({ count }: { count: number }) {
+  const { draft, set } = useEditor();
+  if (count < 2) return <p className="-mt-1 text-sm text-ink-muted">Com uma foto só, ela fica parada no topo. Com duas ou mais, elas podem se revezar.</p>;
+  const rotate = getIn(draft, ROTATE) !== false;
+  return (
+    <div className="flex flex-col gap-3">
+      {/* A section saved before this switch existed has no value: it rotated, so it reads as on. */}
+      <SwitchRow
+        label="Revezar as fotos"
+        hint={rotate ? 'As fotos se revezam no topo, nesta ordem.' : 'Só a Foto 1 aparece, parada. As outras ficam guardadas aqui para quando você quiser.'}
+        checked={rotate}
+        onChange={(v) => set(ROTATE, v)}
+        className="rounded-[12px] border border-line bg-white px-4 py-3"
+      />
+      {rotate && <IntervalField />}
+    </div>
+  );
+}
+
 /** "Trocar de foto a cada": seconds between slides. */
-function IntervalField({ count }: { count: number }) {
+function IntervalField() {
   const { draft, set, errors } = useEditor();
   const uid = useId();
   const path: Path = ['hero', 'interval'];
   const value = Number(getIn(draft, path) ?? INTERVAL_DEFAULT);
-  if (count < 2) return <p className="-mt-1 text-sm text-ink-muted">Com uma foto só, ela fica parada no topo. Com duas ou mais, elas se revezam.</p>;
   const error = errors[pathKey(path)];
   return (
     <div className="flex flex-col gap-2 rounded-[12px] border border-line bg-white px-4 pt-3 pb-4">

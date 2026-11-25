@@ -104,6 +104,16 @@ describe('Hero slider', () => {
     expect(screen.getByRole('img', { name: 'Colar' })).toBeInTheDocument();
   });
 
+  it('with "Revezar as fotos" off, only the first photo shows, still (the others stay saved)', () => {
+    show({ inicio: { ...inicio(), hero: { ...inicio().hero, rotate: false } } });
+    expect(screen.queryByRole('region', { name: 'Fotos em destaque' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Mostrar foto/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /troca de fotos/ })).not.toBeInTheDocument();
+    fireEvent.load(document.querySelector('img')!);
+    expect(document.querySelectorAll('picture')).toHaveLength(1);
+    expect(document.querySelector('img')!.getAttribute('srcset')).toContain('/images/hero/colo-celular');
+  });
+
   it('with several photos: a labelled carousel, "1 de 3" slides, dots and a pause button', () => {
     show();
     loadAll();

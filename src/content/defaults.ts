@@ -176,6 +176,7 @@ export function defaultSections(f: ContentFacts): Sections {
         primaryCta: 'Ver catálogo',
         secondaryCta: 'Seja revendedora',
         slides: builtInHeroSlides(),
+        rotate: true,
         interval: INTERVAL_DEFAULT,
       },
       titles: {

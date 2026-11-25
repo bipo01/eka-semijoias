@@ -187,6 +187,21 @@ describe('hero slides editor', { timeout: 30_000 }, () => {
     expect(hero.slides.map((s) => s.name)).toEqual(['Brinco e colar', 'Mão com anéis', 'Pulseira na seda']);
   });
 
+  it('"Revezar as fotos" off keeps every photo but shows the first one still; the seconds hide', async () => {
+    const { dialog, list } = await openEditor();
+    const rotate = within(dialog).getByRole('switch', { name: 'Revezar as fotos' });
+    expect(rotate).toBeChecked();
+    expect(within(dialog).getByRole('slider', { name: 'Trocar de foto a cada' })).toBeInTheDocument();
+    await userEvent.click(rotate);
+    expect(rotate).not.toBeChecked();
+    expect(within(dialog).getByText(/Só a Foto 1 aparece, parada/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole('slider', { name: 'Trocar de foto a cada' })).not.toBeInTheDocument();
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3);
+    const hero = await save(dialog);
+    expect(hero.rotate).toBe(false);
+    expect(hero.slides).toHaveLength(3);
+  });
+
   it('keeps at least one photo and at most five', async () => {
     const { list } = await openEditor();
     await userEvent.click(within(list).getByRole('button', { name: 'Apagar foto 3' }));
