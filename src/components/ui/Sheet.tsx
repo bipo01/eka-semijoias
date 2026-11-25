@@ -113,7 +113,7 @@ export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', classN
               <X size={22} strokeWidth={1.5} />
             </IconButton>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5">{children}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 [scrollbar-gutter:stable]">{children}</div>
           {footer && <div className="shrink-0 border-t border-line bg-ivory px-5 pt-3 pb-[calc(12px+var(--safe-bottom))]">{footer}</div>}
         </div>
       )}

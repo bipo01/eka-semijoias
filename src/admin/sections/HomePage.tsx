@@ -136,7 +136,7 @@ function Greeting() {
         <path d="M30 58 C 80 54, 100 30, 140 32 S 190 46, 218 26" stroke="currentColor" strokeWidth="0.6" strokeLinecap="round" opacity="0.6" />
       </svg>
       <p id="home-hello" className="relative font-display text-[2.5rem] leading-[1.05] font-semibold lg:text-[2.75rem]">
-        {greeting(now)},
+        {greeting(now)}
       </p>
       <p className="relative mt-1 text-ink-muted first-letter:uppercase">{longDate(now)}</p>
     </div>

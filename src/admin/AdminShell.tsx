@@ -215,7 +215,7 @@ export function AdminShell() {
       <Sidebar openOrders={openOrders} />
       <div className="lg:pl-[248px]">
         {home && <h1 className="sr-only">{section.label}</h1>}
-        <header className={cx('z-20', home ? 'lg:hidden' : 'sticky top-0 border-b border-line/80 bg-ivory/[0.97] backdrop-blur')}>
+        <header className={cx('z-20', home ? 'lg:hidden' : 'sticky top-0 border-b border-line/80 bg-ivory')}>
           <div className="mx-auto flex h-16 max-w-[1080px] items-center gap-3 px-4 lg:h-[76px] lg:px-8">
             {detail ? (
               // A detail page: "Voltar" always leads to the parent list.
