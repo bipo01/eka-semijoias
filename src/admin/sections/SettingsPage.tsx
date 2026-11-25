@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { SelectField, TextArea, TextField } from '../../components/ui/Field';
+import { TextArea, TextField } from '../../components/ui/Field';
+import { Chip } from '../../components/ui/Misc';
 import { cx } from '../../components/ui/cx';
 import { business, pendingChecklist } from '../../config/business';
 import type { SiteContent } from '../../data/content';
 import type { Settings } from '../../data/schema';
 import { DEFAULT_LOW_STOCK } from '../../data/stock';
-import { formatPixKey, normalizePixKey, PIX_KEY_KIND_LABEL, pixKeyKind, pixText, type PixKeyKind } from '../../lib/pix';
+import { formatPixKey, normalizePixKey, pixKeyKind, pixText, type PixKeyKind } from '../../lib/pix';
 import { ApiError, errorMessage } from '../../lib/api';
 import { INSTAGRAM_ERROR, INSTAGRAM_HINT, isInstagramHandle } from '../../lib/instagram';
 import { PIN_MAX, PIN_MIN, pinProblem } from '../../lib/pin';
@@ -19,6 +20,7 @@ import { maskPhone, parseInstagram, parsePhone } from '../lib/contact';
 import { adminPath } from '../lib/paths';
 import { save } from '../lib/persist';
 import { LojaSettings } from './LojaSettings';
+import { PixKeyField } from './PixKeyField';
 import { PushSettings } from './PushSettings';
 import { changePin, signalSessionLost } from '../lib/session';
 import { countInput } from '../../lib/countInput';
@@ -175,8 +177,6 @@ function StoreSettings() {
   );
 }
 
-const PIX_KINDS = Object.keys(PIX_KEY_KIND_LABEL) as PixKeyKind[];
-
 /** Validates the Pix form; returns the settings value or the errors. */
 export function parsePixForm(form: { kind: PixKeyKind; key: string; name: string; city: string }):
   | { ok: true; pix: NonNullable<Settings['pix']> }
@@ -238,22 +238,14 @@ function PixSettings() {
           Usado nos links de pagamento: no pedido, toque em “Cobrar por Pix” e envie a mensagem pronta para a cliente. Ela paga com o QR Code ou o Pix Copia e Cola e envia o comprovante pelo link.
         </p>
       </div>
-      <SelectField label="Tipo de chave" value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as PixKeyKind }))}>
-        {PIX_KINDS.map((k) => (
-          <option key={k} value={k}>
-            {PIX_KEY_KIND_LABEL[k]}
-          </option>
-        ))}
-      </SelectField>
-      <TextField
-        label="Chave Pix"
+      <PixKeyField
+        kind={form.kind}
         value={form.key}
         error={errors.key}
-        onChange={set('key')}
-        inputMode={form.kind === 'email' || form.kind === 'random' ? 'text' : 'numeric'}
-        autoCapitalize="none"
-        spellCheck={false}
-        maxLength={77}
+        onChange={(kind, key) => {
+          setForm((f) => ({ ...f, kind, key }));
+          setErrors((er) => ({ ...er, key: undefined }));
+        }}
       />
       <TextField label="Nome do recebedor" hint="Como aparece no banco. Vai sem acento no Pix (até 25 letras)." maxLength={60} value={form.name} error={errors.name} onChange={set('name')} />
       <TextField label="Cidade da conta" hint="Até 15 letras, sem acento." maxLength={40} value={form.city} error={errors.city} onChange={set('city')} />
@@ -390,6 +382,15 @@ function PinSettings() {
 
 /** Checklist items filled in on the Site tab: a link opens that editor. */
 const EDITED_IN_SITE: Partial<Record<string, string>> = { about: 'sobre', testimonials: 'depoimentos' };
+/** Checklist items filled in another tab of Configurações (the rest are on the Loja tab itself). */
+const EDITED_IN_TAB: Partial<Record<string, Exclude<SettingsTab, 'loja'>>> = {
+  pix: 'pix',
+  shipping: 'oferta',
+  payment: 'oferta',
+  plating: 'oferta',
+  hypoallergenic: 'oferta',
+  reseller: 'oferta',
+};
 
 function StoreChecklist() {
   const settings = useCatalog((s) => s.data.settings);
@@ -402,7 +403,7 @@ function StoreChecklist() {
         Complete as informações da loja
       </h2>
       <p className="mt-1 text-sm text-ink-muted">
-        {done} de {items.length} concluídos. Os itens são marcados sozinhos quando você preenche os campos abaixo ou a aba Site (Sobre e Depoimentos).
+        {done} de {items.length} concluídos. Os itens são marcados sozinhos quando você preenche os campos: aqui embaixo, nas outras abas de Configurações ou na aba Site (Sobre e Depoimentos).
       </p>
       <ul className="mt-3 flex flex-col gap-2">
         {items.map((item) => (
@@ -415,6 +416,14 @@ function StoreChecklist() {
             <span className={cx(item.done && 'text-ink-muted')}>
               <span className="sr-only">{item.done ? 'Feito: ' : 'A fazer: '}</span>
               {item.label}
+              {!item.done && EDITED_IN_TAB[item.key] && (
+                <>
+                  {' · '}
+                  <Link to={settingsTabPath(EDITED_IN_TAB[item.key]!)} className="text-copper underline underline-offset-4">
+                    Preencher em {SETTINGS_TABS.find((t) => t.id === EDITED_IN_TAB[item.key])!.label}
+                  </Link>
+                </>
+              )}
               {!item.done && EDITED_IN_SITE[item.key] && (
                 <>
                   {' · '}
@@ -431,16 +440,54 @@ function StoreChecklist() {
   );
 }
 
+/** The tabs of Configurações (`?aba=`): one subject each, so nothing has to be searched for. */
+export const SETTINGS_TABS = [
+  { id: 'loja', label: 'Loja' },
+  { id: 'oferta', label: 'O que oferecemos' },
+  { id: 'pix', label: 'Pix' },
+  { id: 'avisos', label: 'Avisos no celular' },
+  { id: 'estoque', label: 'Estoque' },
+  { id: 'pin', label: 'PIN' },
+] as const;
+export type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
+
+/** Link to a tab of Configurações. */
+export const settingsTabPath = (tab: SettingsTab) => (tab === 'loja' ? adminPath('configuracoes') : `${adminPath('configuracoes')}?aba=${tab}`);
+
 export function SettingsPage() {
+  const [params, setParams] = useSearchParams();
+  const asked = params.get('aba');
+  const tab: SettingsTab = SETTINGS_TABS.some((t) => t.id === asked) ? (asked as SettingsTab) : 'loja';
+  const go = (next: SettingsTab) =>
+    setParams(
+      (p) => {
+        const out = new URLSearchParams(p);
+        if (next === 'loja') out.delete('aba');
+        else out.set('aba', next);
+        return out;
+      },
+      { replace: true },
+    );
   return (
     <div className="flex flex-col gap-4">
-      <StoreChecklist />
-      <StoreSettings />
-      <LojaSettings />
-      <PixSettings />
-      <PushSettings />
-      <StockSettings />
-      <PinSettings />
+      <div role="group" aria-label="Assunto" className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+        {SETTINGS_TABS.map((t) => (
+          <Chip key={t.id} selected={tab === t.id} onClick={() => go(t.id)}>
+            {t.label}
+          </Chip>
+        ))}
+      </div>
+      {tab === 'loja' && (
+        <>
+          <StoreChecklist />
+          <StoreSettings />
+        </>
+      )}
+      {tab === 'oferta' && <LojaSettings />}
+      {tab === 'pix' && <PixSettings />}
+      {tab === 'avisos' && <PushSettings />}
+      {tab === 'estoque' && <StockSettings />}
+      {tab === 'pin' && <PinSettings />}
     </div>
   );
 }

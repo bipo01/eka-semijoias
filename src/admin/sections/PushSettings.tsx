@@ -198,7 +198,7 @@ export function PushSettings() {
         <BellRing size={22} strokeWidth={1.5} aria-hidden="true" className="mt-1 shrink-0 text-copper" />
         <div>
           <h2 id="push-title" className="font-display text-title">Avisos no celular</h2>
-          <p className="text-sm text-ink-muted">Um aviso chega quando entra um pedido pelo site ou um comprovante de Pix. Só aparecem o número do pedido e o valor.</p>
+          <p className="text-sm text-ink-muted">Um aviso chega quando entra um pedido pelo site ou um comprovante de Pix, e quando uma revendedora registra uma venda, aceita o contrato ou avisa um repasse. Só aparecem o número do pedido ou o nome dela e o valor.</p>
         </div>
       </div>
 

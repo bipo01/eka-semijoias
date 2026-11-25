@@ -217,6 +217,6 @@ export async function handlePushDelete(ctx: Context): Promise<Response> {
 export async function handlePushTest(ctx: Context): Promise<Response> {
   await requireSession(ctx);
   if (!parseVapidJwk(ctx.env.VAPID_PRIVATE_KEY)) throw new HttpError('not_configured', 'Os avisos no celular ainda não foram ligados no servidor.');
-  const result = await notifyOwner(ctx.env, ctx.url.origin, { title: 'Avisos do Painel ÉKA', body: 'Tudo certo: os avisos de pedidos e comprovantes chegam neste aparelho.', url: '/admin/configuracoes', tag: 'teste' });
+  const result = await notifyOwner(ctx.env, ctx.url.origin, { title: 'Avisos do Painel ÉKA', body: 'Tudo certo: os avisos de pedidos e comprovantes chegam neste aparelho.', url: '/admin/configuracoes?aba=avisos', tag: 'teste' });
   return json(result);
 }

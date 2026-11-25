@@ -29,15 +29,31 @@ function validCpf(cpf: string): boolean {
   return check(9) === Number(cpf[9]) && check(10) === Number(cpf[10]);
 }
 
+/**
+ * CNPJ check digits. Since July 2026 a CNPJ may be alphanumeric: the first 12 positions take
+ * 0–9 and A–Z, the last 2 are digits; each character is worth its ASCII code minus 48 (Receita
+ * Federal, e.g. 12.ABC.345/01DE-35). An all-digit CNPJ gives the same result as before.
+ */
 function validCnpj(cnpj: string): boolean {
-  if (!/^\d{14}$/.test(cnpj) || /^(\d)\1{13}$/.test(cnpj)) return false;
+  if (!/^[0-9A-Z]{12}\d{2}$/.test(cnpj) || /^(\d)\1{13}$/.test(cnpj)) return false;
+  const value = (c: string) => c.charCodeAt(0) - 48;
   const check = (len: number) => {
     const weights = len === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-    const sum = weights.reduce((s, w, i) => s + w * Number(cnpj[i]), 0);
+    const sum = weights.reduce((s, w, i) => s + w * value(cnpj[i]!), 0);
     const rest = sum % 11;
     return rest < 2 ? 0 : 11 - rest;
   };
   return check(12) === Number(cnpj[12]) && check(13) === Number(cnpj[13]);
+}
+
+/** The characters of a CNPJ as typed: A–Z and digits in the first 12 positions, digits in the last 2. */
+function cnpjChars(raw: string): string {
+  let out = '';
+  for (const c of raw.toUpperCase()) {
+    if (out.length >= 14) break;
+    if (out.length < 12 ? /[0-9A-Z]/.test(c) : /\d/.test(c)) out += c;
+  }
+  return out;
 }
 
 /**
@@ -52,8 +68,8 @@ export function normalizePixKey(kind: PixKeyKind, raw: string): { ok: true; key:
       return validCpf(d) ? { ok: true, key: d } : { ok: false, error: 'CPF inválido. Confira os 11 números.' };
     }
     case 'cnpj': {
-      const d = digits(value);
-      return validCnpj(d) ? { ok: true, key: d } : { ok: false, error: 'CNPJ inválido. Confira os 14 números.' };
+      const d = value.toUpperCase().replace(/[^0-9A-Z]/g, '');
+      return validCnpj(d) ? { ok: true, key: d } : { ok: false, error: 'CNPJ inválido. Confira os 14 caracteres.' };
     }
     case 'phone': {
       let d = digits(value);
@@ -77,7 +93,7 @@ export function normalizePixKey(kind: PixKeyKind, raw: string): { ok: true; key:
 export function pixKeyKind(key: string): PixKeyKind {
   if (key.startsWith('+')) return 'phone';
   if (key.includes('@')) return 'email';
-  if (/^\d{14}$/.test(key)) return 'cnpj';
+  if (/^[0-9A-Z]{12}\d{2}$/.test(key)) return 'cnpj';
   if (/^\d{11}$/.test(key)) return 'cpf';
   return 'random';
 }
@@ -86,9 +102,87 @@ export function pixKeyKind(key: string): PixKeyKind {
 export function formatPixKey(key: string): string {
   const kind = pixKeyKind(key);
   if (kind === 'cpf') return key.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
-  if (kind === 'cnpj') return key.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  if (kind === 'cnpj') return key.replace(/^([0-9A-Z]{2})([0-9A-Z]{3})([0-9A-Z]{3})([0-9A-Z]{4})(\d{2})$/, '$1.$2.$3/$4-$5');
   if (kind === 'phone') return key.replace(/^\+55(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3');
   return key;
+}
+
+// ---------------------------------------------------------------------------
+// Typing a key: each kind formatted as it is typed, never longer than it can be
+// ---------------------------------------------------------------------------
+
+/** Puts `seps[i]` before the character at position i (progressive mask). */
+function withSeparators(chars: string, seps: Record<number, string>): string {
+  let out = '';
+  for (let i = 0; i < chars.length; i++) out += (seps[i] ?? '') + chars[i];
+  return out;
+}
+
+/** The characters that count in a key of this kind (punctuation and spaces do not). */
+export function pixKeyChars(kind: PixKeyKind, raw: string): string {
+  switch (kind) {
+    case 'cpf':
+      return digits(raw).slice(0, 11);
+    case 'cnpj':
+      return cnpjChars(raw);
+    case 'phone': {
+      let d = digits(raw);
+      // Pasted with the country code: +55 65 99999-8888.
+      if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
+      return d.slice(0, 11);
+    }
+    case 'email':
+      return raw.replace(/\s/g, '').toLowerCase().slice(0, 77);
+    case 'random':
+      return raw.toLowerCase().replace(/[^0-9a-f]/g, '').slice(0, 32);
+  }
+}
+
+/** Formats what was typed so far: 123.456.789-09, 12.ABC.345/01DE-35, (65) 99999-8888, 8-4-4-4-12. */
+export function maskPixKey(kind: PixKeyKind, raw: string): string {
+  const c = pixKeyChars(kind, raw);
+  switch (kind) {
+    case 'cpf':
+      return withSeparators(c, { 3: '.', 6: '.', 9: '-' });
+    case 'cnpj':
+      return withSeparators(c, { 2: '.', 5: '.', 8: '/', 12: '-' });
+    case 'phone':
+      return c ? `(${c.slice(0, 2)}${c.length > 2 ? `) ${c.slice(2, 7)}` : ''}${c.length > 7 ? `-${c.slice(7)}` : ''}` : '';
+    case 'email':
+      return c;
+    case 'random':
+      return withSeparators(c, { 8: '-', 12: '-', 16: '-', 20: '-' });
+  }
+}
+
+/** How many characters a complete key of this kind has (null: free length). */
+export const PIX_KEY_LENGTH: Record<PixKeyKind, number | null> = { cpf: 11, cnpj: 14, phone: 11, email: null, random: 32 };
+
+/** How to type each kind (shown under the field while it is not complete). */
+export const PIX_KEY_HINT: Record<PixKeyKind, string> = {
+  cpf: '11 números: 000.000.000-00.',
+  cnpj: '14 caracteres: 00.000.000/0000-00 (o CNPJ novo pode ter letras).',
+  phone: 'Celular com DDD: (65) 99999-9999.',
+  email: 'O e-mail cadastrado como chave no banco.',
+  random: 'Os 32 caracteres da chave aleatória, como aparecem no app do banco.',
+};
+
+/**
+ * The kind a pasted key most likely is, or null when it says nothing new. An 11-digit number is a
+ * CPF when its check digits match, otherwise a mobile number.
+ */
+export function guessPixKeyKind(raw: string): PixKeyKind | null {
+  const value = raw.trim();
+  if (!value) return null;
+  if (value.includes('@')) return 'email';
+  if (/^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(value)) return 'random';
+  if (/^\+/.test(value)) return 'phone';
+  const compact = value.toUpperCase().replace(/[^0-9A-Z]/g, '');
+  if (compact.length === 14 && validCnpj(compact)) return 'cnpj';
+  const d = digits(value);
+  if (/^\d{11}$/.test(compact)) return validCpf(d) ? 'cpf' : /^[1-9]{2}9\d{8}$/.test(d) ? 'phone' : null;
+  if (/^55[1-9]{2}9\d{8}$/.test(compact)) return 'phone';
+  return null;
 }
 
 /** Plain ASCII for the name and city fields (bank apps reject or mangle accents). */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPixPayload, crc16, formatPixKey, normalizePixKey, pixKeyKind, pixText } from './pix';
+import { buildPixPayload, crc16, formatPixKey, guessPixKeyKind, maskPixKey, normalizePixKey, pixKeyChars, pixKeyKind, pixText } from './pix';
 
 /** Parses a BR Code into its top-level EMV fields (id → value). */
 function fields(payload: string): Map<string, string> {
@@ -76,5 +76,58 @@ describe('Pix keys', () => {
 
   it('strips accents and unsupported characters', () => {
     expect(pixText('  Conceição   d’Ávila ', 25)).toBe('Conceicao dAvila');
+  });
+});
+
+describe('alphanumeric CNPJ (since July 2026)', () => {
+  it('validates the Receita Federal example and keeps the all-digit rule', () => {
+    expect(normalizePixKey('cnpj', '12.abc.345/01de-35')).toEqual({ ok: true, key: '12ABC34501DE35' });
+    expect(normalizePixKey('cnpj', '12.ABC.345/01DE-36').ok).toBe(false);
+    expect(pixKeyKind('12ABC34501DE35')).toBe('cnpj');
+    expect(formatPixKey('12ABC34501DE35')).toBe('12.ABC.345/01DE-35');
+  });
+});
+
+describe('typing a Pix key', () => {
+  it('formats each kind as it is typed', () => {
+    expect(maskPixKey('cpf', '5299')).toBe('529.9');
+    expect(maskPixKey('cpf', '529982247')).toBe('529.982.247');
+    expect(maskPixKey('cpf', '52998224725')).toBe('529.982.247-25');
+    expect(maskPixKey('cnpj', '11222333000181')).toBe('11.222.333/0001-81');
+    expect(maskPixKey('cnpj', '12abc34501de35')).toBe('12.ABC.345/01DE-35');
+    expect(maskPixKey('phone', '65')).toBe('(65');
+    expect(maskPixKey('phone', '659')).toBe('(65) 9');
+    expect(maskPixKey('phone', '65999998888')).toBe('(65) 99999-8888');
+    expect(maskPixKey('email', ' Loja @Eka.com.BR')).toBe('loja@eka.com.br');
+    expect(maskPixKey('random', '123E4567E12B12D1A456426655440000')).toBe('123e4567-e12b-12d1-a456-426655440000');
+  });
+
+  it('never takes more characters than the kind has, nor ones it cannot have', () => {
+    expect(maskPixKey('cpf', '529.982.247-25999')).toBe('529.982.247-25');
+    expect(maskPixKey('cpf', 'abc1')).toBe('1');
+    expect(pixKeyChars('cnpj', '12ABC34501DEXY35')).toBe('12ABC34501DE35'); // letters only in the first 12
+    expect(maskPixKey('phone', '+55 (65) 99999-8888')).toBe('(65) 99999-8888');
+    expect(maskPixKey('phone', '659999988889')).toBe('(65) 99999-8888');
+    expect(maskPixKey('random', '123e4567-e12b-12d1-a456-426655440000ffff')).toBe('123e4567-e12b-12d1-a456-426655440000');
+    expect(maskPixKey('random', 'xyz')).toBe('');
+  });
+
+  it('keeps a formatted key the same when it is formatted again', () => {
+    for (const [kind, key] of [['cpf', '529.982.247-25'], ['cnpj', '12.ABC.345/01DE-35'], ['phone', '(65) 99999-8888'], ['random', '123e4567-e12b-12d1-a456-426655440000']] as const) {
+      expect(maskPixKey(kind, key)).toBe(key);
+      expect(normalizePixKey(kind, maskPixKey(kind, key)).ok).toBe(true);
+    }
+  });
+
+  it('recognizes the kind of a pasted key', () => {
+    expect(guessPixKeyKind('loja@eka.com.br')).toBe('email');
+    expect(guessPixKeyKind('123e4567-e12b-12d1-a456-426655440000')).toBe('random');
+    expect(guessPixKeyKind('+55 65 99999-8888')).toBe('phone');
+    expect(guessPixKeyKind('529.982.247-25')).toBe('cpf');
+    expect(guessPixKeyKind('65999998888')).toBe('phone'); // not a valid CPF
+    expect(guessPixKeyKind('11.222.333/0001-81')).toBe('cnpj');
+    expect(guessPixKeyKind('12.ABC.345/01DE-35')).toBe('cnpj');
+    expect(guessPixKeyKind('1234')).toBeNull();
+    expect(guessPixKeyKind('')).toBeNull();
   });
 });

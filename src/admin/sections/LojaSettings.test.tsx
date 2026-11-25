@@ -20,7 +20,7 @@ describe('“O que a loja oferece”', { timeout: 20_000 }, () => {
     const messages = { active: { contato: 'contato.curta' }, edited: {}, custom: [] };
     mockServer.catalog = { ...seed, settings: { ...seed.settings, messages } };
     useCatalog.setState({ data: mockServer.catalog, version: 1, status: 'ready' });
-    renderAdmin('/admin/configuracoes');
+    renderAdmin('/admin/configuracoes?aba=oferta');
     const card = (await screen.findByRole('heading', { name: 'O que a loja oferece' })).closest('form')!;
     const save = within(card).getByRole('button', { name: 'Salvar o que a loja oferece' });
     expect(within(card).getByText(/Você ainda não confirmou estas respostas/)).toBeInTheDocument();
@@ -40,8 +40,9 @@ describe('“O que a loja oferece”', { timeout: 20_000 }, () => {
     expect(mockServer.catalog.settings).toEqual({ ...seed.settings, messages });
     await waitFor(() => expect(save).toBeDisabled());
 
-    // The checklist marks what was answered.
-    const checklist = screen.getByRole('region', { name: 'Complete as informações da loja' });
+    // The checklist (tab Loja) marks what was answered.
+    await userEvent.click(screen.getByRole('button', { name: 'Loja' }));
+    const checklist = await screen.findByRole('region', { name: 'Complete as informações da loja' });
     const item = (label: string) => within(checklist).getAllByRole('listitem').find((li) => li.textContent?.includes(label));
     expect(item('Se as peças são antialérgicas/sem níquel')).toHaveTextContent(/^Feito:/);
     expect(item('Material e especificação do banho das peças')).toHaveTextContent(/^Feito:/);
@@ -82,7 +83,7 @@ describe('checklist', () => {
     unlockSession();
     mockServer.catalog = { ...seed, content: { loja } };
     useCatalog.setState({ data: mockServer.catalog, version: 1, status: 'ready' });
-    renderAdmin('/admin/configuracoes');
+    renderAdmin('/admin/configuracoes?aba=oferta');
     const card = (await screen.findByRole('heading', { name: 'O que a loja oferece' })).closest('form')!;
     await userEvent.click(within(within(card).getByRole('group', { name: 'Peças antialérgicas' })).getByRole('radio', { name: 'Sim' }));
     // Another device saves "envio = Sim" meanwhile (live refresh).

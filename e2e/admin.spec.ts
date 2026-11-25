@@ -227,6 +227,7 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await page.goto('/admin');
   await unlock(page);
   await page.getByRole('link', { name: 'Configurações', exact: true }).click();
+  await page.getByRole('button', { name: 'Pix', exact: true }).click();
   await page.getByRole('combobox', { name: 'Tipo de chave' }).selectOption('phone');
   await page.getByRole('textbox', { name: 'Chave Pix' }).fill('(65) 99999-8888');
   await page.getByRole('textbox', { name: 'Nome do recebedor' }).fill('ÉKA Semijoias');

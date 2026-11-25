@@ -94,8 +94,8 @@ function ChargeBody({ order, onClose, onDone }: { order: Order; onClose: () => v
       {!pix ? (
         <div className="flex flex-col gap-4">
           <p className="rounded-[12px] bg-champagne px-4 py-3 text-sm">Para cobrar por Pix, cadastre primeiro a chave Pix da loja.</p>
-          <Link to={`${ADMIN_BASE}/configuracoes`} onClick={onClose} className="inline-flex min-h-11 items-center gap-1.5 self-start text-copper underline underline-offset-4">
-            Ir para Configurações
+          <Link to={`${ADMIN_BASE}/configuracoes?aba=pix`} onClick={onClose} className="inline-flex min-h-11 items-center gap-1.5 self-start text-copper underline underline-offset-4">
+            Cadastrar a chave Pix
           </Link>
         </div>
       ) : done && ready ? (
