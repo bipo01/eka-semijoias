@@ -241,3 +241,44 @@ test('clean URLs: deep links load directly and old #/ links are redirected', asy
   await expect(page).toHaveURL(/\/catalogo\/brincos/);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 });
+
+test('"Voltar" on inner pages goes back to where the visitor came from, or up from a shared link', async ({ page }) => {
+  const back = (name: string) => page.locator('main').getByRole('link', { name: `Voltar para ${name}` });
+
+  // A piece opened from a shared link: nothing behind it, so it goes up to its category.
+  await open(page, '/produto/brinco-gota-cristal');
+  await expect(back('Brincos')).toHaveAttribute('href', '/catalogo/brincos');
+  await back('Brincos').click();
+  await expect(page).toHaveURL(/\/catalogo\/brincos$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Brincos' })).toBeVisible();
+  // Category pages go up to the catalog.
+  await back('Catálogo').click();
+  await expect(page).toHaveURL(/\/catalogo$/);
+
+  // From the filtered catalog: back really returns, filters kept, no new history entry.
+  await page.getByRole('button', { name: /^Filtrar/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Filtrar' });
+  await sheet.getByRole('button', { name: /Ródio negro/ }).click();
+  await sheet.getByRole('button', { name: /^Ver \d+ peças?$/ }).click();
+  await expect(page).toHaveURL(/acabamento=rodio-negro/);
+  await page.getByRole('link', { name: 'Argola Cravejada Ródio Negro' }).click();
+  const before = await page.evaluate(() => history.length);
+  await expect(back('Catálogo')).toHaveAttribute('href', /acabamento=rodio-negro/);
+  await back('Catálogo').click();
+  await expect(page).toHaveURL(/\/catalogo\?.*acabamento=rodio-negro/);
+  await expect(page.getByRole('button', { name: 'Remover filtro Ródio negro' })).toBeVisible();
+  expect(await page.evaluate(() => history.length)).toBe(before);
+
+  // Switching categories with the chips never makes "Voltar" lead to the other category.
+  await page.locator('nav[aria-label="Categorias"]').getByRole('link', { name: 'Brincos' }).click();
+  await page.locator('nav[aria-label="Categorias"]').getByRole('link', { name: 'Anéis' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Anéis' })).toBeVisible();
+  await expect(back('Catálogo')).toBeVisible();
+
+  // From the home page, a piece says where "Voltar" goes.
+  await open(page, '/');
+  await page.locator('main a[href^="/produto/"]').first().click();
+  await expect(page).toHaveURL(/\/produto\//);
+  await back('Início').click();
+  await expect(page).toHaveURL(/\/$/);
+});

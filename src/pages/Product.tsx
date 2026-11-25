@@ -6,6 +6,7 @@ import { FavoriteButton } from '../components/product/FavoriteButton';
 import { Gallery } from '../components/product/Gallery';
 import { ProductCard } from '../components/product/ProductCard';
 import { useAddToBag } from '../components/product/useAddToBag';
+import { BackLink } from '../components/layout/BackLink';
 import { AccordionItem } from '../components/ui/Accordion';
 import { Button, ButtonAnchor } from '../components/ui/Button';
 import { WhatsAppIcon } from '../components/ui/Icons';
@@ -137,21 +138,25 @@ function ProductView({ product }: { product: Product }) {
 
   return (
     <div className="pb-[calc(96px+var(--safe-bottom))] lg:pb-20">
-      <nav aria-label="Você está em" className="container-x hidden pt-6 text-sm text-ink-muted lg:block">
-        <ol className="flex items-center gap-1.5">
-          <li><Link to="/catalogo" className="hover:text-copper">Catálogo</Link></li>
-          {category && (
-            <>
-              <ChevronRight size={14} aria-hidden="true" />
-              <li><Link to={`/catalogo/${category.slug}`} className="hover:text-copper">{category.name}</Link></li>
-            </>
-          )}
-          <ChevronRight size={14} aria-hidden="true" />
-          <li aria-current="page" className="text-ink">{product.name}</li>
-        </ol>
-      </nav>
+      <div className="container-x flex items-center gap-4 pt-3 lg:pt-6">
+        <BackLink up={category ? { to: `/catalogo/${category.slug}`, label: category.name } : { to: '/catalogo', label: 'Catálogo' }} />
+        <span aria-hidden="true" className="hidden h-5 w-px shrink-0 bg-line lg:block" />
+        <nav aria-label="Você está em" className="hidden min-w-0 text-sm text-ink-muted lg:block">
+          <ol className="flex items-center gap-1.5">
+            <li><Link to="/catalogo" className="hover:text-copper">Catálogo</Link></li>
+            {category && (
+              <>
+                <ChevronRight size={14} aria-hidden="true" />
+                <li><Link to={`/catalogo/${category.slug}`} className="hover:text-copper">{category.name}</Link></li>
+              </>
+            )}
+            <ChevronRight size={14} aria-hidden="true" />
+            <li aria-current="page" className="truncate text-ink">{product.name}</li>
+          </ol>
+        </nav>
+      </div>
 
-      <div className="container-x pt-4 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-14 lg:pt-6">
+      <div className="container-x pt-2 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-14 lg:pt-5">
         <div className="lg:sticky lg:top-[calc(var(--header-h)+24px)] lg:self-start">
           <Gallery images={gallery.images} name={product.name} caption={gallery.caption} />
         </div>

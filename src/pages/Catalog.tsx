@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowUpDown, Check, Search, SlidersHorizontal, X } from 'lucide-react';
+import { BackLink } from '../components/layout/BackLink';
 import { ProductGrid } from '../components/product/ProductCard';
 import { Button, ButtonAnchor } from '../components/ui/Button';
 import { BareInput, TextField } from '../components/ui/Field';
@@ -81,7 +82,8 @@ export function CatalogPage() {
   ];
 
   return (
-    <div className="container-x pt-6 pb-16 lg:pt-10">
+    <div className={cx('container-x pb-16', category ? 'pt-3 lg:pt-6' : 'pt-6 lg:pt-10')}>
+      {category && <BackLink up={{ to: '/catalogo', label: 'Catálogo' }} siblings="/catalogo/" className="mb-2 lg:mb-3" />}
       <div className="flex items-baseline justify-between gap-4">
         <h1 className="font-display text-display-l">{category ? category.name : 'Catálogo'}</h1>
         <p className="shrink-0 text-ink-muted" aria-live="polite">

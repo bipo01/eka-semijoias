@@ -13,6 +13,7 @@ import { AboutPage } from './pages/About';
 import { ContactPage } from './pages/Contact';
 import { PrivacyPage } from './pages/Privacy';
 import { NotFoundPage } from './pages/NotFound';
+import { trackNavHistory } from './lib/navHistory';
 
 // Clean paths (/catalogo, /produto/<slug>, /admin): the Worker serves index.html for every page route.
 export const router = createBrowserRouter([
@@ -72,3 +73,6 @@ export const router = createBrowserRouter([
     ],
   },
 ], { basename: import.meta.env.BASE_URL.replace(/\/$/, '') || '/' });
+
+// Note every navigation before the app renders, so "Voltar" knows where the visitor came from.
+trackNavHistory(router);
