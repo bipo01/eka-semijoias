@@ -9,6 +9,7 @@ import { formatPhone } from '../lib/contact';
 import { matchesCustomer, useCustomerList, useCustomers } from '../lib/customers';
 import { CustomerDetail, placeOf } from './CustomerDetail';
 import { CustomerForm } from './CustomerForm';
+import { Avatar } from '../ui';
 
 /*
  * Painel → Clientes (docs/revenda/PLAN.md §1): search, list with what each
@@ -94,6 +95,7 @@ export function CustomersPage() {
                 onClick={() => open(c.id)}
                 className="flex w-full items-center gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4 text-left transition-colors hover:border-copper focus-visible:outline-2 focus-visible:outline-copper"
               >
+                <Avatar name={c.name} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{c.name}</p>
                   <p className="truncate text-sm text-ink-muted">{[placeOf(c), c.whatsapp && formatPhone(c.whatsapp)].filter(Boolean).join(' · ') || 'Sem cidade e WhatsApp'}</p>
@@ -101,7 +103,7 @@ export function CustomersPage() {
                     {c.stats.purchases ? `${c.stats.purchases} ${c.stats.purchases === 1 ? 'compra' : 'compras'}` : 'Nenhuma compra ainda'}
                   </p>
                 </div>
-                {c.stats.spentCents > 0 && <span className="price shrink-0 text-lg">{formatBRL(c.stats.spentCents)}</span>}
+                {c.stats.spentCents > 0 && <span className="price shrink-0 text-[1.0625rem] font-semibold">{formatBRL(c.stats.spentCents)}</span>}
                 <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-muted" />
               </button>
             </li>

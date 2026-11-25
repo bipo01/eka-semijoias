@@ -14,7 +14,7 @@ test.beforeEach(async ({ context }) => {
 async function unlock(page: Page) {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
-  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeAttached();
+  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeVisible();
 }
 
 // Parallel browser projects share one server: each project moves its own product (none of them is

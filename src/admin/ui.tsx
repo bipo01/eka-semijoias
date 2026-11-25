@@ -103,8 +103,8 @@ export function Tabs<T extends string>({ items, value, onChange, label, panelId,
   }
   const underline = variant === 'underline';
   return (
-    <div className={cx(!underline && 'no-scrollbar -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0', className)}>
-      <div role="tablist" aria-label={label} className={underline ? 'flex border-b border-line' : 'inline-flex min-w-full gap-1 rounded-2xl border border-line bg-[#f6efe9] p-1 sm:min-w-0'}>
+    <div className={cx('no-scrollbar overflow-x-auto', !underline && '-mx-4 px-4 sm:mx-0 sm:px-0', className)}>
+      <div role="tablist" aria-label={label} className={underline ? 'flex min-w-full border-b border-line' : 'inline-flex min-w-full gap-1 rounded-2xl border border-line bg-[#f6efe9] p-1 sm:min-w-0'}>
         {items.map((t, i) => {
           const selected = t.id === value;
           const badge = t.count != null && (!underline || t.count > 0);
@@ -125,7 +125,7 @@ export function Tabs<T extends string>({ items, value, onChange, label, panelId,
               className={cx(
                 'relative inline-flex flex-1 items-center justify-center gap-1 whitespace-nowrap transition-[background-color,color,box-shadow] duration-[160ms]',
                 underline
-                  ? cx('min-h-11 px-1 text-[0.875rem]', selected ? 'font-medium text-copper' : 'text-ink-muted hover:text-ink')
+                  ? cx('min-h-11 shrink-0 px-2 text-[0.875rem]', selected ? 'font-medium text-copper' : 'text-ink-muted hover:text-ink')
                   : cx('gap-1.5 rounded-xl px-3.5 text-sm', size === 'sm' ? 'min-h-10' : 'min-h-11', selected ? 'bg-white font-medium text-ink shadow-[0_1px_3px_rgb(48_33_28/0.12)]' : 'text-ink-muted hover:text-ink'),
               )}
             >

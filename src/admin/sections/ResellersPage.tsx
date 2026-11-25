@@ -177,17 +177,17 @@ function NetworkSummary({ list }: { list: ResellerSummary[] }) {
         className="absolute inset-0 -z-10 size-full object-cover object-[right_40%]"
       />
       <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgb(60_38_29/0.95)_0%,rgb(60_38_29/0.85)_55%,rgb(60_38_29/0.35)_100%)]" />
-      <dl className="grid grid-cols-2 sm:grid-cols-4">
+      <ul className="grid grid-cols-2 sm:grid-cols-4">
         {cells.map((c, i) => (
-          <div key={c.label} className={cx('flex min-w-0 items-center gap-2.5 px-3.5 py-3.5 sm:gap-3 sm:px-5 sm:py-4', i % 2 === 1 && 'border-l border-white/15', i > 1 && 'border-t border-white/15 sm:border-t-0', i === 2 && 'sm:border-l')}>
+          <li key={c.label} className={cx('flex min-w-0 items-center gap-2.5 px-3.5 py-3.5 sm:gap-3 sm:px-5 sm:py-4', i % 2 === 1 && 'border-l border-white/15', i > 1 && 'border-t border-white/15 sm:border-t-0', i === 2 && 'sm:border-l')}>
             <c.icon size={20} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-rose-light" />
-            <div className="flex min-w-0 flex-col-reverse">
-              <dt className="text-xs text-white/75">{c.label}</dt>
-              <dd className="price text-[1rem] leading-tight font-semibold whitespace-nowrap sm:text-[1.125rem]">{c.value}</dd>
-            </div>
-          </div>
+            <p className="flex min-w-0 flex-col-reverse">
+              <span className="text-xs text-white/75">{c.label}</span>
+              <span className="price text-[0.9375rem] leading-tight font-semibold sm:text-[1.125rem]">{c.value}</span>
+            </p>
+          </li>
         ))}
-      </dl>
+      </ul>
     </section>
   );
 }
@@ -247,7 +247,10 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
   const activeSales = openSales.filter((s) => s.status === 'ativa').length;
   const repasseOpen = closed.filter((k) => k.settlement && ['pending', 'reported'].includes(repasseState(k.settlement))).length;
   const panelId = `reseller-${reseller.id}-panel`;
-  const tab: DetailTab = chosenTab ?? (repasseOpen > 0 && !open ? 'acertos' : 'resumo');
+  const reported = closed.some((k) => k.settlement && repasseState(k.settlement) === 'reported');
+  const tab: DetailTab = chosenTab ?? (reported || (repasseOpen > 0 && !open) ? 'acertos' : 'resumo');
+  // Keep that first choice: marking the repasse as received must not jump to another tab.
+  if (chosenTab === null) setTab(tab);
 
   const makeKit =
     reseller.status === 'ativa' ? (
@@ -352,7 +355,7 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
                   <div key={t.label} className={cx(CARD, 'flex flex-col items-center gap-0.5 px-1.5 py-3 text-center')}>
                     <t.icon size={19} strokeWidth={1.5} aria-hidden="true" className="mb-1 text-copper" />
                     <p className="text-xs text-ink-muted">{t.label}</p>
-                    <p className={cx('price text-[0.875rem] font-semibold whitespace-nowrap', t.late && 'text-danger')}>{t.value}</p>
+                    <p className={cx('price text-[0.875rem] leading-tight font-semibold', t.late && 'text-danger')}>{t.value}</p>
                   </div>
                 ))}
               </div>
@@ -948,7 +951,7 @@ export function ResellersPage() {
           </p>
         ) : list.length ? (
           <>
-            <ul className="grid gap-3 md:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {shown.map((item) => (
                 <li key={item.reseller.id}>
                   <ResellerCard item={item} onOpen={() => setOpenId(item.reseller.id)} />
@@ -960,7 +963,7 @@ export function ResellersPage() {
                 <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm text-ink-muted [&::-webkit-details-marker]:hidden">
                   <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="transition-transform group-open:rotate-90" /> Parcerias encerradas ({ended.length})
                 </summary>
-                <ul className="mt-2 grid gap-3 md:grid-cols-2">
+                <ul className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
                   {ended.map((item) => (
                     <li key={item.reseller.id}>
                       <ResellerCard item={item} onOpen={() => setOpenId(item.reseller.id)} />
@@ -1004,7 +1007,7 @@ export function ResellersPage() {
             {created.token ? (
               <InviteMessage reseller={created.reseller} token={created.token} />
             ) : (
-              <p className="rounded-[10px] bg-champagne/60 p-3 text-sm">A revendedora foi criada. Abra a ficha dela e toque em “Gerar novo convite” para enviar o acesso.</p>
+              <p className="rounded-[10px] bg-champagne/60 p-3 text-sm">A revendedora foi criada. Abra a ficha dela, na aba Dados, e toque em “Novo convite” para enviar o acesso.</p>
             )}
             <Button
               variant="ghost"

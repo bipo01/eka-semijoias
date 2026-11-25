@@ -35,7 +35,7 @@ async function ensureStorePix(api: APIRequestContext, origin: string) {
 
 async function unlock(page: Page) {
   await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeAttached();
+  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeVisible();
 }
 
 test('repasse: she sees the amount and the store Pix, says she paid, the owner confirms', async ({ page, browser }, testInfo) => {

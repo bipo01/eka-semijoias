@@ -11,7 +11,7 @@ test.beforeEach(async ({ context }) => {
 async function unlock(page: Page) {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
-  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeAttached();
+  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeVisible();
 }
 
 async function axe(page: Page) {
@@ -38,8 +38,11 @@ test('admin: PIN gate, edit a price and see it on the public site', async ({ pag
   for (const d of '000001') await page.getByRole('button', { name: d, exact: true }).click();
   await expect(page.getByRole('alert')).toContainText(/PIN/);
   for (const d of PIN) await page.keyboard.press(d);
-  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeAttached();
-  await page.goto('/admin/produtos');
+  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeVisible();
+  // Início: what needs her and the shortcuts; the bottom bar (phone) or the sidebar (desktop) leads on.
+  await expect(page.getByRole('heading', { name: 'Precisa de você' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Nova peça' }).first()).toBeVisible();
+  await page.getByRole('link', { name: 'Produtos', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Produtos', level: 1 })).toBeVisible();
 
   await page.locator(`a[href="/admin/produtos/${product.id}"]`).first().click();
@@ -192,7 +195,7 @@ test('admin: stock, order and confirmation; the visitor page sells out live', as
 
   // 3. The order is in the admin (live); confirming takes the unit out of stock.
   await page.getByRole('link', { name: /^Pedidos/ }).click();
-  const card = page.getByRole('button', { name: new RegExp(`nº ${number}.*Bia Teste`) });
+  const card = page.getByRole('button', { name: new RegExp(`Bia Teste.*nº ${number}`) });
   await expect(card).toBeVisible({ timeout: 10_000 });
   await card.click();
   const detail = page.getByRole('dialog', { name: `Pedido nº ${number}` });
@@ -247,7 +250,7 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await page.getByRole('button', { name: 'Salvar Pix' }).click();
   await expect(page.getByText(/Pix salvo/)).toBeVisible();
   await page.getByRole('link', { name: /^Pedidos/ }).click();
-  await page.getByRole('button', { name: new RegExp(`nº ${number}.*Carla Pagadora`) }).click();
+  await page.getByRole('button', { name: new RegExp(`Carla Pagadora.*nº ${number}`) }).click();
   const detail = page.getByRole('dialog', { name: `Pedido nº ${number}` });
   await detail.getByRole('button', { name: 'Cobrar por Pix' }).click();
   const sheet = page.getByRole('dialog', { name: `Cobrar pedido nº ${number} por Pix` });

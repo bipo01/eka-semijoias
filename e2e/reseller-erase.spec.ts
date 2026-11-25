@@ -20,7 +20,7 @@ test.beforeEach(async ({ context }) => {
 /** The run's admin session (e2e/admin-session.setup.ts): no PIN typed, so the panel's attempt cap is never hit. */
 async function unlock(page: Page) {
   await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeAttached();
+  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeVisible();
 }
 
 test('admin: ends a partnership and erases the reseller data for good', async ({ page }, testInfo) => {
@@ -96,6 +96,8 @@ test('admin: the settlements spreadsheet downloads before erasing', async ({ pag
   expect((await page.request.patch(`/api/admin/resellers/${reseller.id}`, { data: { updatedAt: fresh.reseller.updatedAt, status: 'encerrada' }, headers: { Origin: origin } })).status()).toBe(200);
 
   await page.goto('/admin/revendedoras');
+  // Ended partnerships sit under their own fold.
+  await page.getByText(/Parcerias encerradas/).click();
   await page.getByRole('button', { name: new RegExp(name) }).first().click();
   await page.getByRole('tab', { name: 'Dados' }).click();
   await page.getByRole('button', { name: /^Apagar os dados de Teca/ }).click();

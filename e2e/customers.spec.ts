@@ -12,7 +12,7 @@ test.beforeEach(async ({ context }) => {
 async function unlock(page: Page) {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeAttached();
+  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeVisible();
 }
 
 // A piece no other spec renames, reprices or puts under stock control (no sizes: one tap to add).

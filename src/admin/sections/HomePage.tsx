@@ -57,9 +57,10 @@ const TODO_TONE: Record<Tone, string> = {
   muted: 'bg-[#f1ece8] text-ink-muted',
 };
 
-function useTodos(): { todos: Todo[]; loading: boolean } {
+type ResellersState = ReturnType<typeof useResellers>['state'];
+
+function useTodos(resellers: ResellersState): { todos: Todo[]; loading: boolean; failed: boolean } {
   const orders = useOrders((s) => s.state);
-  const { state: resellers } = useResellers();
   const { state: leads } = useLeads();
   const catalog = useCatalog((s) => s.data);
 
@@ -98,7 +99,7 @@ function useTodos(): { todos: Todo[]; loading: boolean } {
               to: a(open),
               title: d < 0 ? `Acerto de ${first} atrasado` : d === 0 ? `Acerto de ${first} é hoje` : `Acerto de ${first} em ${plural(d, 'dia', 'dias')}`,
               detail: `Vendeu ${formatBRL(salesTotalCents(r.sales))} da maleta`,
-              tone: d < 0 ? 'danger' : 'success',
+              tone: d < 0 ? 'danger' : 'warning',
               icon: <CalendarClock {...ICON} />,
               rank: d < 0 ? 0 : 2,
             });
@@ -107,17 +108,22 @@ function useTodos(): { todos: Todo[]; loading: boolean } {
     }
     if (leads.status === 'ready') {
       const fresh = leads.leads.filter((l) => (l.status ?? 'nova') === 'nova').length;
-      if (fresh) todos.push({ key: 'leads', to: a('revendedoras?aba=fichas'), title: plural(fresh, 'ficha de revendedora nova', 'fichas de revendedora novas'), detail: 'Veja quem quer revender com você', tone: 'danger', icon: <UserPlus {...ICON} />, rank: 3 });
+      if (fresh) todos.push({ key: 'leads', to: a('revendedoras?aba=fichas'), title: plural(fresh, 'ficha de revendedora nova', 'fichas de revendedora novas'), detail: 'Veja quem quer revender com você', tone: 'info', icon: <UserPlus {...ICON} />, rank: 3 });
     }
     // Pieces with stock control and nothing left at home.
     const stock = catalog.stock ?? {};
-    const soldOut = catalog.products.filter((p) => p.available && stock[p.id] && Object.values(stock[p.id]!).every((n) => n === 0)).length;
+    const soldOut = catalog.products.filter((p) => stock[p.id] && Object.values(stock[p.id]!).every((n) => n === 0)).length;
     if (soldOut) todos.push({ key: 'soldout', to: a('estoque'), title: plural(soldOut, 'peça esgotada', 'peças esgotadas'), detail: 'Registre uma entrada quando chegar mais', tone: 'danger', icon: <PackageMinus {...ICON} />, rank: 5 });
     const done = pendingChecklist.filter((i) => DONE_WHEN[i.key]?.(catalog.settings, catalog.content)).length;
     if (done < pendingChecklist.length)
       todos.push({ key: 'setup', to: a('configuracoes'), title: 'Complete os dados da loja', detail: `${done} de ${pendingChecklist.length} preenchidas`, tone: 'muted', icon: <ClipboardCheck {...ICON} />, rank: 9 });
     todos.sort((x, y) => x.rank - y.rank);
-    return { todos, loading: orders.status === 'loading' || resellers.status === 'loading' };
+    return {
+      todos,
+      loading: orders.status === 'loading' || resellers.status === 'loading' || leads.status === 'loading',
+      // Never "Tudo em dia" when a list could not be read: something may be waiting.
+      failed: orders.status === 'error' || resellers.status === 'error' || leads.status === 'error',
+    };
   }, [orders, resellers, leads, catalog]);
 }
 
@@ -158,7 +164,7 @@ function Hero() {
       <div className="flex min-h-[178px] flex-col justify-center p-5 sm:min-h-[200px] sm:p-7">
         <p className="font-display text-[1.375rem] leading-tight text-[#f3e6dc]">Vendas do mês</p>
         <p className="price mt-1 font-display text-[2.625rem] leading-none font-semibold sm:text-[3rem]">{month ? formatBRL(month.revenueCents) : '—'}</p>
-        <p className="mt-1.5 text-[0.9375rem] text-white/85">{month ? `${plural(month.orders, 'pedido', 'pedidos')} · ${plural(month.units, 'peça', 'peças')}` : 'Carregando…'}</p>
+        <p className="mt-1.5 text-[0.9375rem] text-white/85">{month ? `${plural(month.orders, 'pedido', 'pedidos')} · ${plural(month.units, 'peça', 'peças')}` : orders.status === 'error' ? 'Não foi possível carregar os pedidos' : 'Carregando…'}</p>
         <Link to={a('relatorio')} className="mt-3 inline-flex min-h-10 w-fit items-center gap-1 text-[0.9375rem] text-white underline decoration-white/60 underline-offset-[6px] hover:decoration-white">
           Ver relatório <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
         </Link>
@@ -195,11 +201,16 @@ function Today() {
   );
 }
 
-function NeedsYou() {
-  const { todos, loading } = useTodos();
+function NeedsYou({ resellers }: { resellers: ResellersState }) {
+  const { todos, loading, failed } = useTodos(resellers);
   return (
     <section aria-labelledby="home-todo">
       <SectionHeading id="home-todo" title="Precisa de você" />
+      {failed && (
+        <p role="status" className="mb-3 rounded-2xl bg-warning-tint px-4 py-3 text-sm text-warning">
+          Não deu para conferir tudo agora. Verifique a conexão; a lista se atualiza sozinha.
+        </p>
+      )}
       {todos.length ? (
         <ul className={cx(CARD, 'overflow-hidden px-1')}>
           {todos.map((t, i) => (
@@ -218,7 +229,7 @@ function NeedsYou() {
             </li>
           ))}
         </ul>
-      ) : (
+      ) : failed ? null : (
         <div className={cx(CARD, 'flex items-center gap-4 p-4')}>
           <img src={asset('images/admin/tudo-em-dia-320.webp')} alt="" width={88} height={88} className="size-[88px] shrink-0 rounded-xl object-cover" />
           <div>
@@ -256,10 +267,11 @@ function QuickActions() {
   );
 }
 
-function Network() {
-  const { state } = useResellers();
-  const list = state.status === 'ready' ? state.data.resellers.filter((r) => r.reseller.status === 'ativa') : [];
-  const inKits = list.reduce((s, r) => s + (r.kit ? kitValueCents(r.kit.items) : 0), 0);
+function Network({ state }: { state: ResellersState }) {
+  const all = state.status === 'ready' ? state.data.resellers : [];
+  const list = all.filter((r) => r.reseller.status === 'ativa');
+  // Same total as the Revendedoras summary: every kit still out, whatever her status.
+  const inKits = all.reduce((s, r) => s + (r.kit ? kitValueCents(r.kit.items) : 0), 0);
   return (
     <Link to={a('revendedoras')} className={cx(CARD, 'group flex items-stretch overflow-hidden transition-colors hover:border-copper')}>
       <img src={asset('images/admin/maleta-320.webp')} alt="" width={120} height={120} className="w-[112px] shrink-0 object-cover sm:w-[128px]" />
@@ -299,6 +311,8 @@ function Storefront() {
 }
 
 export function HomePage() {
+  // One request for the reseller list, shared by the to-dos and the Revendas card.
+  const { state: resellers } = useResellers();
   // Phone: one column (hero, today, to-dos, actions, network); desktop: two columns. The column
   // wrappers dissolve (`contents`) on phones so `order` can interleave their blocks.
   return (
@@ -310,7 +324,7 @@ export function HomePage() {
             <Hero />
           </div>
           <div className="order-3">
-            <NeedsYou />
+            <NeedsYou resellers={resellers} />
           </div>
         </div>
         <div className="max-lg:contents lg:flex lg:flex-col lg:gap-7">
@@ -321,7 +335,7 @@ export function HomePage() {
             <QuickActions />
           </div>
           <div className="order-5 flex flex-col gap-3">
-            <Network />
+            <Network state={resellers} />
             <Storefront />
           </div>
         </div>

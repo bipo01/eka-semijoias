@@ -119,7 +119,7 @@ async function adminPage(browser: Browser, width: number) {
   await page.goto('/admin');
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeAttached();
+  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeVisible();
   return { context, page };
 }
 

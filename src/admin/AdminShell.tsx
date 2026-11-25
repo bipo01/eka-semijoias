@@ -19,6 +19,8 @@ export function useSectionPath(): string {
   return pathname.slice(ADMIN_BASE.length + 1).split('/')[0] ?? '';
 }
 
+const slugOf = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
 const to = (path: string) => (path ? `${ADMIN_BASE}/${path}` : ADMIN_BASE);
 
 /** Shown while the server cannot be reached (edits would fail). */
@@ -136,6 +138,7 @@ function Sidebar({ openOrders }: { openOrders: number }) {
         <Link to="/" className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-[#d9c6bb] hover:bg-white/[0.05] hover:text-white">
           <ExternalLink size={18} strokeWidth={1.6} aria-hidden="true" /> Ver o site
         </Link>
+        <InstallAppButton app="admin" variant="list" className="!min-h-11 !rounded-xl !px-3 text-[#d9c6bb] hover:!bg-white/[0.05] hover:text-white" />
         <button type="button" onClick={() => void lock()} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[#d9c6bb] hover:bg-white/[0.05] hover:text-white">
           <LogOut size={18} strokeWidth={1.6} aria-hidden="true" /> Sair do painel
         </button>
@@ -162,9 +165,15 @@ function BottomBar({ current, openOrders }: { current: string; openOrders: numbe
               >
                 <span className={cx('relative inline-flex h-8 w-[52px] items-center justify-center rounded-[12px] transition-colors duration-[200ms]', active ? 'bg-copper text-white shadow-[0_4px_10px_-4px_rgb(138_90_69/0.7)]' : 'text-ink')}>
                   <i.icon size={21} strokeWidth={1.6} aria-hidden="true" />
-                  {i.path === 'pedidos' && <Badge count={openOrders} className="absolute -top-1 right-1.5 ring-2 ring-white" />}
+                  {/* The number shows on the icon; screen readers hear it after the name ("Pedidos, 2 …"). */}
+                  {i.path === 'pedidos' && openOrders > 0 && (
+                    <span aria-hidden="true" className="price absolute -top-1 right-1.5 inline-flex min-w-5 items-center justify-center rounded-full bg-copper px-1.5 text-[0.6875rem] leading-5 text-white ring-2 ring-white">
+                      {openOrders}
+                    </span>
+                  )}
                 </span>
                 {i.short ?? i.label}
+                {i.path === 'pedidos' && openOrders > 0 && <span className="sr-only">, {openOrders} precisando de atenção</span>}
               </Link>
             </li>
           );
@@ -224,8 +233,8 @@ export function MorePage() {
   return (
     <div className="flex flex-col gap-6">
       {NAV_GROUPS.map((g) => (
-        <section key={g.title} aria-labelledby={`mais-${g.title}`}>
-          <h2 id={`mais-${g.title}`} className="eyebrow mb-2 px-1 text-[0.6875rem] tracking-[0.16em] text-ink-muted">
+        <section key={g.title} aria-labelledby={`mais-${slugOf(g.title)}`}>
+          <h2 id={`mais-${slugOf(g.title)}`} className="eyebrow mb-2 px-1 text-[0.6875rem] tracking-[0.16em] text-ink-muted">
             {g.title}
           </h2>
           <ul className="overflow-hidden rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)]">

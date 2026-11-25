@@ -21,7 +21,7 @@ test.beforeEach(async ({ context }, testInfo) => {
 /** The run's admin session (e2e/admin-session.setup.ts): no PIN typed, so the panel's attempt cap is never hit. */
 async function unlock(page: Page) {
   await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeAttached();
+  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeVisible();
 }
 
 /** A confirmed order with a Pix charge; returns the payment link token and the amount. */

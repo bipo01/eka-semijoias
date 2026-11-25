@@ -17,7 +17,7 @@ test.beforeEach(async ({ context }) => {
 async function unlock(page: Page) {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeAttached();
+  await expect(page.getByRole('heading', { name: 'Início', level: 1 })).toBeVisible();
 }
 
 test('site content: a testimonial added in the admin shows live, is deleted and the section restored', async ({ page, browser }, testInfo) => {
