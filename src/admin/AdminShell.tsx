@@ -118,9 +118,10 @@ function Sidebar({ openOrders }: { openOrders: number }) {
     </li>
   );
   return (
-    <aside className="on-dark fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col bg-espresso text-on-dark lg:flex">
-      <div className="relative overflow-hidden px-6 pt-6 pb-5">
-        <div aria-hidden="true" className="pointer-events-none absolute -top-16 -right-20 size-56 rounded-full bg-[radial-gradient(circle,rgb(230_190_164/0.18),transparent_65%)]" />
+    // The rose glow behind the logo is painted on the sidebar itself: inside the clipped logo block it
+    // was cut off flat right above "Início", leaving a visible seam in the background.
+    <aside className="on-dark fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col bg-espresso bg-[radial-gradient(circle_104px_at_216px_48px,rgb(230_190_164/0.18),transparent)] bg-no-repeat text-on-dark lg:flex">
+      <div className="px-6 pt-6 pb-5">
         <Link to={ADMIN_BASE} className="relative block w-fit">
           <img src={asset('brand/eka-lockup-white.svg')} alt="ÉKA Semijoias" width={96} height={32} className="h-8 w-auto opacity-95" />
         </Link>
