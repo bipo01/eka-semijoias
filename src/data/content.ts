@@ -311,6 +311,21 @@ export const sectionSchemas = {
       salesEmpty: req(120),
       settlementsEmpty: req(120),
     }),
+    /**
+     * Repasse (the customer pays the reseller; she passes sold − commission to the store at the
+     * settlement). Optional: a section saved before it keeps her texts and shows these built-in.
+     */
+    repasse: z
+      .object({
+        cycleNote: text(200),
+        title: req(60),
+        text: text(200),
+        noPix: req(200),
+        reported: req(200),
+        /** {primeiro_nome}, {total} */
+        whatsapp: req(300),
+      })
+      .optional(),
   }),
 } satisfies Record<SectionId, z.ZodType>;
 

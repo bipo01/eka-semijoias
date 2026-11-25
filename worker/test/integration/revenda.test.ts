@@ -415,4 +415,71 @@ describe('reseller program', () => {
     expect((await catalog()).stock[p.id][key]).toBe(3);
     expect((await a.req(`/api/admin/stock/${p.id}`, { method: 'PUT', body: { tracked: false, levels: [] } })).status).toBe(200);
   });
+
+  it('repasse: the reseller reports she paid the store, the owner confirms or clears the report', async () => {
+    const a = await admin();
+    const [p] = await plainProducts(1);
+    const v = p.variants[0];
+    const price = p.promoPrice ?? p.price;
+    const { reseller, token } = await newReseller(a);
+    const r = await activate(token);
+    const other = await newReseller(a);
+    const r2 = await activate(other.token, '518273');
+
+    const kit = (await a.req(`/api/admin/resellers/${reseller.id}/kits`, { body: { items: [{ productId: p.id, variantId: v.id, qty: 1 }] } })).json.kit;
+    // Nothing to report before the settlement.
+    expect((await r.req(`/api/revenda/settlements/${kit.id}/report`, { body: {} })).status).toBe(409);
+    const sale = await r.req('/api/revenda/sales', { body: { lines: [{ productId: p.id, variantId: v.id, size: '', qty: 1, unitCents: price }], payment: 'pix' }, headers: { 'Idempotency-Key': randomUUID() } });
+    expect(sale.status).toBe(201);
+    const open = (await a.req(`/api/admin/resellers/${reseller.id}`)).json.kits[0];
+    const settled = (await a.req(`/api/admin/kits/${kit.id}/settle`, { body: { updatedAt: open.updatedAt, returned: [] } })).json.kit.settlement;
+    expect(settled.dueCents).toBe(price - settled.commissionCents);
+    expect(settled.reportedAt).toBeUndefined();
+
+    // Her panel: the settlement and the store's Pix (or null when the owner has none).
+    const me = (await r.req('/api/revenda/me')).json;
+    expect(me.history[0].settlement).toMatchObject({ dueCents: settled.dueCents });
+    expect(me.pix).toEqual((await catalog()).settings.pix ?? null);
+
+    // Only she can report it; without a session, nobody.
+    expect((await r2.req(`/api/revenda/settlements/${kit.id}/report`, { body: {} })).status).toBe(404);
+    expect((await new Client().req(`/api/revenda/settlements/${kit.id}/report`, { body: {} })).status).toBe(401);
+    expect((await r.req('/api/revenda/settlements/nao-existe/report', { body: {} })).status).toBe(404);
+
+    const reported = await r.req(`/api/revenda/settlements/${kit.id}/report`, { body: {} });
+    expect(reported.status).toBe(200);
+    const at = reported.json.settlement.reportedAt;
+    expect(at).toBeTruthy();
+    // A second tap changes nothing.
+    expect((await r.req(`/api/revenda/settlements/${kit.id}/report`, { body: {} })).json.settlement.reportedAt).toBe(at);
+    expect((await r.req('/api/revenda/me')).json.history[0].settlement.reportedAt).toBe(at);
+    const listed = (await a.req('/api/admin/resellers')).json.resellers.find((x: any) => x.reseller.id === reseller.id);
+    expect(listed).toMatchObject({ unpaidCents: settled.dueCents, reportedCents: settled.dueCents });
+
+    // The money did not arrive: the owner clears the report, and she can report again.
+    const cleared = await a.req(`/api/admin/kits/${kit.id}/report-clear`, { body: {} });
+    expect(cleared.status).toBe(200);
+    expect(cleared.json.kit.settlement.reportedAt).toBeUndefined();
+    expect((await r.req('/api/revenda/me')).json.history[0].settlement.reportedAt).toBeUndefined();
+    expect((await a.req('/api/admin/resellers')).json.resellers.find((x: any) => x.reseller.id === reseller.id).reportedCents).toBe(0);
+    const again = (await r.req(`/api/revenda/settlements/${kit.id}/report`, { body: {} })).json.settlement.reportedAt;
+    expect(again).toBeTruthy();
+
+    // Received: a report after it changes nothing, and the report cannot be cleared until unmarked.
+    const paid = (await a.req(`/api/admin/kits/${kit.id}/paid`, { body: { paid: true } })).json.kit.settlement;
+    expect(paid).toMatchObject({ reportedAt: again });
+    expect(paid.paidAt).toBeTruthy();
+    expect((await r.req(`/api/revenda/settlements/${kit.id}/report`, { body: {} })).json.settlement.paidAt).toBe(paid.paidAt);
+    expect((await a.req(`/api/admin/kits/${kit.id}/report-clear`, { body: {} })).status).toBe(409);
+    const unpaid = (await a.req(`/api/admin/kits/${kit.id}/paid`, { body: { paid: false } })).json.kit.settlement;
+    expect(unpaid.paidAt).toBeUndefined();
+    expect(unpaid.reportedAt).toBe(again);
+
+    // A cycle with nothing to pass (nothing sold, everything back) has no repasse to report.
+    const k2 = (await a.req(`/api/admin/resellers/${reseller.id}/kits`, { body: { items: [{ productId: p.id, variantId: v.id, qty: 1 }] } })).json.kit;
+    await a.req(`/api/admin/kits/${k2.id}/settle`, { body: { updatedAt: k2.updatedAt, returned: [{ productId: p.id, variantId: v.id, size: '', qty: 1 }] } });
+    const none = await r.req(`/api/revenda/settlements/${k2.id}/report`, { body: {} });
+    expect(none.status).toBe(409);
+    expect(none.json.error.message).toBe('Este acerto não tem repasse.');
+  });
 });

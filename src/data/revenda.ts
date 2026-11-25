@@ -175,9 +175,27 @@ export const settlementSchema = z.object({
   dueCents: z.number().int(),
   returned: z.array(z.object({ productId: id, variantId: id, size: text(12), qty: z.number().int().min(0) })),
   missing: z.array(z.object({ productId: id, variantId: id, size: text(12), qty: z.number().int().min(1), name: text(120) })),
+  /** The owner confirmed she received the repasse. */
   paidAt: isoDate.optional(),
+  /** The reseller said she paid it (the owner still confirms with `paidAt`). */
+  reportedAt: isoDate.optional(),
 });
 export type Settlement = z.infer<typeof settlementSchema>;
+
+/**
+ * Where a settlement's repasse stands (option 1: the customer pays the reseller, who passes
+ * sold − commission + missing pieces to the store): nothing to pass, waiting for her, she says
+ * she paid, or the owner confirmed it.
+ */
+export type RepasseState = 'none' | 'pending' | 'reported' | 'paid';
+export function repasseState(settlement: Pick<Settlement, 'dueCents' | 'paidAt' | 'reportedAt'>): RepasseState {
+  if (settlement.dueCents <= 0) return 'none';
+  if (settlement.paidAt) return 'paid';
+  return settlement.reportedAt ? 'reported' : 'pending';
+}
+
+/** Pix reference of a repasse (letters and digits, at most 25): shows in the store's bank statement. */
+export const repassePixTxid = (kitId: string) => `REP${kitId.replace(/[^A-Za-z0-9]/g, '')}`.slice(0, 25);
 
 export const kitSchema = z.object({
   id,

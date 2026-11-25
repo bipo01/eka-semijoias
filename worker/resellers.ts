@@ -131,18 +131,18 @@ export async function handleListResellers(ctx: Context): Promise<Response> {
       db.prepare(`SELECT ${RESELLER_COLUMNS} FROM resellers ORDER BY created_at DESC`),
       db.prepare(`SELECT ${KIT_COLUMNS} FROM kits WHERE status = 'aberta'`),
       db.prepare(`SELECT s.id, s.status, s.data FROM reseller_sales s JOIN kits k ON k.id = s.kit_id WHERE k.status = 'aberta'`),
-      db.prepare(`SELECT k.reseller_id, COUNT(*) AS cycles, COALESCE(SUM(json_extract(k.data, '$.settlement.commissionCents')), 0) AS commission, SUM(CASE WHEN json_extract(k.data, '$.settlement.paidAt') IS NULL THEN json_extract(k.data, '$.settlement.dueCents') ELSE 0 END) AS unpaid FROM kits k WHERE k.status = 'fechada' GROUP BY k.reseller_id`),
+      db.prepare(`SELECT k.reseller_id, COUNT(*) AS cycles, COALESCE(SUM(json_extract(k.data, '$.settlement.commissionCents')), 0) AS commission, SUM(CASE WHEN json_extract(k.data, '$.settlement.paidAt') IS NULL THEN json_extract(k.data, '$.settlement.dueCents') ELSE 0 END) AS unpaid, SUM(CASE WHEN json_extract(k.data, '$.settlement.paidAt') IS NULL AND json_extract(k.data, '$.settlement.reportedAt') IS NOT NULL THEN json_extract(k.data, '$.settlement.dueCents') ELSE 0 END) AS reported FROM kits k WHERE k.status = 'fechada' GROUP BY k.reseller_id`),
       programStatement(db),
     ]),
   );
   const kits = ((results[1]?.results ?? []) as unknown as KitRow[]).map(toKit);
   const sales = ((results[2]?.results ?? []) as unknown as SaleRow[]).map(toSale);
-  const closed = new Map(((results[3]?.results ?? []) as { reseller_id: string; cycles: number; commission: number; unpaid: number | null }[]).map((r) => [r.reseller_id, r]));
+  const closed = new Map(((results[3]?.results ?? []) as { reseller_id: string; cycles: number; commission: number; unpaid: number | null; reported: number | null }[]).map((r) => [r.reseller_id, r]));
   return json({
     resellers: ((results[0]?.results ?? []) as unknown as ResellerRow[]).map(toReseller).map((reseller) => {
       const kit = kits.find((k) => k.resellerId === reseller.id) ?? null;
       const c = closed.get(reseller.id);
-      return { reseller, kit, sales: kit ? sales.filter((s) => s.kitId === kit.id) : [], closedCycles: c?.cycles ?? 0, receivedCommissionCents: c?.commission ?? 0, unpaidCents: c?.unpaid ?? 0 };
+      return { reseller, kit, sales: kit ? sales.filter((s) => s.kitId === kit.id) : [], closedCycles: c?.cycles ?? 0, receivedCommissionCents: c?.commission ?? 0, unpaidCents: c?.unpaid ?? 0, reportedCents: c?.reported ?? 0 };
     }),
     program: parseProgram((results[4]?.results[0] as { data?: string } | undefined) ?? undefined),
   });
@@ -627,6 +627,43 @@ export async function handleKitPaid(ctx: Context): Promise<Response> {
     const next: Kit = { ...kit, updatedAt: at, settlement };
     try {
       await db.batch([kitUnchanged(db, id, row.updated_at), db.prepare('UPDATE kits SET updated_at = ?2, data = ?3 WHERE id = ?1').bind(id, at, JSON.stringify(next))]);
+    } catch (error) {
+      if (isGuardMiss(error)) continue;
+      throw toHttpError(error);
+    }
+    ctx.waitUntil(notifyLeads(ctx.env));
+    return json({ kit: next });
+  }
+  throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
+}
+
+/**
+ * POST /api/admin/kits/:id/report-clear — "Desfazer aviso": the reseller said she paid the repasse
+ * but the money did not arrive. Her panel shows the repasse as pending again.
+ */
+export async function handleKitReportClear(ctx: Context): Promise<Response> {
+  await requireSession(ctx);
+  const db = ctx.env.DB;
+  await readJson(ctx.request, 512);
+  const id = ctx.params.id ?? '';
+  if (!ID.test(id)) throw new HttpError('not_found', 'Maleta não encontrada.');
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
+    const row = await withReadRetry(() => db.prepare(`SELECT ${KIT_COLUMNS} FROM kits WHERE id = ?1`).bind(id).first<KitRow>());
+    if (!row) throw new HttpError('not_found', 'Maleta não encontrada.');
+    const kit = toKit(row);
+    if (!kit.settlement) throw new HttpError('conflict', 'Faça o acerto antes.');
+    if (kit.settlement.paidAt) throw new HttpError('conflict', 'Este repasse já está marcado como recebido. Desmarque antes.');
+    if (!kit.settlement.reportedAt) return json({ kit });
+    const at = nextStamp(row.updated_at);
+    const settlement = { ...kit.settlement };
+    delete settlement.reportedAt;
+    const next: Kit = { ...kit, updatedAt: at, settlement };
+    try {
+      await db.batch([
+        kitUnchanged(db, id, row.updated_at),
+        db.prepare('UPDATE kits SET updated_at = ?2, data = ?3 WHERE id = ?1').bind(id, at, JSON.stringify(next)),
+        db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'kit.report_clear', `Aviso de repasse da maleta ${id} desfeito`),
+      ]);
     } catch (error) {
       if (isGuardMiss(error)) continue;
       throw toHttpError(error);

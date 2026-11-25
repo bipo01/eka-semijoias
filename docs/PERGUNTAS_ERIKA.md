@@ -19,6 +19,8 @@ O site já funciona com informações e fotos provisórias. Cada resposta abaixo
 10. **Categorias:** quais você trabalha? (Brincos, colares, anéis, pulseiras, conjuntos, tornozeleiras, choker, piercing, infantil, masculino…)
 
 ## Revendedoras
+> 24/11/2026: **respondido** — a cliente paga à revendedora, que repassa à ÉKA no acerto (vendido − comissão) pelo Pix da loja (`docs/revenda/REPASSE_PLAN.md`). Comissão e prazo continuam com os valores padrão até a Érika confirmar.
+
 11. Você trabalha (ou quer trabalhar) com **revendedoras**? Em **consignado** (mostruário emprestado) ou compra?
 12. Qual a **comissão** ou margem, e ela muda por faixa de venda? Há **investimento inicial**?
 13. Para quais **cidades/regiões** aceita revendedoras? O que a revendedora recebe (mostruário, materiais, treinamento)?

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commissionFor, DEFAULT_PROGRAM, earnings, kitDiscounts, kitState, saleDiscountCents, programSchema, readProgram, settle, uniqueSlug, type Kit, type ResellerSale } from './revenda';
+import { commissionFor, DEFAULT_PROGRAM, earnings, kitDiscounts, kitState, repassePixTxid, repasseState, saleDiscountCents, programSchema, readProgram, settle, uniqueSlug, type Kit, type ResellerSale } from './revenda';
 import { warrantyText, warrantyUntil } from './customers';
 
 const tiers = DEFAULT_PROGRAM.tiers;
@@ -114,5 +114,23 @@ describe('discounts on reseller sales', () => {
       { status: 'ativa' as const, lines: [line('p2', 'v2', '18', 1, 8000)] },
     ];
     expect(kitDiscounts(kit, sales)).toEqual({ cents: 1990 + 2000, sales: 2 });
+  });
+});
+
+describe('repasse of a settlement (the customer pays the reseller)', () => {
+  const base = { dueCents: 14985 };
+  it('follows nothing → pending → reported → paid', () => {
+    expect(repasseState({ dueCents: 0 })).toBe('none');
+    expect(repasseState({ dueCents: -1, paidAt: 'x' })).toBe('none');
+    expect(repasseState(base)).toBe('pending');
+    expect(repasseState({ ...base, reportedAt: '2026-11-24T18:30:00.000Z' })).toBe('reported');
+    expect(repasseState({ ...base, reportedAt: '2026-11-24T18:30:00.000Z', paidAt: '2026-11-25T10:00:00.000Z' })).toBe('paid');
+    // Confirmed by the owner without a report (paid in person).
+    expect(repasseState({ ...base, paidAt: '2026-11-25T10:00:00.000Z' })).toBe('paid');
+  });
+
+  it('makes a Pix reference the banks accept', () => {
+    expect(repassePixTxid('kit_K4B7FRjHGkKDWgZY')).toBe('REPkitK4B7FRjHGkKDWgZY');
+    expect(repassePixTxid('kit_' + 'a-b_c'.repeat(20))).toMatch(/^REP[A-Za-z0-9]{1,22}$/);
   });
 });

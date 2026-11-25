@@ -16,6 +16,7 @@ import {
   kitState,
   kitValueCents,
   PAYMENT_LABEL,
+  repasseState,
   RESELLER_STATUS_LABEL,
   saleDiscountCents,
   salesTotalCents,
@@ -32,7 +33,7 @@ import { toast } from '../../store/ui';
 import { EmptyState, SwitchRow } from '../FormBits';
 import { formatDateTime, formatPhone } from '../lib/contact';
 import { downloadText, fileDate } from '../lib/download';
-import { checkContract, eraseReseller, erasureBlocker, isError, markKitPaid, newInvite, patchReseller, saveProgram, settlementsCsv, showcaseLink, useProgram, useResellerDetail, useResellers, type ResellerSummary } from '../lib/resellers';
+import { checkContract, clearRepasseReport, eraseReseller, erasureBlocker, isError, markKitPaid, newInvite, patchReseller, saveProgram, settlementsCsv, showcaseLink, useProgram, useResellerDetail, useResellers, type ResellerSummary } from '../lib/resellers';
 import { LeadsPage } from './LeadsPage';
 import { copyText } from './OrderMessages';
 import { InviteMessage, KitEditor, NewResellerForm, SettleForm } from './ResellerForms';
@@ -81,6 +82,7 @@ function ResellerRow({ item, onOpen }: { item: ResellerSummary; onOpen: () => vo
         </p>
         {due && <p className={cx('text-sm', due.late ? 'text-danger' : 'text-ink-muted')}>{due.text}</p>}
         {item.unpaidCents > 0 && <p className="text-sm text-danger">A receber de acertos: {formatBRL(item.unpaidCents)}</p>}
+        {item.reportedCents > 0 && <p className="text-sm font-medium text-copper">Ela avisou que repassou {formatBRL(item.reportedCents)}: confira e marque como recebido.</p>}
       </div>
       <ChevronRight size={18} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-muted" />
     </button>
@@ -310,13 +312,29 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
                   Vendeu {formatBRL(k.settlement?.soldCents ?? 0)} · comissão {k.settlement?.percent}% ({formatBRL(k.settlement?.commissionCents ?? 0)})
                   {k.settlement?.missingCents ? ` · faltaram ${formatBRL(k.settlement.missingCents)}` : ''}
                 </p>
-                <SwitchRow
-                  className="mt-2"
-                  label="Repasse recebido"
-                  {...(k.settlement?.paidAt ? { hint: `Marcado em ${formatDateTime(k.settlement.paidAt)}` } : {})}
-                  checked={!!k.settlement?.paidAt}
-                  onChange={(paid) => void markKitPaid(k, paid).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : reload()))}
-                />
+                {k.settlement && repasseState(k.settlement) === 'reported' && (
+                  <div role="status" className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-[10px] bg-champagne/70 px-3 py-2">
+                    <span>Ela avisou que pagou em {formatDateTime(k.settlement.reportedAt!)}. Confira no banco.</span>
+                    <button
+                      type="button"
+                      className="min-h-11 text-sm text-copper underline underline-offset-4"
+                      onClick={() => void clearRepasseReport(k).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : (toast('Aviso desfeito. O repasse voltou a aparecer como pendente para ela.', { tone: 'success' }), reload())))}
+                    >
+                      Desfazer aviso
+                    </button>
+                  </div>
+                )}
+                {k.settlement && repasseState(k.settlement) === 'none' ? (
+                  <p className="mt-2 text-ink-muted">Sem repasse neste acerto.</p>
+                ) : (
+                  <SwitchRow
+                    className="mt-2"
+                    label="Repasse recebido"
+                    {...(k.settlement?.paidAt ? { hint: `Marcado em ${formatDateTime(k.settlement.paidAt)}${k.settlement.reportedAt ? ` · ela avisou em ${formatDateTime(k.settlement.reportedAt)}` : ''}` } : {})}
+                    checked={!!k.settlement?.paidAt}
+                    onChange={(paid) => void markKitPaid(k, paid).then((r) => (isError(r) ? toast(r.error, { tone: 'error' }) : reload()))}
+                  />
+                )}
               </li>
             ))}
           </ul>

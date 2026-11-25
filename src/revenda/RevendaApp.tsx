@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { CalendarClock, Copy, ExternalLink, Eye, LogOut, Minus, Plus, ShoppingBag, Undo2 } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Clock3, Copy, ExternalLink, Eye, LogOut, Minus, Plus, ShoppingBag, Undo2 } from 'lucide-react';
 import { Lockup } from '../components/layout/Logo';
 import { InstallAppButton } from '../components/install/InstallAppButton';
 import { Button, ButtonAnchor, ButtonLink } from '../components/ui/Button';
@@ -15,7 +15,10 @@ import { cx } from '../components/ui/cx';
 import { sizeLabel } from '../data/catalog';
 import { warrantyText, warrantyUntil } from '../data/customers';
 import { firstNameOf } from '../data/messages';
-import { daysLeft, PAYMENT_LABEL, PAYMENT_METHODS, type KitLineState, type PaymentMethod, type ResellerSale } from '../data/revenda';
+import { daysLeft, PAYMENT_LABEL, PAYMENT_METHODS, repassePixTxid, repasseState, type KitLineState, type PaymentMethod, type ResellerSale } from '../data/revenda';
+import { PixCopyField, QrCode } from '../components/pay/PixCode';
+import { useBusiness } from '../hooks/useBusiness';
+import { buildPixPayload, pixText } from '../lib/pix';
 import { FINISH_LABEL } from '../data/schema';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useSection, useSectionsReady } from '../hooks/useSection';
@@ -29,7 +32,7 @@ import { maskPhone } from '../lib/lead';
 import { whatsappUrl } from '../lib/whatsapp';
 import { useCatalog } from '../store/catalog';
 import { toast } from '../store/ui';
-import { acceptContract, acceptInvite, cancelSale, fetchInvite, fetchMe, login, logout, registerSale, type InviteView, type Me } from './api';
+import { acceptContract, acceptInvite, cancelSale, fetchInvite, fetchMe, login, logout, registerSale, reportRepasse, type InviteView, type Me } from './api';
 
 /*
  * /revenda — the reseller's own panel (docs/revenda/PLAN.md §3): login with
@@ -357,7 +360,9 @@ function Thumb({ me, line }: { me: Me; line: { productId: string; variantId: str
 }
 
 function Summary({ me }: { me: Me }) {
-  const t = useSection('revenda').panel;
+  const section = useSection('revenda');
+  const t = section.panel;
+  const repasse = repasseTexts(section);
   const kit = me.kit;
   const c = me.commission;
   const days = kit ? daysLeft(kit.dueAt) : null;
@@ -379,6 +384,11 @@ function Summary({ me }: { me: Me }) {
             <div className="h-full rounded-full bg-copper transition-[width] duration-500" style={{ width: `${Math.round(c.progress * 100)}%` }} />
           </div>
           <p className="text-sm text-ink-muted">{c.next ? `Faltam ${formatBRL(c.next.missingCents)} para subir para ${c.next.percent}%.` : t.topTier}</p>
+          <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-rose/30 pt-3">
+            <span className="text-sm">Para a ÉKA no acerto</span>
+            <span className="price font-medium">{formatBRL(Math.max(0, me.soldCents - c.commissionCents))}</span>
+          </div>
+          {repasse.cycleNote && <p className="text-sm text-ink-muted">{repasse.cycleNote}</p>}
         </div>
       )}
       <dl className="mt-4 grid grid-cols-2 gap-px bg-rose/30">
@@ -638,6 +648,122 @@ function SalesList({ me, onChanged }: { me: Me; onChanged: () => void }) {
   );
 }
 
+type RevendaTexts = ReturnType<typeof useSection<'revenda'>>;
+/** The repasse texts (an older saved section has none: withBuiltIn fills them, this is only for the types). */
+function repasseTexts(section: RevendaTexts) {
+  return (
+    section.repasse ?? {
+      cycleNote: '',
+      title: 'Repasse do acerto',
+      text: '',
+      noPix: 'Combine com a ÉKA como fazer o repasse.',
+      reported: 'Você avisou que pagou. Quando a ÉKA conferir, aparece aqui como recebido.',
+      whatsapp: 'Oi! Aqui é {primeiro_nome}. Fiz o repasse de {total} do acerto da minha maleta. Segue o comprovante.',
+    }
+  );
+}
+
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+const dateTime = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+/** The repasse of a closed cycle, in one line (history). */
+function RepasseLine({ settlement }: { settlement: NonNullable<Me['history'][number]['settlement']> }) {
+  const state = repasseState(settlement);
+  if (state === 'none') return <p className="text-ink-muted">Sem repasse neste acerto.</p>;
+  return (
+    <p className={cx(state === 'paid' ? 'text-ink-muted' : 'text-copper')}>
+      Repasse <span className="price">{formatBRL(settlement.dueCents)}</span>
+      {state === 'paid' ? ` · recebido em ${shortDate(settlement.paidAt!)}` : state === 'reported' ? ` · avisado em ${shortDate(settlement.reportedAt!)}` : ' · pendente'}
+    </p>
+  );
+}
+
+/**
+ * A settled cycle whose repasse the store has not confirmed yet: the amount, the store's Pix with
+ * that exact amount, "Já fiz o repasse" and the receipt through the store's WhatsApp.
+ */
+function RepasseCard({ me, entry, onChanged }: { me: Me; entry: Me['history'][number]; onChanged: () => void }) {
+  const t = repasseTexts(useSection('revenda'));
+  const biz = useBusiness();
+  const [busy, setBusy] = useState(false);
+  const settlement = entry.settlement!;
+  const state = repasseState(settlement);
+  const amount = formatBRL(settlement.dueCents);
+  const code = useMemo(
+    () => (me.pix ? buildPixPayload({ ...me.pix, amountCents: settlement.dueCents, txid: repassePixTxid(entry.id) }) : null),
+    [me.pix, settlement.dueCents, entry.id],
+  );
+  const message = fillString(t.whatsapp, { primeiro_nome: me.reseller.firstName, total: amount });
+  const titleId = `repasse-${entry.id}`;
+
+  async function report() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await reportRepasse(entry.id);
+      toast('Pronto! A ÉKA recebeu o seu aviso.', { tone: 'success' });
+      onChanged();
+    } catch (err) {
+      toast(errorMessage(err), { tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-[14px] border border-copper/40 bg-white p-5 shadow-[var(--shadow-1)]">
+      <div className="flex flex-col gap-1">
+        <h2 id={titleId} className="font-display text-title">
+          {t.title}
+        </h2>
+        <p className="font-display text-[2.2rem] leading-none">{amount}</p>
+        <p className="text-sm text-ink-muted">
+          Acerto de {shortDate(entry.closedAt ?? settlement.at)} · vendeu <span className="price">{formatBRL(settlement.soldCents)}</span>, comissão{' '}
+          <span className="price">{formatBRL(settlement.commissionCents)}</span>
+          {settlement.missingCents > 0 && (
+            <>
+              , peças que não voltaram <span className="price">{formatBRL(settlement.missingCents)}</span>
+            </>
+          )}
+        </p>
+      </div>
+
+      {state === 'reported' ? (
+        <p role="status" className="flex items-start gap-2 rounded-[10px] bg-champagne/60 p-3 text-sm">
+          <Clock3 size={18} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-copper" />
+          <span>
+            {t.reported} <span className="text-ink-muted">Avisado em {dateTime(settlement.reportedAt!)}.</span>
+          </span>
+        </p>
+      ) : code && me.pix ? (
+        <div className="flex flex-col gap-3">
+          {t.text && <p className="text-sm">{t.text}</p>}
+          <PixCopyField code={code} id={`pix-${entry.id}`} />
+          <div className="flex flex-col items-center gap-2 border-t border-line pt-4">
+            <QrCode value={code} label={`QR Code Pix de ${amount} para a ÉKA`} className="size-[168px] ring-1 ring-line" />
+            <p className="text-center text-sm text-ink-muted">
+              Recebedor: <span className="text-ink">{pixText(me.pix.name, 25)}</span>
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm">{t.noPix}</p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {state === 'pending' && (
+          <Button size="lg" block disabled={busy} aria-busy={busy} onClick={() => void report()}>
+            <CheckCircle2 size={19} strokeWidth={1.5} /> {busy ? 'Enviando…' : 'Já fiz o repasse'}
+          </Button>
+        )}
+        <ButtonAnchor href={whatsappUrl(biz.whatsapp, message)} variant={state === 'pending' ? 'secondary' : 'primary'} block>
+          <WhatsAppIcon size={18} /> Enviar comprovante no WhatsApp
+        </ButtonAnchor>
+      </div>
+    </section>
+  );
+}
+
 function History({ me }: { me: Me }) {
   const t = useSection('revenda').history;
   if (!me.history.length) return <p className="rounded-[12px] border border-dashed border-line px-4 py-8 text-center text-ink-muted">{t.settlementsEmpty}</p>;
@@ -651,6 +777,7 @@ function History({ me }: { me: Me }) {
           <p>
             Vendeu <span className="price">{formatBRL(h.settlement?.soldCents ?? 0)}</span> · comissão {h.settlement?.percent}%: <strong className="price font-medium">{formatBRL(h.settlement?.commissionCents ?? 0)}</strong>
           </p>
+          {h.settlement && <RepasseLine settlement={h.settlement} />}
         </li>
       ))}
     </ul>
@@ -728,6 +855,13 @@ function PanelPage() {
         <h1 className="font-display text-display-m">{t.panel.title}</h1>
       </div>
       <ContractUpdate key={me.contractDue?.version ?? 0} me={me} onAccepted={load} />
+      {/* Settled cycles whose repasse the store has not confirmed, oldest first. */}
+      {me.history
+        .filter((h) => h.settlement && (repasseState(h.settlement) === 'pending' || repasseState(h.settlement) === 'reported'))
+        .reverse()
+        .map((h) => (
+          <RepasseCard key={h.id} me={me} entry={h} onChanged={load} />
+        ))}
       <Summary me={me} />
       {!me.contractDue && me.kit && me.kit.lines.some((l) => l.available > 0) && (
         <Button size="lg" block onClick={() => setSelling(true)}>

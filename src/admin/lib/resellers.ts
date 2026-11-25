@@ -21,6 +21,8 @@ export interface ResellerSummary {
   closedCycles: number;
   receivedCommissionCents: number;
   unpaidCents: number;
+  /** Part of unpaidCents she says she already paid (the owner still confirms it). */
+  reportedCents: number;
 }
 export interface ResellerDetail {
   reseller: Reseller;
@@ -107,6 +109,8 @@ export const settleKit = (kit: Kit, returned: { productId: string; variantId: st
   attempt(() => ownWrite(() => api<{ kit: Kit; version?: number }>(`/api/admin/kits/${encodeURIComponent(kit.id)}/settle`, { json: { returned, updatedAt }, retries: 1, timeoutMs: 20_000 }), (r) => r.version));
 
 export const markKitPaid = (kit: Kit, paid: boolean) => attempt(() => api<{ kit: Kit }>(`/api/admin/kits/${encodeURIComponent(kit.id)}/paid`, { json: { paid }, retries: 1 }));
+/** "Desfazer aviso": she said she paid the repasse, but the money did not arrive. */
+export const clearRepasseReport = (kit: Kit) => attempt(() => api<{ kit: Kit }>(`/api/admin/kits/${encodeURIComponent(kit.id)}/report-clear`, { json: {}, retries: 1 }));
 
 export const saveProgram = (program: Program) => attempt(() => api<{ program: Program }>('/api/admin/reseller-program', { method: 'PUT', json: { program }, retries: 1 }));
 
@@ -130,7 +134,7 @@ const money = (cents: number | undefined) => (cents === undefined ? '' : (cents 
  */
 export function settlementsCsv(reseller: Reseller, kits: Kit[]): string {
   return toCSV(
-    ['Revendedora', 'Maleta aberta em', 'Acerto em', 'Vendido', 'Comissão (%)', 'Comissão', 'Peças que faltaram', 'Valor do acerto', 'Repasse recebido em'],
+    ['Revendedora', 'Maleta aberta em', 'Acerto em', 'Vendido', 'Comissão (%)', 'Comissão', 'Peças que faltaram', 'Valor do acerto', 'Repasse avisado em', 'Repasse recebido em'],
     [...kits]
       .sort((a, b) => a.openedAt.localeCompare(b.openedAt))
       .map((k) => [
@@ -142,6 +146,7 @@ export function settlementsCsv(reseller: Reseller, kits: Kit[]): string {
         money(k.settlement?.commissionCents),
         money(k.settlement?.missingCents),
         money(k.settlement?.dueCents),
+        k.settlement?.reportedAt ? formatDateTime(k.settlement.reportedAt) : '',
         k.settlement?.paidAt ? formatDateTime(k.settlement.paidAt) : '',
       ]),
     { delimiter: ';' },

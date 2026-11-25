@@ -29,8 +29,11 @@ describe('settlementsCsv', () => {
   it('lists her settlements for the owner, without her customers, in pt-BR Excel format', () => {
     const csv = settlementsCsv(reseller, [kit()]);
     const [header, row] = csv.replace(/^\uFEFF/, '').trim().split(/\r?\n/);
-    expect(header).toBe('Revendedora;Maleta aberta em;Acerto em;Vendido;Comissão (%);Comissão;Peças que faltaram;Valor do acerto;Repasse recebido em');
+    expect(header).toBe('Revendedora;Maleta aberta em;Acerto em;Vendido;Comissão (%);Comissão;Peças que faltaram;Valor do acerto;Repasse avisado em;Repasse recebido em');
     expect(row).toContain('Lia Moraes;');
-    expect(row).toContain(';459,90;25;114,98;0,00;344,92;');
+    // Not reported by her (paid in person): that column stays empty.
+    expect(row).toMatch(/;459,90;25;114,98;0,00;344,92;;\d{2}\/\d{2}\/\d{4}/);
+    const reported = settlementsCsv(reseller, [kit({ settlement: { ...kit().settlement!, reportedAt: '2026-10-30T20:00:00.000Z' } })]);
+    expect(reported.trim().split(/\r?\n/)[1]).toMatch(/;344,92;\d{2}\/\d{2}\/\d{4}[^;]*;\d{2}\/\d{2}\/\d{4}/);
   });
 });

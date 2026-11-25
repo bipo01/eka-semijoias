@@ -470,6 +470,14 @@ function RevendaForm() {
         <TextInput path={['history', 'salesEmpty']} label="Quando ainda não há vendas na maleta" />
         <TextInput path={['history', 'settlementsEmpty']} label="Quando ainda não há acertos" />
       </Group>
+      <Group title="Repasse" hint="A cliente paga à revendedora; no acerto, ela repassa à ÉKA o vendido menos a comissão. O valor, o Pix e os botões aparecem sozinhos.">
+        <TextInput path={['repasse', 'cycleNote']} label="Explicação no resumo da maleta" long rows={2} />
+        <TextInput path={['repasse', 'title']} label="Título do repasse depois do acerto" />
+        <TextInput path={['repasse', 'text']} label="Texto acima do Pix" long rows={2} />
+        <TextInput path={['repasse', 'noPix']} label="Quando a chave Pix da loja não está cadastrada" long rows={2} />
+        <TextInput path={['repasse', 'reported']} label="Depois que ela avisa que pagou" long rows={2} />
+        <TextInput path={['repasse', 'whatsapp']} label="Mensagem para enviar o comprovante" long rows={3} hint="{primeiro_nome} é o nome dela e {total} é o valor do repasse." />
+      </Group>
     </>
   );
 }

@@ -205,7 +205,8 @@ export function SettleForm({ kit, sales, onDone }: { kit: Kit; sales: ResellerSa
       if (latest) setStamp(latest);
       return setError(result.error);
     }
-    toast(kit.stockMoves.length ? 'Acerto feito. As peças devolvidas voltaram para o estoque.' : 'Acerto feito.', { tone: 'success' });
+    const repasse = 'error' in preview || preview.dueCents <= 0 ? '' : ' Ela já vê o valor do repasse e o Pix no painel dela.';
+    toast(`${kit.stockMoves.length ? 'Acerto feito. As peças devolvidas voltaram para o estoque.' : 'Acerto feito.'}${repasse}`, { tone: 'success' });
     onDone();
   }
 

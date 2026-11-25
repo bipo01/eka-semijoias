@@ -6,6 +6,7 @@
 As regras do programa de revenda ainda não foram respondidas (`docs/PERGUNTAS_ERIKA.md` §11–13). O sistema nasce com estes padrões. Todos ficam em Painel → Revendedoras → Programa e podem mudar a qualquer momento.
 
 - **Modelo:** consignado. A Érika monta a maleta, a revendedora vende e, no acerto, devolve o que sobrou e repassa o valor vendido menos a comissão.
+- **Pagamento (decidido pela Érika em 24/11/2026, opção 1):** a cliente paga **à revendedora** (Pix dela, dinheiro ou cartão). No acerto, a revendedora repassa à ÉKA pelo Pix da loja, avisa no painel ("Já fiz o repasse") e a Érika confirma ("Repasse recebido"). Detalhes: `REPASSE_PLAN.md`.
 - **Comissão por faixas, sobre o total vendido na maleta (ciclo):**
   - até R$ 999,99: 25%;
   - de R$ 1.000 a R$ 1.999,99: 30%;

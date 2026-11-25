@@ -9,6 +9,7 @@ import {
   kitState,
   kitValueCents,
   resellerSaleSchema,
+  repasseState,
   saleDiscountCents,
   saleRequestSchema,
   salesTotalCents,
@@ -383,6 +384,8 @@ export async function handleResellerMe(ctx: Context): Promise<Response> {
       soldCents,
       earnings: earnings(open ? { soldCents, tiers: open.tiers } : null, [{ commissionCents: received }]),
       history: closed.map((k) => ({ id: k.id, openedAt: k.openedAt, closedAt: k.closedAt, settlement: k.settlement })),
+      // The store's Pix for her repasse (public in the snapshot anyway); null when the owner has none.
+      pix: catalog?.settings.pix ?? null,
       images,
     },
     { headers: { 'Cache-Control': 'no-store' } },
@@ -573,4 +576,57 @@ export async function handleShowcase(ctx: Context): Promise<Response> {
     { firstName: reseller.name.split(/\s+/)[0], whatsapp: active && reseller.showWhatsapp ? reseller.whatsapp : null, active, items },
     { headers: { 'Cache-Control': 'public, max-age=30', 'Referrer-Policy': 'strict-origin-when-cross-origin' } },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Repasse (the customer paid her; she passes sold − commission + missing to the store)
+// ---------------------------------------------------------------------------
+
+const shortDate = (iso: string | undefined) =>
+  iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Cuiaba' }) : '';
+
+/**
+ * POST /api/revenda/settlements/:kitId/report — "Já fiz o repasse". Only her own settled kit with
+ * something to pass; repeating it (or after the owner confirmed) changes nothing. The owner still
+ * confirms the money with "Repasse recebido".
+ */
+export async function handleReportRepasse(ctx: Context): Promise<Response> {
+  const { reseller } = await requireReseller(ctx);
+  const db = ctx.env.DB;
+  await readJson(ctx.request, 512);
+  const id = ctx.params.kitId ?? '';
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new HttpError('not_found', 'Acerto não encontrado.');
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
+    const row = await withReadRetry(() => db.prepare(`SELECT ${KIT_COLUMNS} FROM kits WHERE id = ?1 AND reseller_id = ?2`).bind(id, reseller.id).first<KitRow>());
+    if (!row) throw new HttpError('not_found', 'Acerto não encontrado.');
+    const kit = toKit(row);
+    if (kit.status !== 'fechada' || !kit.settlement) throw new HttpError('conflict', 'Esta maleta ainda não teve acerto.');
+    const state = repasseState(kit.settlement);
+    if (state === 'none') throw new HttpError('conflict', 'Este acerto não tem repasse.');
+    if (state !== 'pending') return json({ settlement: kit.settlement });
+    const at = nextStamp(row.updated_at);
+    const settlement = { ...kit.settlement, reportedAt: at };
+    const next = { ...kit, updatedAt: at, settlement };
+    try {
+      await db.batch([
+        kitUnchanged(db, id, row.updated_at),
+        db.prepare('UPDATE kits SET updated_at = ?2, data = ?3 WHERE id = ?1').bind(id, at, JSON.stringify(next)),
+        db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'kit.report', `Repasse da maleta ${id} informado por ${reseller.id}: ${settlement.dueCents} centavos`),
+      ]);
+    } catch (error) {
+      if (isGuardMiss(error)) continue;
+      throw toHttpError(error);
+    }
+    ctx.waitUntil(notifyLeads(ctx.env));
+    ctx.waitUntil(
+      notifyOwner(ctx.env, ctx.url.origin, {
+        title: `Repasse informado · ${reseller.name.split(/\s+/)[0]}`,
+        body: `${formatBRL(settlement.dueCents)} do acerto de ${shortDate(kit.closedAt ?? settlement.at)}. Confira e marque como recebido.`,
+        url: '/admin/revendedoras',
+        tag: `rev-${reseller.id}`,
+      }),
+    );
+    return json({ settlement });
+  }
+  throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
 }

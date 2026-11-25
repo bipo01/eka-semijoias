@@ -8,8 +8,8 @@ import { toHttpError } from './db';
 import type { Env } from './env';
 import { assertSameOrigin, errorResponse, HttpError, json } from './http';
 import { handleCreateLead, handleDeleteLead, handleListLeads, handlePatchLead } from './leads';
-import { handleContractCheck, handleCreateKit, handleCreateReseller, handleEditKit, handleEraseReseller, handleGetProgram, handleGetReseller, handleKitPaid, handleListResellers, handleNewInvite, handlePatchReseller, handlePutProgram, handleSettleKit } from './resellers';
-import { handleAcceptContract, handleAcceptInvite, handleCancelResellerSale, handleGetInvite, handleResellerLogin, handleResellerLogout, handleResellerMe, handleResellerSale, handleShowcase } from './revenda';
+import { handleContractCheck, handleCreateKit, handleCreateReseller, handleEditKit, handleEraseReseller, handleGetProgram, handleGetReseller, handleKitPaid, handleKitReportClear, handleListResellers, handleNewInvite, handlePatchReseller, handlePutProgram, handleSettleKit } from './resellers';
+import { handleAcceptContract, handleAcceptInvite, handleCancelResellerSale, handleGetInvite, handleReportRepasse, handleResellerLogin, handleResellerLogout, handleResellerMe, handleResellerSale, handleShowcase } from './revenda';
 import { handleLive } from './live';
 import { handleAnonymizeOrder, handleCreateManualOrder, handleCreateOrder, handleDeleteOrder, handleEditOrderItems, handleListOrders, handleOrderStatus } from './orders';
 import { handleCharge, handleGetReceipt, handlePayView, handleUploadReceipt } from './payments';
@@ -66,6 +66,7 @@ const router = new Router()
   .on('PUT', '/api/admin/kits/:id/items', handleEditKit)
   .on('POST', '/api/admin/kits/:id/settle', handleSettleKit)
   .on('POST', '/api/admin/kits/:id/paid', handleKitPaid)
+  .on('POST', '/api/admin/kits/:id/report-clear', handleKitReportClear)
   .on('GET', '/api/revenda/invite/:token', handleGetInvite)
   .on('POST', '/api/revenda/invite/:token', handleAcceptInvite)
   .on('POST', '/api/revenda/login', handleResellerLogin)
@@ -74,6 +75,7 @@ const router = new Router()
   .on('GET', '/api/revenda/me', handleResellerMe)
   .on('POST', '/api/revenda/sales', handleResellerSale)
   .on('POST', '/api/revenda/sales/:id/cancel', handleCancelResellerSale)
+  .on('POST', '/api/revenda/settlements/:kitId/report', handleReportRepasse)
   .on('GET', '/api/r/:slug', handleShowcase)
   .on('GET', '/api/admin/orders', handleListOrders)
   .on('POST', '/api/admin/orders', handleCreateManualOrder)
