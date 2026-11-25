@@ -28,6 +28,20 @@ export const RECEIPT_STEPS = [
 
 const IMAGE_TYPES: Record<string, ReceiptType> = { 'image/png': 'image/png', 'image/jpeg': 'image/jpeg', 'image/jpg': 'image/jpeg', 'image/webp': 'image/webp' };
 
+/**
+ * An in-memory copy of a picked file (null when it cannot be read). The upload must not depend on the
+ * file on the phone: Chrome on Android refuses to send one that changed after it was picked.
+ */
+export async function snapshotFile(file: File): Promise<File | null> {
+  try {
+    const bytes = await file.arrayBuffer();
+    if (!bytes.byteLength) return null;
+    return new File([bytes], file.name, { type: file.type, lastModified: file.lastModified });
+  } catch {
+    return null;
+  }
+}
+
 export const isPdf = (file: Pick<File, 'type' | 'name'>) => file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
 
 export async function prepareReceipt(file: File): Promise<PreparedReceipt> {

@@ -161,6 +161,10 @@ export async function handleUploadReceipt(ctx: Context): Promise<Response> {
     // Only a confirmed order (pieces held) with a live charge takes payment receipts.
     if (order.status !== 'confirmado' || order.anonymized) throw new HttpError('conflict', 'Este link de pagamento não vale mais. Peça um novo pelo WhatsApp.');
     const receipts = order.receipts ?? [];
+    // The same file again for this charge (a retry whose first answer was lost): already received.
+    const same = await db.prepare('SELECT id, created_at FROM receipts WHERE order_id = ?1 AND sha256 = ?2').bind(order.id, sha).all<{ id: string; created_at: string }>();
+    const already = same.results.find((row) => receipts.some((r) => r.id === row.id && r.chargeToken === order.charge!.token));
+    if (already) return json({ receipt: { at: already.created_at } }, { status: 201 });
     if (receipts.length >= MAX_RECEIPTS_PER_ORDER) throw new HttpError('conflict', 'Já recebemos vários comprovantes deste pedido. Se precisar, mande pelo WhatsApp.');
     const at = nextStamp(stamp);
     const id = `rcp_${randomToken().slice(0, 16)}`;

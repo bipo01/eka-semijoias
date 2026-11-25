@@ -3,8 +3,23 @@ import { api, apiUrl, ApiError, NETWORK_MESSAGE } from './api';
 
 export const fetchPayView = (token: string) => api<PayView>(`/api/pay/${encodeURIComponent(token)}`, { retries: 2 });
 
-/** Uploads a receipt with progress (XHR: fetch has no upload progress). */
-export function uploadReceipt(token: string, blob: Blob, type: ReceiptType, onProgress?: (fraction: number) => void): Promise<void> {
+/**
+ * Uploads a receipt with progress (XHR: fetch has no upload progress). A request that never got an
+ * answer (a phone switching networks, a dropped connection) is sent once more on its own before the
+ * customer sees "Sem conexão"; the server answers the same file for the same order as already
+ * received, so a retry after a lost answer never stores it twice.
+ */
+export async function uploadReceipt(token: string, blob: Blob, type: ReceiptType, onProgress?: (fraction: number) => void): Promise<void> {
+  try {
+    await sendReceipt(token, blob, type, onProgress);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 0 || error.code !== 'network') throw error;
+    await new Promise((r) => setTimeout(r, 1200));
+    await sendReceipt(token, blob, type, onProgress);
+  }
+}
+
+function sendReceipt(token: string, blob: Blob, type: ReceiptType, onProgress?: (fraction: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', apiUrl(`/api/pay/${encodeURIComponent(token)}/receipt`));

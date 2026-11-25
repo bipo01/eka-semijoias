@@ -17,7 +17,7 @@ import { ApiError, errorMessage } from '../lib/api';
 import { formatBRL } from '../lib/format';
 import { checkAutoPix, createAutoPix, fetchPayView, uploadReceipt } from '../lib/payments';
 import { buildPixPayload, pixText, pixTxid } from '../lib/pix';
-import { isPdf, prepareReceipt } from '../lib/receipt';
+import { isPdf, prepareReceipt, snapshotFile } from '../lib/receipt';
 import { whatsappUrl } from '../lib/whatsapp';
 import { useMessages } from '../hooks/useMessages';
 import { useSection, useSectionsReady } from '../hooks/useSection';
@@ -277,21 +277,29 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
 
   useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
 
-  const pick = (f: File | undefined) => {
+  const pick = async (f: File | undefined) => {
     if (!f) return;
     setError(null);
     if (!(f.type.startsWith('image/') || isPdf(f))) {
       setError('Envie uma imagem (PNG ou JPG) ou o PDF do comprovante.');
       return;
     }
-    setFile(f);
-    setPreview(f.type.startsWith('image/') && !/heic|heif/i.test(f.type) ? URL.createObjectURL(f) : null);
+    // Read it now: Chrome on Android reads a picked file only when it is sent, and refuses the upload
+    // (net::ERR_UPLOAD_FILE_CHANGED, shown as "Sem conexão") when the phone touched the file meanwhile,
+    // as it does with a screenshot just taken. The copy in memory cannot change.
+    const copy = await snapshotFile(f);
+    if (!copy) {
+      setError('Não conseguimos abrir este arquivo. Escolha o comprovante de novo.');
+      return;
+    }
+    setFile(copy);
+    setPreview(copy.type.startsWith('image/') && !/heic|heif/i.test(copy.type) ? URL.createObjectURL(copy) : null);
   };
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    if (!busy) pick(e.dataTransfer.files[0]);
+    if (!busy) void pick(e.dataTransfer.files[0]);
   };
 
   async function send() {
@@ -380,7 +388,7 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
         accept="image/*,application/pdf,.pdf"
         className="sr-only"
         onChange={(e) => {
-          pick(e.target.files?.[0]);
+          void pick(e.target.files?.[0]);
           e.target.value = '';
         }}
       />

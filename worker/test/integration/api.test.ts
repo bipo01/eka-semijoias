@@ -928,8 +928,13 @@ describe('Pix charges and receipts', () => {
     expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'application/pdf' })).status).toBe(415);
     expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: new Uint8Array(800_000), type: 'image/png' })).status).toBe(413);
     expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png', origin: 'https://evil.example' })).status).toBe(403);
-    const sent = await visitor.req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' });
+    const shot = pngBytes();
+    const sent = await visitor.req(`/api/pay/${token}/receipt`, { raw: shot, type: 'image/png' });
     expect(sent.status).toBe(201);
+    // The same file again (a retry after a lost answer): answered as received, stored once.
+    const again = await visitor.req(`/api/pay/${token}/receipt`, { raw: shot, type: 'image/png' });
+    expect(again.status).toBe(201);
+    expect(again.json.receipt.at).toBe(sent.json.receipt.at);
     const pdf = await visitor.req(`/api/pay/${token}/receipt`, { raw: new TextEncoder().encode('%PDF-1.7\n%comprovante'), type: 'application/pdf' });
     expect(pdf.status).toBe(201);
     expect((await new Client().req(`/api/pay/${token}`)).json).toMatchObject({ state: 'analise', receipts: [{}, {}] });
