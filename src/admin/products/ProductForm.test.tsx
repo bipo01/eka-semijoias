@@ -86,6 +86,22 @@ describe('restoreProduct (undo delete)', () => {
 });
 
 describe('product form', { timeout: 20_000 }, () => {
+  it('a removed photo comes back with "Desfazer", at the same place', async () => {
+    unlockSession();
+    const user = userEvent.setup();
+    renderAdmin('/admin/produtos/prod-p05');
+    const dialog = await screen.findByRole('dialog', { name: 'Editar peça' });
+    const photos = () => within(within(dialog).getByRole('list', { name: 'Fotos da peça' })).getAllByRole('button', { name: /^(Principal, foto 1|Foto \d+):/ });
+    const before = photos().map((b) => b.getAttribute('aria-label'));
+    expect(before.length).toBeGreaterThanOrEqual(2);
+    await user.click(within(dialog).getByRole('button', { name: 'Remover foto 1' }));
+    expect(photos()).toHaveLength(before.length - 1);
+    await user.click(await screen.findByRole('button', { name: 'Desfazer' }));
+    expect(photos().map((b) => b.getAttribute('aria-label'))).toEqual(before);
+    // The photo is selected again, ready for "Tornar principal"/"Mover".
+    expect(photos()[0]).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('shows an inline error when the promo price is not below the price', async () => {
     unlockSession();
     const user = userEvent.setup();

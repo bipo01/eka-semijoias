@@ -123,10 +123,22 @@ test('admin: a new photo is uploaded on save and becomes the cover on the public
   const uploads: string[] = [];
   page.on('response', (r) => r.url().endsWith('/api/admin/media') && uploads.push(String(r.status())));
   const photos = page.getByRole('list', { name: 'Fotos da peça' }).getByRole('button', { name: /^(Principal, foto 1|Foto \d+):/ });
+  // Count only once the photos are on screen: counting an empty list made the "new" photo the
+  // first one (already the main one, so no "Tornar principal"), a flaky failure on slow machines.
+  await expect(photos.first()).toBeVisible();
   const before = await photos.count();
   await page.locator('dialog input[type="file"]').first().setInputFiles('public/images/products/p02-argola-cravejada-960.webp');
   await expect(photos).toHaveCount(before + 1, { timeout: 15_000 });
-  await photos.last().click();
+  // A tap on the photo near its remove button (but outside it) picks the photo: it must never remove
+  // it (the remove target once covered half the tile and deleted photos on the phone).
+  const tile = (await photos.last().boundingBox())!;
+  const removeBox = (await page.getByRole('button', { name: `Remover foto ${before + 1}` }).boundingBox())!;
+  expect(removeBox.width).toBeLessThanOrEqual(36);
+  expect(removeBox.height).toBeLessThanOrEqual(36);
+  await page.mouse.click(removeBox.x - 6, removeBox.y + removeBox.height + 6);
+  await expect(photos).toHaveCount(before + 1);
+  await expect(photos.last()).toHaveAttribute('aria-pressed', 'true');
+  expect(tile.width).toBeGreaterThan(80);
   await page.getByRole('button', { name: 'Tornar principal' }).click();
   await page.getByRole('button', { name: 'Salvar', exact: true }).click();
   await expect(page.getByText('Alterações salvas.')).toBeVisible({ timeout: 15_000 });

@@ -76,7 +76,14 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
     }
   }
 
+  /** Removes a photo and offers to undo it: a tap in the wrong place must never cost a photo. */
   function remove(id: string) {
+    const index = draft.images.findIndex((img) => img.id === id);
+    const image = draft.images[index];
+    if (!image) return;
+    const autoAlt = draft.autoAltIds.includes(id);
+    const linked = new Map(draft.variants.filter((v) => v.imageIds.includes(id)).map((v) => [v.id, v.imageIds.indexOf(id)]));
+    const original = originals.current.get(id);
     originals.current.delete(id);
     update((d) => ({
       ...d,
@@ -85,6 +92,34 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
       variants: d.variants.map((v) => ({ ...v, imageIds: v.imageIds.filter((x) => x !== id) })),
     }));
     if (selectedId === id) onSelect(null);
+    toast(`Foto ${index + 1} removida.`, {
+      action: {
+        label: 'Desfazer',
+        onClick: () => {
+          if (original) originals.current.set(id, original);
+          update((d) => {
+            if (d.images.some((img) => img.id === id)) return d;
+            const images = [...d.images];
+            images.splice(Math.min(index, images.length), 0, image);
+            return {
+              ...d,
+              images,
+              autoAltIds: autoAlt ? [...d.autoAltIds, id] : d.autoAltIds,
+              // Back in the finishes it was marked in, at the same place.
+              variants: d.variants.map((v) => {
+                const at = linked.get(v.id);
+                if (at === undefined || v.imageIds.includes(id)) return v;
+                const ids = [...v.imageIds];
+                ids.splice(Math.min(at, ids.length), 0, id);
+                return { ...v, imageIds: ids };
+              }),
+            };
+          });
+          onSelect(id);
+        },
+      },
+      duration: 8000,
+    });
   }
 
   async function openStandardizer(id: string) {
@@ -125,25 +160,30 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
         {draft.images.map((img, i) => {
           const hasError = !!errors[`alt:${img.id}`];
           return (
-            <li key={img.id} className={tileClass}>
+            // The ring sits on the tile itself: on the photo button it was cut by the tile's rounded
+            // clipping, so the selected photo looked like the others. The list's 4 px padding fits it.
+            <li
+              key={img.id}
+              className={cx(tileClass, 'ring-offset-2 ring-offset-ivory', img.id === selectedId ? 'ring-2 ring-copper' : hasError ? 'ring-2 ring-danger' : '')}
+            >
               <button
                 type="button"
                 aria-pressed={img.id === selectedId}
                 aria-label={`${i === 0 ? 'Principal, foto 1' : `Foto ${i + 1}`}: ${img.alt || 'sem descrição'}`}
                 onClick={() => onSelect(img.id)}
-                className={cx(
-                  'absolute inset-0 rounded-[10px] ring-offset-2 ring-offset-ivory',
-                  img.id === selectedId ? 'ring-2 ring-copper' : hasError ? 'ring-2 ring-danger' : '',
-                )}
+                className="absolute inset-0 rounded-[10px]"
               >
                 <Img {...productImageSources(img, true)} alt="" ratio="4 / 5" frameClassName="h-full w-full" width={88} height={110} />
                 {i === 0 && <span className="absolute bottom-1 left-1 rounded-full bg-ink/80 px-2 text-[0.75rem] leading-5 text-on-dark">Principal</span>}
               </button>
+              {/* The remove target is the visible circle plus a small margin (32 px, above the 24 px
+                  minimum): a bigger one covered half the tile, and a tap meant to pick the photo
+                  removed it on the phone. Removing can be undone anyway. */}
               <button
                 type="button"
                 aria-label={`Remover foto ${i + 1}`}
                 onClick={() => remove(img.id)}
-                className="absolute top-0 right-0 flex size-11 items-start justify-end p-1.5"
+                className="absolute top-1 right-1 flex size-8 items-center justify-center rounded-full"
               >
                 <span className="flex size-6 items-center justify-center rounded-full bg-white/90 text-ink shadow">
                   <X size={14} strokeWidth={2} />
