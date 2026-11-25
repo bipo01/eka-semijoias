@@ -48,7 +48,7 @@ const brl = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency
 
 async function editSection(page: Page, id: 'pagamento' | 'revenda', fields: { group: string; label: string; value: string }[]) {
   await page.goto(`/admin/site?secao=${id}`);
-  const editor = page.getByRole('dialog');
+  const editor = page.getByRole('main').getByRole('region').first();
   for (const f of fields) {
     const input = editor.getByRole('region', { name: f.group, exact: true }).getByRole('textbox', { name: new RegExp(`^${f.label}`) });
     await input.fill(f.value);
@@ -59,9 +59,9 @@ async function editSection(page: Page, id: 'pagamento' | 'revenda', fields: { gr
 
 async function restore(page: Page, id: 'pagamento' | 'revenda') {
   await page.goto(`/admin/site?secao=${id}`);
-  await page.getByRole('dialog').getByRole('button', { name: /Restaurar o texto original/ }).click();
+  await page.getByRole('button', { name: /Restaurar o texto original/ }).click();
   await page.getByRole('dialog', { name: 'Restaurar o texto original?' }).getByRole('button', { name: 'Restaurar' }).click();
-  await expect(page.getByRole('dialog').getByRole('button', { name: /Restaurar o texto original/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Restaurar o texto original/ })).toHaveCount(0);
 }
 
 test('payment page: her texts replace the built-in ones, with the amount filled in', async ({ page }) => {

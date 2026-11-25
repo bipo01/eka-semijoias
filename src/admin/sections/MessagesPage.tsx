@@ -3,7 +3,6 @@ import { Check, Plus, RotateCcw, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TextField } from '../../components/ui/Field';
-import { Sheet } from '../../components/ui/Sheet';
 import { cx } from '../../components/ui/cx';
 import {
   activeTemplate,
@@ -23,6 +22,9 @@ import {
   type TemplateOption,
 } from '../../data/messages';
 import { useCatalog } from '../../store/catalog';
+import { useNavigate, useParams } from 'react-router-dom';
+import { DetailPage, useListPlace } from '../DetailPage';
+import { adminPath } from '../lib/paths';
 import { save } from '../lib/persist';
 
 /*
@@ -360,9 +362,20 @@ function Group({ title, intro, children }: { title: string; intro: string; child
 export function MessagesPage() {
   const stored = useCatalog((s) => s.data.settings.messages);
   const settings = stored ?? EMPTY;
-  const [editing, setEditing] = useState<MessageType | null>(null);
+  // /admin/mensagens/<tipo> opens its editor as a page (the list stays mounted behind it).
+  const navigate = useNavigate();
+  const { messageType } = useParams();
+  const editing = (MESSAGE_TYPES as readonly string[]).includes(messageType ?? '') ? (messageType as MessageType) : null;
+  const setEditing = (t: MessageType | null) => navigate(t ? adminPath('mensagens', t) : adminPath('mensagens'));
+  useListPlace(!!editing);
   return (
-    <div className="flex flex-col gap-8">
+    <>
+    {editing && (
+      <DetailPage header={{ title: MESSAGE_TYPE_INFO[editing].label, backTo: adminPath('mensagens'), backLabel: 'Mensagens' }}>
+        <TemplateEditor key={editing} type={editing} settings={settings} onClose={() => setEditing(null)} />
+      </DetailPage>
+    )}
+    <div hidden={!!editing} className="flex flex-col gap-8">
       <p className="text-sm text-ink-muted">
         Cada mensagem tem variações prontas e aceita as suas. Os dados do pedido entram sozinhos.
       </p>
@@ -381,9 +394,7 @@ export function MessagesPage() {
           <MessageCard key={t} type={t} settings={settings} onEdit={() => setEditing(t)} />
         ))}
       </Group>
-      <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing ? MESSAGE_TYPE_INFO[editing].label : 'Mensagem'} side="right">
-        {editing && <TemplateEditor key={editing} type={editing} settings={settings} onClose={() => setEditing(null)} />}
-      </Sheet>
     </div>
+    </>
   );
 }

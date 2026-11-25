@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ExternalLink, LogOut, Plus } from 'lucide-react';
+import { ArrowLeft, ExternalLink, LogOut, Plus } from 'lucide-react';
 import { ButtonLink } from '../components/ui/Button';
 import { InstallAppButton } from '../components/install/InstallAppButton';
 import { cx } from '../components/ui/cx';
@@ -11,6 +11,7 @@ import { useAdminSession } from './AdminContext';
 import { useOrders, useOrdersSync } from './lib/orders';
 import { awaitingReview } from '../data/orders';
 import { ADMIN_BASE } from './lib/paths';
+import { DetailHeaderContext, type DetailHeader } from './DetailPage';
 import { BOTTOM_BAR, HOME, MORE, NAV_GROUPS, navItem, type NavItem } from './nav';
 
 /** The current section from the URL ('' = Início). */
@@ -191,24 +192,49 @@ export function AdminShell() {
   useNewReceiptNotice();
   const openOrders = useOpenOrders();
   useExternalUpdateNotice();
-  const home = section === HOME;
+  const [detailState, setDetailState] = useState<DetailHeader | null>(null);
+  // Only one detail shows at a time; keep the setter stable and skip identical updates.
+  const setDetail = useCallback((next: DetailHeader | null) => {
+    setDetailState((prev) => (prev?.title === next?.title && prev?.backTo === next?.backTo && prev?.backLabel === next?.backLabel ? prev : next));
+  }, []);
+  const detail = detailState;
+  const home = section === HOME && !detail;
 
   return (
+    <DetailHeaderContext.Provider value={setDetail}>
     <div className="admin-ui min-h-dvh bg-ivory">
       <Sidebar openOrders={openOrders} />
       <div className="lg:pl-[248px]">
         {home && <h1 className="sr-only">{section.label}</h1>}
         <header className={cx('sticky top-0 z-20 border-b border-line/80 bg-ivory/92 backdrop-blur supports-[backdrop-filter]:bg-ivory/80', home && 'border-transparent bg-transparent lg:hidden')}>
           <div className="mx-auto flex h-16 max-w-[1080px] items-center gap-3 px-4 lg:h-[76px] lg:px-8">
-            <Link to={ADMIN_BASE} className={cx('shrink-0 lg:hidden', home && 'hidden')} aria-label="Início do painel">
-              <img src={asset('brand/eka-monogram-copper.svg')} alt="" width={34} height={34} className="size-[34px]" />
-            </Link>
+            {detail ? (
+              // A detail page: "Voltar" always leads to the parent list.
+              <Link
+                to={detail.backTo}
+                className="-ml-2 inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-line bg-white text-copper shadow-[0_2px_8px_rgb(48_33_28/0.06)] transition-colors hover:border-copper"
+                aria-label={`Voltar para ${detail.backLabel}`}
+                title={`Voltar para ${detail.backLabel}`}
+              >
+                <ArrowLeft size={20} strokeWidth={1.75} aria-hidden="true" />
+              </Link>
+            ) : (
+              <Link to={ADMIN_BASE} className={cx('shrink-0 lg:hidden', home && 'hidden')} aria-label="Início do painel">
+                <img src={asset('brand/eka-monogram-copper.svg')} alt="" width={34} height={34} className="size-[34px]" />
+              </Link>
+            )}
             <div className="min-w-0 flex-1">
-              <p className="eyebrow hidden text-[0.625rem] tracking-[0.18em] text-ink-muted lg:block">{NAV_GROUPS.find((g) => g.items.includes(section))?.title ?? 'Painel da loja'}</p>
-              {!home && <h1 className="truncate font-display text-[1.75rem] leading-tight font-semibold lg:text-[2rem]">{section.label}</h1>}
+              {detail ? (
+                <Link to={detail.backTo} className="eyebrow block w-fit text-[0.625rem] tracking-[0.18em] text-ink-muted hover:text-copper">
+                  {detail.backLabel}
+                </Link>
+              ) : (
+                <p className="eyebrow hidden text-[0.625rem] tracking-[0.18em] text-ink-muted lg:block">{NAV_GROUPS.find((g) => g.items.includes(section))?.title ?? 'Painel da loja'}</p>
+              )}
+              {!home && <h1 className={cx('truncate font-display leading-tight font-semibold', detail ? 'text-[1.5rem] lg:text-[1.875rem]' : 'text-[1.75rem] lg:text-[2rem]')}>{detail ? detail.title : section.label}</h1>}
               {home && <img src={asset('brand/eka-lockup-copper.svg')} alt="" width={84} height={28} className="h-7 w-auto lg:hidden" />}
             </div>
-            {current === 'produtos' && (
+            {current === 'produtos' && !detail && (
               <ButtonLink to={`${ADMIN_BASE}/produtos/nova`} size="sm" className="shrink-0">
                 <Plus size={18} strokeWidth={1.75} /> Nova peça
               </ButtonLink>
@@ -223,6 +249,7 @@ export function AdminShell() {
       </div>
       <BottomBar current={current} openOrders={openOrders} />
     </div>
+    </DetailHeaderContext.Provider>
   );
 }
 

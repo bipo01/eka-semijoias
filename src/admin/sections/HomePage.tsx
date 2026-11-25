@@ -86,7 +86,7 @@ function useTodos(resellers: ResellersState): { todos: Todo[]; loading: boolean;
     if (resellers.status === 'ready') {
       for (const r of resellers.data.resellers) {
         const first = r.reseller.name.split(/\s+/)[0] ?? r.reseller.name;
-        const open = `revendedoras?r=${encodeURIComponent(r.reseller.id)}`;
+        const open = `revendedoras/${encodeURIComponent(r.reseller.id)}`;
         if (r.reportedCents > 0)
           todos.push({ key: `rep-${r.reseller.id}`, to: a(open), title: `${first} avisou que fez o repasse`, detail: 'confira e marque', value: formatBRL(r.reportedCents), tone: 'success', icon: <HandCoins {...ICON} />, rank: 0 });
         const unpaid = r.unpaidCents - r.reportedCents;

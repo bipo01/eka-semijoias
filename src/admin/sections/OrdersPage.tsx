@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Search, ShoppingBag, Store } from 'lucide-react';
-import { Button } from '../../components/ui/Button';
+import { Button, ButtonLink } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { Chip } from '../../components/ui/Misc';
-import { Sheet } from '../../components/ui/Sheet';
 import { cx } from '../../components/ui/cx';
 import { sizeLabel } from '../../data/catalog';
 import { awaitingReview, canTransition, EDITABLE_ITEMS, HOLDS_STOCK, NEXT_STEP, STATUS_LABEL, UNDO_STEP, type Order, type OrderStatus } from '../../data/orders';
@@ -18,7 +17,10 @@ import { FINISH_LABEL } from '../../data/schema';
 import { formatBRL } from '../../lib/format';
 import { toast } from '../../store/ui';
 import { EmptyState } from '../FormBits';
-import { CARD, Pill, type Tone } from '../ui';
+import { CARD, Empty, Pill, type Tone } from '../ui';
+import { DetailPage, useListPlace } from '../DetailPage';
+import { Loader } from '../Loader';
+import { adminPath } from '../lib/paths';
 import { formatDateTime } from '../lib/contact';
 import { useCustomer, type Customer } from '../lib/customers';
 import { anonymizeOrder, changeOrderStatus, deleteOrder, useOrders } from '../lib/orders';
@@ -327,7 +329,11 @@ export function OrdersPage() {
   }, [params, setParams]);
   const [autoNew] = useState(params.get('novo') === '1');
   const [query, setQuery] = useState('');
-  const [openId, setOpenId] = useState<string | null>(null);
+  // /admin/pedidos/<número> opens an order as a page; the list stays mounted (hidden) behind it.
+  const navigate = useNavigate();
+  const { orderNumber } = useParams();
+  const openNumber = (order: Order) => navigate(adminPath('pedidos', String(order.number)));
+  useListPlace(!!orderNumber);
   // "Compra registrada" waiting to open over its order: a confirmed manual sale or an order just paid,
   // for a customer with WhatsApp. Rendered after the order sheet, so it opens on top of it.
   const [purchase, setPurchase] = useState<{ orderId: string; target: PurchaseTarget } | null>(null);
@@ -335,16 +341,18 @@ export function OrdersPage() {
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, orders.filter((o) => matchesFilter(o, f.id)).length])) as Record<Filter, number>, [orders]);
   const q = query.trim().toLowerCase().replace(/^n[ºo°]?\s*/, '');
   const visible = orders.filter((o) => matchesFilter(o, filter) && (!q || String(o.number).includes(q) || o.customer.name.toLowerCase().includes(q) || o.customer.city.toLowerCase().includes(q)));
-  // A notice on the phone opens /admin/pedidos?pedido=<número>: that order opens on arrival.
+  // Phone notices open /admin/pedidos?pedido=<número> (older links too): same page as /admin/pedidos/<número>.
   const linked = params.get('pedido');
-  const open = orders.find((o) => o.id === openId) ?? (linked ? (orders.find((o) => String(o.number) === linked) ?? null) : null);
+  useEffect(() => {
+    if (linked) navigate(adminPath('pedidos', linked), { replace: true });
+  }, [linked, navigate]);
+  const open = orderNumber ? (orders.find((o) => String(o.number) === orderNumber) ?? null) : null;
   const close = () => {
-    setOpenId(null);
     setPurchase(null);
-    if (linked) setParams((p) => { p.delete('pedido'); return p; }, { replace: true });
+    navigate(adminPath('pedidos'));
   };
 
-  if (state.status === 'loading') return <p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando pedidos…</p>;
+  if (state.status === 'loading') return <Loader label={orderNumber ? `Carregando o pedido nº ${orderNumber}…` : 'Carregando pedidos…'} />;
   if (state.status === 'error') {
     return (
       <div role="alert" className="flex flex-col items-center gap-3 py-10 text-center">
@@ -358,6 +366,18 @@ export function OrdersPage() {
 
   return (
     <>
+      {orderNumber && (
+        <DetailPage header={{ title: `Pedido nº ${orderNumber}`, backTo: adminPath('pedidos'), backLabel: 'Pedidos' }}>
+          {open ? (
+            <OrderDetail key={open.id} order={open} onClose={close} onPurchase={(target) => setPurchase({ orderId: open.id, target })} />
+          ) : (
+            <Empty title="Pedido não encontrado" action={<ButtonLink to={adminPath('pedidos')} variant="secondary">Ver pedidos</ButtonLink>}>
+              Ele pode ter sido excluído.
+            </Empty>
+          )}
+        </DetailPage>
+      )}
+      <div hidden={!!orderNumber}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-sm text-ink-muted">
           {counts.ativos ? `${counts.ativos} ${counts.ativos === 1 ? 'pedido em andamento' : 'pedidos em andamento'}` : 'Nenhum pedido em andamento'}
@@ -369,7 +389,7 @@ export function OrdersPage() {
             setPurchase(target ? { orderId: order.id, target } : null);
             setFilter('ativos');
             setQuery('');
-            setOpenId(order.id);
+            openNumber(order);
           }}
         />
       </div>
@@ -401,7 +421,7 @@ export function OrdersPage() {
             <li key={order.id}>
               <button
                 type="button"
-                onClick={() => setOpenId(order.id)}
+                onClick={() => openNumber(order)}
                 className={cx(CARD, 'flex w-full items-center gap-3 p-4 text-left transition-[border-color,box-shadow] hover:border-copper hover:shadow-[0_6px_18px_-8px_rgb(48_33_28/0.25)] focus-visible:outline-2 focus-visible:outline-copper')}
               >
                 <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-champagne text-copper">
@@ -436,9 +456,7 @@ export function OrdersPage() {
         </EmptyState>
       )}
 
-      <Sheet open={!!open} onClose={close} title={open ? `Pedido nº ${open.number}` : 'Pedido'} side="right">
-        {open && <OrderDetail key={open.id} order={open} onClose={close} onPurchase={(target) => setPurchase({ orderId: open.id, target })} />}
-      </Sheet>
+      </div>
       {open && purchase?.orderId === open.id && (
         <PurchaseMessageSheet order={open} phone={purchase.target.phone} firstName={purchase.target.firstName} open onClose={() => setPurchase(null)} />
       )}

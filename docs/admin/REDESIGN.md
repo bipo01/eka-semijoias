@@ -24,3 +24,13 @@ Greeting and date → month sales hero (photo per ratio: 2:1 phone, 3:1 wide) �
 
 ## Revendedoras
 Network summary (ativas, em maletas, vendido no ciclo, a receber) → tabs Revendedoras · Fichas · Programa → cards (avatar, status, na maleta / vendido, pieces progress, due pill, repasse notes). A reseller opens with tabs Resumo · Maleta · Vendas · Acertos · Dados; Resumo spells out the commission: total sold − commission **of the reseller** = what ÉKA receives. Opens on Acertos while a repasse waits. Links: `?aba=fichas|programa`, `?r=<id>`, `?nova=1`.
+
+## Detail pages, never layers (2026-11-25, second pass)
+- Every detail is a route rendered inside the panel (`src/admin/DetailPage.tsx`): the sidebar/bottom bar stay, the header turns into "← <parent>" + the title. Routes: `/admin/produtos/<id>`, `/admin/pedidos/<número>`, `/admin/clientes/<id>`, `/admin/revendedoras/<id>`, `/admin/estoque/<peça>`, `/admin/mensagens/<tipo>`, `/admin/site/<seção>`. Old query links (`?pedido=`, `?cliente=`, `?r=`, `?secao=`) redirect to them, so phone notices keep working.
+- The list stays mounted (hidden) behind its detail, so filters and search survive; `useListPlace` brings the scroll back.
+- Forms with unsaved edits (piece, site section) ask before leaving through the sidebar or "Voltar" (`useBlocker`).
+- Actions stay sheets (Novo pedido, Cobrar, Maleta, Acerto, Nova cliente…): they are steps, not places.
+- Sub-tabs never move the page: Revendedoras keeps the network summary and "Nova revendedora" on every tab, a skeleton holds the summary's place while loading, and `scrollbar-gutter: stable` keeps every page at the same x whether it scrolls or not.
+
+## Loader
+`src/components/ui/Loader.tsx` (CSS in `base.css`, `.eka-loader-*`), designed in ChatGPT as inline SVG: **brilho** (a gem draws itself, a sparkle orbits; default), **colar** (a pendant swings; people: resellers, customers, the reseller panel), **pérolas** (three pearls breathe; compact spots). Always above a short "Carregando …" text; fades in after 180 ms so quick loads never flash; reduced motion = a gentle pulse. Used for every loading state of the panel, the reseller panel and the store's catalog gate.

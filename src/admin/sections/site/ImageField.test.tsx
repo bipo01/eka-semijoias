@@ -33,7 +33,7 @@ describe('site images', { timeout: 20_000 }, () => {
     start();
     renderAdmin('/admin/site?secao=inicio');
     // The first render here also loads the admin chunk (slow on a busy machine).
-    const dialog = await screen.findByRole('dialog', { name: 'Página inicial' }, { timeout: 5000 });
+    const dialog = await screen.findByRole('region', { name: 'Página inicial' }, { timeout: 5000 });
     const band = within(dialog).getByRole('group', { name: 'Foto da faixa' });
     expect(within(band).queryByRole('button', { name: /Remover/ })).not.toBeInTheDocument(); // the band always has a photo
     await userEvent.upload(within(band).getByLabelText(/Enviar outra foto/), file());
@@ -49,7 +49,7 @@ describe('site images', { timeout: 20_000 }, () => {
   it('uses the product profile for the Sobre photo, picks product photos and removes where allowed', async () => {
     const catalog = start();
     renderAdmin('/admin/site?secao=sobre');
-    const dialog = await screen.findByRole('dialog', { name: 'Sobre' });
+    const dialog = await screen.findByRole('region', { name: 'Sobre' });
     const photo = within(dialog).getByRole('group', { name: 'Foto ao lado da história' });
     await userEvent.upload(within(photo).getByLabelText(/Enviar foto/), file());
     expect(processImage).toHaveBeenLastCalledWith(expect.any(File), { profile: 'product' });

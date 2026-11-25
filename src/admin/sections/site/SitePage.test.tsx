@@ -18,7 +18,10 @@ function start(content?: ReturnType<typeof createCatalogSeed>['content']) {
   useCatalog.setState({ data: catalog, version: 1, status: 'ready' });
 }
 
-const editor = (name: string) => screen.findByRole('dialog', { name });
+// The page region comes first; a list inside may carry the same name.
+const editor = async (name: string) => (await screen.findAllByRole('region', { name }))[0]!;
+/** The editor is a page of the panel: "Voltar" leads back to the list. */
+const back = () => screen.getByRole('link', { name: 'Voltar para Site' });
 const sentChanges = () => mockServer.requests.filter((r) => r.path === '/api/admin/changes').flatMap((r) => (r.body as { changes: Change[] }).changes);
 
 describe('Painel → Site', { timeout: 20_000 }, () => {
@@ -35,7 +38,7 @@ describe('Painel → Site', { timeout: 20_000 }, () => {
     expect(within(sobre).getByText('Texto original')).toBeInTheDocument();
     expect(within(sobre).getByRole('link', { name: /Ver no site/ })).toHaveAttribute('href', '/sobre');
     expect(screen.getByText(/Nenhum depoimento no site ainda/)).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Sobre' })).not.toBeInTheDocument();
 
     await userEvent.click(within(sobre).getByRole('button', { name: 'Editar Sobre' }));
     expect(await editor('Sobre')).toBeInTheDocument();
@@ -48,10 +51,12 @@ describe('Painel → Site', { timeout: 20_000 }, () => {
     expect(within(dialog).getByText('Texto original')).toBeInTheDocument();
     // "Remover" exists only where the site works without a photo; the built-in Sobre has none.
     expect(within(dialog).getByText('Sem foto, aparece o emblema da ÉKA.')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
-    await waitFor(() => expect(router.state.location.search).toBe(''));
-    await router.navigate('/admin/site?secao=loja');
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/admin/site/sobre');
+    await userEvent.click(back());
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/site'));
+    await router.navigate('/admin/site/loja');
+    expect(screen.queryByRole('region', { name: 'Loja' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Páginas' })).toBeVisible();
   });
 
   it('saves a section with the moment of the save, only after the server confirms, and restores the original', async () => {
@@ -131,13 +136,13 @@ describe('Painel → Site', { timeout: 20_000 }, () => {
     renderAdmin('/admin/site?secao=contato');
     const dialog = await editor('Contato');
     await userEvent.type(within(dialog).getByRole('textbox', { name: /Título da mensagem rápida/ }), '!');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
+    await userEvent.click(back());
     const confirm = await screen.findByRole('dialog', { name: 'Descartar alterações?' });
     await userEvent.click(within(confirm).getByRole('button', { name: 'Continuar editando' }));
-    expect(screen.getByRole('dialog', { name: 'Contato' })).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
+    expect(screen.getByRole('region', { name: 'Contato' })).toBeInTheDocument();
+    await userEvent.click(back());
     await userEvent.click(within(await screen.findByRole('dialog', { name: 'Descartar alterações?' })).getByRole('button', { name: 'Descartar' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Contato' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Contato' })).not.toBeInTheDocument());
     expect(sentChanges()).toHaveLength(0);
   });
 
@@ -189,8 +194,8 @@ describe('Depoimentos', { timeout: 20_000 }, () => {
 
     // No "hidden" state: the public catalog would still carry it. Leaving the site = deleting.
     expect(within(dialog).queryByRole('switch', { name: /Mostrar no site/ })).not.toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Depoimentos' })).not.toBeInTheDocument());
+    await userEvent.click(back());
+    await waitFor(() => expect(screen.queryAllByRole('region', { name: 'Depoimentos' })).toHaveLength(0));
     expect(screen.getByText('depoimento no site', { exact: false })).toBeInTheDocument();
   });
 });

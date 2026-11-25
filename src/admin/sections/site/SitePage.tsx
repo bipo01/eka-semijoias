@@ -1,4 +1,7 @@
-import { useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useListPlace } from '../../DetailPage';
+import { adminPath } from '../../lib/paths';
 import { ExternalLink, MessageSquareQuote, Pencil } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { cx } from '../../../components/ui/cx';
@@ -62,32 +65,27 @@ function SectionCard({ id, content, onEdit }: { id: SiteSectionId; content: Site
   );
 }
 
-/** Painel → Site: every text and image visitors read, grouped by page. `?secao=<id>` opens an editor. */
+/** Painel → Site: every text and image visitors read, grouped by page. `/admin/site/<seção>` opens an editor. */
 export function SitePage() {
   const content = useCatalog((s) => s.data.content);
-  const [params, setParams] = useSearchParams();
-  const requested = params.get('secao');
-  const editing = isSiteSectionId(requested) ? requested : null;
+  // /admin/site/<seção> opens its editor as a page (the list stays mounted behind it); ?secao=<id> too.
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const { sectionId } = useParams();
+  const editing: SiteSectionId | null = sectionId && isSiteSectionId(sectionId) ? sectionId : null;
+  const legacy = params.get('secao');
+  useEffect(() => {
+    if (isSiteSectionId(legacy)) navigate(adminPath('site', legacy), { replace: true });
+  }, [legacy, navigate]);
+  useListPlace(!!editing);
 
-  const open = (id: SiteSectionId) =>
-    setParams(
-      (p) => {
-        p.set('secao', id);
-        return p;
-      },
-      { replace: true },
-    );
-  const close = () =>
-    setParams(
-      (p) => {
-        p.delete('secao');
-        return p;
-      },
-      { replace: true },
-    );
+  const open = (id: SiteSectionId) => navigate(adminPath('site', id));
+  const close = () => navigate(adminPath('site'));
 
   return (
-    <div className="flex flex-col gap-8">
+    <>
+    {editing && <SectionEditor key={editing} id={editing} onClose={close} />}
+    <div hidden={!!editing} className="flex flex-col gap-8">
       <p className="text-sm text-ink-muted">
         Textos e fotos do site. Ao salvar, muda na hora para todo mundo, e dá para voltar ao original.
       </p>
@@ -106,7 +104,7 @@ export function SitePage() {
           </ul>
         </section>
       ))}
-      {editing && <SectionEditor key={editing} id={editing} onClose={close} />}
     </div>
+    </>
   );
 }

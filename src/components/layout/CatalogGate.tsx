@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Button } from '../ui/Button';
+import { Loader } from '../ui/Loader';
 import { useCatalog } from '../../store/catalog';
 
 /**
@@ -13,9 +14,8 @@ export function CatalogGate({ children }: { children: ReactNode }) {
   if (status === 'ready') return <>{children}</>;
   if (status === 'loading') {
     return (
-      <div className="flex min-h-[60dvh] items-center justify-center" aria-busy="true">
-        <span className="sr-only">Carregando as peças…</span>
-        <span aria-hidden="true" className="size-8 animate-spin rounded-full border-2 border-line border-t-copper motion-reduce:animate-none" />
+      <div className="flex min-h-[60dvh] items-center justify-center">
+        <Loader label="Carregando as peças…" />
       </div>
     );
   }

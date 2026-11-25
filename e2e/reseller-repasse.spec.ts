@@ -100,7 +100,7 @@ test('repasse: she sees the amount and the store Pix, says she paid, the owner c
   const row = page.getByRole('button', { name: new RegExp(name) }).first();
   await expect(row).toContainText('Avisou que fez o repasse');
   await row.click();
-  const detail = page.getByRole('dialog', { name });
+  const detail = page.getByRole('region', { name });
   await expect(detail.getByText(/Ela avisou que pagou em/)).toBeVisible();
   await detail.getByRole('button', { name: 'Desfazer aviso' }).click();
   await expect(page.getByText('Aviso desfeito.', { exact: false })).toBeVisible();
@@ -110,9 +110,8 @@ test('repasse: she sees the amount and the store Pix, says she paid, the owner c
   // …she reports again, and the owner confirms the money.
   await her.getByRole('region', { name: 'Repasse do acerto' }).getByRole('button', { name: 'Já fiz o repasse' }).click();
   await expect(her.getByRole('region', { name: 'Repasse do acerto' })).toContainText('Você avisou que pagou');
-  await page.reload();
-  await page.getByRole('button', { name: new RegExp(name) }).first().click();
-  const sheet = page.getByRole('dialog', { name });
+  await page.reload(); // her page (/admin/revendedoras/<id>) opens again by itself
+  const sheet = page.getByRole('region', { name });
   await expect(sheet.getByText(/Ela avisou que pagou em/)).toBeVisible();
   await sheet.getByRole('switch', { name: 'Repasse recebido' }).click();
   await expect(sheet.getByText(/ela avisou em/)).toBeVisible();

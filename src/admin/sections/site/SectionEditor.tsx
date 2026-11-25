@@ -3,13 +3,14 @@ import { useBlocker } from 'react-router-dom';
 import { ExternalLink, RotateCcw } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
-import { Sheet } from '../../../components/ui/Sheet';
 import { jsonEqual } from '../../../data/changes';
 import { SECTION_LABEL, type Sections } from '../../../data/content';
 import { withBuiltIn } from '../../../content/defaults';
 import { useContentFacts, useDefaultSection } from '../../../hooks/useSection';
 import { useCatalog } from '../../../store/catalog';
 import { formatDateTime } from '../../lib/contact';
+import { adminPath } from '../../lib/paths';
+import { DetailPage } from '../../DetailPage';
 import { save } from '../../lib/persist';
 import { EditorProvider, type EditorApi } from './fields';
 import { SECTION_FORMS } from './SectionForms';
@@ -41,7 +42,7 @@ function focusFirstError(root: HTMLElement | null, order: string[]) {
 }
 
 /**
- * Editor of one site section in a full-height sheet. The draft starts from
+ * Editor of one site section, as a page of the panel (/admin/site/<seção>). The draft starts from
  * the saved section or the built-in text; "Salvar" validates with the
  * section's schema, saves through the catalog commit and shows success only
  * after the server confirmed; failures keep the draft and the message.
@@ -113,12 +114,6 @@ export function SectionEditor({ id, onClose }: { id: SiteSectionId; onClose: () 
     onClose();
   }
 
-  function requestClose() {
-    if (busy) return;
-    if (dirty) setConfirmDiscard(true);
-    else close();
-  }
-
   function submit(e?: FormEvent) {
     e?.preventDefault();
     if (busy || !dirty) return;
@@ -177,12 +172,8 @@ export function SectionEditor({ id, onClose }: { id: SiteSectionId; onClose: () 
   const Form = SECTION_FORMS[id];
 
   return (
-    <Sheet
-      open
-      side="right"
-      className="md:w-[min(100vw,640px)]!"
-      title={label}
-      onClose={requestClose}
+    <DetailPage
+      header={{ title: label, backTo: adminPath('site'), backLabel: 'Site' }}
       footer={
         <div className="flex flex-col gap-2">
           {serverError && (
@@ -270,6 +261,6 @@ export function SectionEditor({ id, onClose }: { id: SiteSectionId; onClose: () 
       >
         As alterações de “{label}” ainda não foram salvas.
       </ConfirmDialog>
-    </Sheet>
+    </DetailPage>
   );
 }

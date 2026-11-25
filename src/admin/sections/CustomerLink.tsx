@@ -83,7 +83,7 @@ export function OrderCustomerRow({ order }: { order: Order }) {
       <dd className="flex min-w-0 flex-wrap gap-x-4">
         {order.customerId ? (
           <>
-            <Link to={`${adminPath('clientes')}?cliente=${encodeURIComponent(order.customerId)}`} className={`${rowAction} min-w-0 break-words text-copper`}>
+            <Link to={adminPath('clientes', encodeURIComponent(order.customerId))} className={`${rowAction} min-w-0 break-words text-copper`}>
               {customer ? customer.name : 'Abrir a ficha da cliente'}
             </Link>
             <button type="button" disabled={busy} className={`${rowAction} text-ink-muted hover:text-ink`} onClick={() => void unlink()}>

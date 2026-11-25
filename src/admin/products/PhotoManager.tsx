@@ -156,7 +156,7 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
 
   return (
     <div className="flex flex-col gap-3">
-      <ul className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 py-1" aria-label="Fotos da peça">
+      <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1 lg:mx-0 lg:px-0" aria-label="Fotos da peça">
         {draft.images.map((img, i) => {
           const hasError = !!errors[`alt:${img.id}`];
           return (

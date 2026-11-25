@@ -17,6 +17,7 @@ import { HomePage } from './sections/HomePage';
 import { ADMIN_BASE } from './lib/paths';
 import { fetchSession, logout, SESSION_LOST_EVENT } from './lib/session';
 import { PinGate } from './PinGate';
+import { Loader } from './Loader';
 import { ProductsPage } from './products/ProductsPage';
 import { ProductFormRoute } from './products/ProductFormRoute';
 import { CategoriesPage } from './sections/CategoriesPage';
@@ -83,7 +84,11 @@ export default function AdminApp() {
 
   let content;
   if (gate.state === 'checking') {
-    content = <div className="min-h-dvh bg-ivory" aria-busy="true" />;
+    content = (
+      <main className="flex min-h-dvh items-center justify-center bg-ivory">
+        <Loader label="Abrindo o painel…" />
+      </main>
+    );
   } else if (gate.state === 'error') {
     content = (
       <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-ivory px-6 text-center">
@@ -124,17 +129,17 @@ export default function AdminApp() {
         <Route element={<AdminShell />}>
           <Route index element={<HomePage />} />
           <Route path="mais" element={<MorePage />} />
-          <Route path="pedidos" element={<OrdersPage />} />
-          <Route path="clientes" element={<CustomersPage />} />
-          <Route path="estoque" element={<StockPage />} />
+          <Route path="pedidos/:orderNumber?" element={<OrdersPage />} />
+          <Route path="clientes/:customerId?" element={<CustomersPage />} />
+          <Route path="estoque/:productId?" element={<StockPage />} />
           <Route path="relatorio" element={<ReportPage />} />
-          <Route path="mensagens" element={<MessagesPage />} />
-          <Route path="site" element={<SitePage />} />
+          <Route path="mensagens/:messageType?" element={<MessagesPage />} />
+          <Route path="site/:sectionId?" element={<SitePage />} />
           <Route path="produtos" element={<ProductsPage />}>
             <Route path=":productId" element={<ProductFormRoute />} />
           </Route>
           <Route path="categorias" element={<CategoriesPage />} />
-          <Route path="revendedoras" element={<ResellersPage />} />
+          <Route path="revendedoras/:resellerId?" element={<ResellersPage />} />
           <Route path="configuracoes" element={<SettingsPage />} />
           <Route path="backup" element={<BackupPage />} />
           <Route path="*" element={<Navigate to={ADMIN_BASE} replace />} />

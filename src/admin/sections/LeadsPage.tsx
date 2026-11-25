@@ -17,6 +17,7 @@ import { downloadText, fileDate } from '../lib/download';
 import { useLeads } from '../lib/leads';
 import { useMessages } from '../../hooks/useMessages';
 import { firstNameOf } from '../../data/messages';
+import { Loader } from '../Loader';
 
 export const newestFirst = (leads: ResellerLead[]) => [...leads].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
@@ -87,7 +88,7 @@ export function LeadsPage({ onEffectivate }: { onEffectivate?: (lead: ResellerLe
   }
 
   if (state.status === 'loading') {
-    return <p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando cadastros…</p>;
+    return <Loader variant="perolas" label="Carregando cadastros…" />;
   }
   if (state.status === 'error') {
     return (

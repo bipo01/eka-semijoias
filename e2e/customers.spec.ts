@@ -40,10 +40,10 @@ test('customers: register a customer, sell to her and open "Compra registrada" w
   await expect(page.getByText('Cliente cadastrada.', { exact: true })).toBeVisible();
 
   // Her record opens; the search finds her without accents or by number.
-  const record = page.getByRole('dialog', { name });
+  const record = page.getByRole('region', { name });
   await expect(record.getByText('Várzea Grande/MT')).toBeVisible();
   await expect(record.getByRole('link', { name: 'Conversar no WhatsApp' })).toHaveAttribute('href', new RegExp(`^https://wa\\.me/55${digits}`));
-  await record.getByRole('button', { name: 'Fechar', exact: true }).click();
+  await page.getByRole('link', { name: 'Voltar para Clientes' }).click();
   await page.getByRole('searchbox', { name: 'Buscar cliente' }).fill(digits.slice(-6));
   await expect(page.getByRole('button', { name: new RegExp(name) })).toBeVisible();
 
@@ -73,11 +73,13 @@ test('customers: register a customer, sell to her and open "Compra registrada" w
   await purchase.getByRole('button', { name: 'Fechar', exact: true }).click();
 
   // The order shows her record (the message is in "Enviar mensagem" too); her record lists the purchase.
-  const detail = page.getByRole('dialog', { name: `Pedido nº ${number}` });
+  const detail = page.getByRole('region', { name: `Pedido nº ${number}` });
   await expect(detail.getByText(name).first()).toBeVisible();
   await detail.getByRole('link', { name }).click();
-  await expect(page.getByRole('heading', { name: 'Clientes', level: 1 })).toBeVisible();
-  const herRecord = page.getByRole('dialog', { name });
+  // Her record is a page of Clientes: her name on top, "Voltar" to the list.
+  await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Voltar para Clientes' })).toBeVisible();
+  const herRecord = page.getByRole('region', { name });
   await expect(herRecord.getByRole('link', { name: new RegExp(`nº ${number}`) })).toBeVisible();
   await expect(herRecord.getByRole('definition').filter({ hasText: /^1$/ })).toBeVisible(); // Compras: 1
 });
@@ -106,7 +108,7 @@ test('customers: accessible and without horizontal overflow at 360px (list, reco
   await form.getByRole('textbox', { name: /^Instagram/ }).fill('helena.acessivel');
   await check('new customer');
   await form.getByRole('button', { name: 'Cadastrar cliente' }).click();
-  await expect(page.getByRole('dialog', { name: 'Helena Acessível de Sobrenome Comprido' }).getByRole('button', { name: 'Editar dados' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Helena Acessível de Sobrenome Comprido' }).getByRole('button', { name: 'Editar dados' })).toBeVisible();
   await page.waitForLoadState('networkidle');
   await check('record');
   await context.close();

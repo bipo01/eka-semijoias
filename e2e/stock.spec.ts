@@ -80,7 +80,7 @@ test('stock: register an entry and an exit, see the numbers, the public stock an
 
   // 5. The piece's own sheet shows where the units are; turning control off cleans up.
   await row.click();
-  const panel = page.getByRole('dialog', { name: product.name });
+  const panel = page.getByRole('region', { name: product.name });
   await expect(panel.getByRole('region', { name: 'Onde estão as peças' })).toContainText('3 em casa');
   await panel.getByRole('switch', { name: 'Controlar estoque desta peça' }).click();
   await panel.getByRole('button', { name: 'Salvar estoque' }).click();

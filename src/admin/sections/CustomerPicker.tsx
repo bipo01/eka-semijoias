@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { formatPhone } from '../lib/contact';
 import { matchesCustomer, useCustomers, type Customer } from '../lib/customers';
+import { Loader } from '../Loader';
 
 /*
  * Search among the registered customers (name, city or WhatsApp, accents
@@ -39,9 +40,7 @@ export function CustomerSearchList({ onPick, initialQuery = '', label = 'Buscar 
         />
       </div>
       {state.status === 'loading' || state.status === 'idle' ? (
-        <p className="py-3 text-sm text-ink-muted" aria-busy="true">
-          Carregando clientes…
-        </p>
+        <Loader variant="perolas" label="Carregando clientes…" size={44} className="py-4" />
       ) : state.status === 'error' ? (
         <p role="alert" className="py-3 text-sm text-danger">
           {state.message}{' '}

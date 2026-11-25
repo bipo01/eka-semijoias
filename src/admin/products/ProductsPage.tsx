@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useParams } from 'react-router-dom';
+import { useListPlace } from '../DetailPage';
 import { Search } from 'lucide-react';
 import { BareInput } from '../../components/ui/Field';
 import { Chip } from '../../components/ui/Misc';
@@ -26,6 +27,10 @@ export function ProductsPage() {
     [data.products, categoryId, categoryName, query],
   );
 
+  // A piece open (/produtos/<id>): the list stays mounted, hidden, so filters and scroll come back.
+  const detailOpen = !!useParams().productId;
+  useListPlace(detailOpen);
+
   function reorder(idsInNewOrder: string[]) {
     void save((d) => {
       const orders = reorderSubset(d.products, idsInNewOrder);
@@ -35,6 +40,7 @@ export function ProductsPage() {
 
   return (
     <>
+      <div hidden={detailOpen}>
       <div className="flex flex-col gap-3">
         <BareInput
           type="search"
@@ -69,6 +75,7 @@ export function ProductsPage() {
           {data.products.length ? 'Nenhuma peça encontrada com esses filtros.' : 'Nenhuma peça cadastrada ainda. Toque em “Nova peça” para começar.'}
         </p>
       )}
+      </div>
 
       <Outlet />
     </>

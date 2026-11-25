@@ -27,7 +27,7 @@ async function openEditor() {
   useCatalog.setState({ data: catalog, version: 1, status: 'ready' });
   renderAdmin('/admin/site?secao=inicio');
   // The first render also loads the admin chunk (slow on a busy machine).
-  const dialog = await screen.findByRole('dialog', { name: 'Página inicial' }, { timeout: 5000 });
+  const dialog = await screen.findByRole('region', { name: 'Página inicial' }, { timeout: 5000 });
   const list = within(dialog).getByRole('region', { name: 'Fotos do topo' });
   return { dialog, list, slide: (i: number) => within(list).getAllByRole('listitem')[i]! };
 }

@@ -109,6 +109,76 @@ Registrado em 23/11/2026. **Prioridade: depois dos itens 1 a 3.**
 3. **Dica na tela para fotografar:** fundo liso, luz difusa, sem flash, peça inteira no quadro. Melhora muito o recorte.
 4. O modelo carrega só quando ela toca em "Padronizar" (lazy), com barra de progresso no primeiro download e aviso para usar o Wi-Fi.
 
+## 6. Preço de custo e lucro
+
+Registrado em 25/11/2026. **Fica para depois** (decisão de 25/11/2026).
+
+**Objetivo:** a Érika informa quanto pagou em cada peça e vê no relatório o lucro e a margem, além do faturamento. Hoje cada peça só tem o preço de venda: o relatório mostra quanto ela vendeu, não quanto ganhou. O "lucro acumulado" do painel da revendedora é a comissão dela, não o lucro da loja.
+
+**Como fazer**
+- **Custo só no painel.** O catálogo (`/api/catalog`) é público, então o custo **não** pode ficar no produto. Ele fica numa tabela à parte, lida só por rotas do admin, como o estoque (`stock_levels`). Custo por peça, com a opção de um custo por acabamento quando ela precisar.
+- **Custo congelado na venda.** Ao entrar em confirmado/pago (e no pedido manual, e na venda da revendedora), cada linha do pedido guarda o custo daquele momento. Mudar o custo depois não altera o lucro das vendas antigas.
+- **Relatório:** lucro bruto e margem no total, por período, por peça e por categoria. Venda de revendedora: venda − comissão − custo. Frete e desconto entram na conta como estão no pedido.
+- **Peça sem custo cadastrado** aparece como "sem custo" e fica fora do cálculo, com o aviso de quantas vendas ficaram de fora. Nunca vira lucro de 100%.
+- **Backup e exportação:** o custo entra no backup do painel e no CSV do relatório; nunca no snapshot público, no WebSocket ou nos logs.
+- Formulário da peça: campo "Quanto você pagou" ao lado do preço, com a margem calculada na hora.
+
+## 7. Melhorias sugeridas (vender mais, fazer a cliente voltar, segurança)
+
+Registrado em 25/11/2026, depois de olhar o site como dona de loja, cliente e programador. Nenhuma foi pedida pela Érika ainda. Os itens 7.1, 7.2, 7.6 e 7.8 são rápidos e sem risco.
+
+### Vender mais
+
+**7.1 Guia de medida do aro.** A página do anel pede o aro, mas não ensina a descobrir. A cliente desiste ou erra e depois pede troca.
+- "Como descobrir meu aro" ao lado da escolha do tamanho (`src/pages/Product.tsx`), num `Sheet`: medir com uma linha ou tira de papel em volta do dedo, ou o diâmetro de um anel que ela já usa, com a tabela de conversão para a numeração brasileira.
+- Dicas: medir no fim do dia, dedo frio afina, junta larga pede o aro de cima.
+- Texto editável em Painel → Site; ilustração no estilo da marca (ChatGPT).
+
+**7.2 Aparecer no Google (busca e aba Shopping).** Hoje o Google só sabe que o site existe se alguém o encontrar por um link.
+- `sitemap.xml` gerado pelo Worker a partir do snapshot (página inicial, catálogo, categorias, cada peça visível), citado no `robots.txt`.
+- Dados de produto em JSON-LD (`schema.org/Product`: nome, foto, preço em BRL, disponível/esgotado) em cada página de peça, escritos pelo `serveDocument` como as tags de compartilhamento (`worker/seo.ts`).
+- Cadastrar o site no Google Search Console e no Google Merchant Center (listagens gratuitas na aba Shopping), com um feed de produtos (`/feed/google.xml`). O cadastro nas contas do Google é da Érika; o site só entrega os arquivos.
+
+**7.3 Catálogo no Instagram e no WhatsApp.** O mesmo feed de produtos alimenta o catálogo da Meta (Commerce Manager): as peças ficam marcáveis nos posts e stories e aparecem no catálogo do WhatsApp Business, cada uma com o link da página dela.
+- Feed `/feed/meta.csv` (ou XML) do snapshot, atualizado sozinho a cada mudança no painel. Só peças visíveis, com preço, foto principal e estoque.
+- Exige conta comercial no Instagram e no Facebook (decisão e cadastro da Érika).
+
+**7.4 Frete na sacola.** Hoje o frete é sempre combinado no WhatsApp.
+- Regras simples editáveis em Configurações: motoboy em Cuiabá (e Várzea Grande) com valor fixo, retirada, Correios para o resto do Brasil "a combinar" ou por faixa, frete grátis acima de um valor.
+- A sacola pergunta a cidade (ou o CEP) e mostra a estimativa; o pedido guarda o frete escolhido (o servidor recalcula, como já faz com o preço). A Érika ainda pode ajustar no pedido.
+- Cálculo exato dos Correios por API fica para depois (contrato e custo).
+
+**7.5 Cupom de desconto.** Hoje o desconto só existe na cobrança feita pela Érika.
+- Painel → Cupons: código, % ou valor fixo, validade, valor mínimo, limite de usos, um uso por cliente (por WhatsApp).
+- A sacola aceita o código; o servidor valida e aplica no `priceOrder`; o relatório mostra o desconto dado por cupom.
+- Serve para lançamento, campanha do Instagram e indicação de cliente.
+
+### Fazer a cliente voltar
+
+**7.6 Aniversariantes.** A ficha da cliente já guarda o aniversário (DD/MM), mas nada avisa a Érika.
+- "Aniversariantes da semana" no Início do painel (`sections/HomePage.tsx`, bloco "Precisa de você"), com a mensagem pronta no WhatsApp (novo tipo em `src/data/messages.ts`, com variações editáveis em Painel → Mensagens).
+- Opcional: aviso no celular no dia (Web Push).
+
+**7.7 Pós-venda.** Uns 10 dias depois de o pedido ir para "entregue", o painel lembra a Érika de pedir a opinião da cliente, com a mensagem pronta (e o pedido de autorização para usar como depoimento).
+- Alimenta os depoimentos (hoje vazios) e reforça a garantia e os cuidados com a peça.
+
+### Saber o que funciona
+
+**7.8 Números de visita.** Hoje ela não sabe quantas pessoas entram, quais peças olham nem quantas montam a sacola e desistem.
+- Cloudflare Web Analytics (grátis, sem cookies, sem aviso de LGPD): visitas, páginas e peças mais vistas, de onde vêm (Instagram, Google, WhatsApp). Liberar o script na CSP.
+- Depois, se quiser: no relatório, "olharam × colocaram na sacola × finalizaram" por peça, contado no próprio servidor, sem dado pessoal.
+- Atualizar a Política de privacidade (`privacidade` em `src/content/defaults.ts`) se algo novo for coletado.
+
+### Segurança do negócio
+
+**7.9 Backup automático.** Hoje o backup só existe quando ela baixa pelo painel, e o D1 volta no tempo só até 7 dias (plano Free).
+- Cron do Worker (semanal) exporta catálogo, pedidos, clientes, revenda e estoque para o R2 (exige ligar o R2; ver o topo do `AGENTS.md`), guardando as últimas N cópias.
+- O painel mostra "Último backup: há X dias" e permite baixar qualquer cópia. Dados pessoais: o backup segue a mesma regra de acesso (só admin) e as exclusões da LGPD valem também para as cópias antigas, que expiram.
+
+**7.10 Domínio próprio (.com.br).** O endereço `eka-semijoias.eka-semijoias.workers.dev` passa pouca confiança para quem vai pagar por Pix.
+- Registrar `ekasemijoias.com.br` (ou parecido) no Registro.br (cerca de R$ 40 por ano; compra e titularidade da Érika, de preferência com o CNPJ), apontar para o Worker na Cloudflare e redirecionar o endereço antigo.
+- Depois: refazer os links já compartilhados (bio do Instagram, mostruários das revendedoras), o webhook do Mercado Pago, o Search Console, e conferir no código tudo que cite o endereço antigo (CSP, `AGENTS.md`, página de redirecionamento do GitHub Pages).
+
 ## Ordem sugerida
 
 1. ~~Backend (pré-requisito de tudo).~~ Feito em 23/11/2026.

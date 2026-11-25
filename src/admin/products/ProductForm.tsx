@@ -5,7 +5,6 @@ import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { SelectField, TextArea, TextField } from '../../components/ui/Field';
 import { Chip } from '../../components/ui/Misc';
-import { Sheet } from '../../components/ui/Sheet';
 import { sortedCategories } from '../../data/catalog';
 import { TAGS, type Catalog, type Product, type Tag } from '../../data/schema';
 import { centsToInput, parseBRL } from '../../lib/format';
@@ -14,6 +13,7 @@ import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
 import { FormSection, SwitchRow } from '../FormBits';
 import { LinkField } from '../LinkField';
+import { DetailPage } from '../DetailPage';
 import { adminPath } from '../lib/paths';
 import { save } from '../lib/persist';
 import { PhotoManager } from './PhotoManager';
@@ -168,21 +168,18 @@ export function ProductForm({ source }: { source: FormSource }) {
   };
 
   return (
-    <Sheet
-      open
-      side="full"
-      headerClassName="mx-auto w-full max-w-[760px]"
-      title={draft.isNew ? (source.kind === 'copy' ? 'Nova peça (cópia)' : 'Nova peça') : 'Editar peça'}
-      onClose={() => navigate(adminPath('produtos'))}
+    <DetailPage
+      label={draft.isNew ? 'Nova peça' : 'Editar peça'}
+      header={{ title: draft.isNew ? (source.kind === 'copy' ? 'Nova peça (cópia)' : 'Nova peça') : draft.name.trim() || 'Editar peça', backTo: adminPath('produtos'), backLabel: 'Produtos' }}
       footer={
-        <div className="mx-auto flex max-w-[720px] items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           {draft.isNew ? (
             <Button variant="ghost" onClick={() => navigate(adminPath('produtos'))}>
               Cancelar
             </Button>
           ) : (
-            <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
-              <span className="text-danger">Excluir</span>
+            <Button variant="ghost-danger" onClick={() => setConfirmDelete(true)}>
+              Excluir
             </Button>
           )}
           <Button type="submit" form={formId} className="min-w-40 flex-1 sm:flex-none" disabled={saving != null} aria-busy={saving != null}>
@@ -195,7 +192,7 @@ export function ProductForm({ source }: { source: FormSource }) {
         id={formId}
         ref={formRef}
         noValidate
-        className="mx-auto flex max-w-[720px] flex-col gap-5 pt-1"
+        className="flex flex-col gap-5 pt-1"
         onSubmit={(e) => {
           e.preventDefault();
           submit('close');
@@ -371,6 +368,6 @@ export function ProductForm({ source }: { source: FormSource }) {
       >
         As alterações desta peça ainda não foram salvas.
       </ConfirmDialog>
-    </Sheet>
+    </DetailPage>
   );
 }

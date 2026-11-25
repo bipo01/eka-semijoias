@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ChevronRight, Minus, PackageX, Plus, Search } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { Img } from '../../components/ui/Img';
 import { Chip } from '../../components/ui/Misc';
-import { Sheet } from '../../components/ui/Sheet';
 import { cx } from '../../components/ui/cx';
 import { byOrder, sizeLabel } from '../../data/catalog';
 import { FINISH_LABEL, type Product } from '../../data/schema';
@@ -19,8 +18,11 @@ import { EmptyState, SwitchRow } from '../FormBits';
 import { QuantityStepper } from '../QuantityStepper';
 import { holdingKey, matchesFilter, productStock, saveStock, STOCK_FILTERS, stockOverview, useStockData, type MoveKind, type ProductStock, type StockData, type StockFilter } from '../lib/stock';
 import { MovementList, StockHistory } from './StockHistory';
-import { CARD } from '../ui';
+import { CARD, Empty } from '../ui';
+import { DetailPage, useListPlace } from '../DetailPage';
+import { adminPath } from '../lib/paths';
 import { StockMoveSheet, type MoveRequestState } from './StockMoveSheet';
+import { Loader } from '../Loader';
 
 /*
  * Estoque: overview (at home, with resellers, value), entries and exits,
@@ -239,7 +241,11 @@ export function StockPage() {
   const threshold = useCatalog((s) => s.data.settings.lowStockThreshold ?? DEFAULT_LOW_STOCK);
   const [filter, setFilter] = useState<StockFilter>('todas');
   const [query, setQuery] = useState('');
-  const [openId, setOpenId] = useState<string | null>(null);
+  // /admin/estoque/<peça> opens a piece's stock as a page (the list stays mounted behind it).
+  const navigate = useNavigate();
+  const openId = useParams().productId ?? null;
+  const setOpenId = (id: string | null) => navigate(id ? adminPath('estoque', encodeURIComponent(id)) : adminPath('estoque'));
+  useListPlace(!!openId);
   // Início's "Entrada no estoque" links here with ?entrada=1: the entry sheet opens with the page.
   const [params, setParams] = useSearchParams();
   const [move, setMove] = useState<MoveRequestState | null>(() => (params.get('entrada') === '1' ? { kind: 'entrada', productId: null, session: ++moveSession } : null));
@@ -268,9 +274,7 @@ export function StockPage() {
       );
     }
     return (
-      <p className="py-10 text-center text-ink-muted" aria-busy="true">
-        Carregando estoque…
-      </p>
+      <Loader label="Carregando estoque…" />
     );
   }
 
@@ -280,12 +284,21 @@ export function StockPage() {
   const visible = rows.filter(({ product, stock }) => matchesFilter(stock, filter) && (!q || normalize(`${product.name} ${product.variants.map((v) => v.sku ?? '').join(' ')}`).includes(q)));
   const open = products.find((p) => p.id === openId) ?? null;
   const startMove = (kind: MoveKind, productId: string | null = null) => {
-    setOpenId(null);
     setMove({ kind, productId, session: ++moveSession });
   };
 
   return (
     <>
+      {openId && (
+        <DetailPage header={{ title: open?.name ?? 'Peça', backTo: adminPath('estoque'), backLabel: 'Estoque' }}>
+          {open ? (
+            <ProductStockPanel product={open} data={data} onMove={(kind) => startMove(kind, open.id)} onClose={() => setOpenId(null)} />
+          ) : (
+            <Empty title="Peça não encontrada">Ela pode ter sido excluída.</Empty>
+          )}
+        </DetailPage>
+      )}
+      <div hidden={!!openId}>
       <section aria-label="Resumo do estoque" className="mb-4 flex flex-col gap-3">
         <div className={cx(CARD, 'grid grid-cols-3 divide-x divide-line')}>
           {[
@@ -380,9 +393,7 @@ export function StockPage() {
 
       <StockHistory movements={data.movements} products={products} />
 
-      <Sheet open={!!open} onClose={() => setOpenId(null)} title={open?.name ?? 'Estoque'} side="right">
-        {open && <ProductStockPanel product={open} data={data} onMove={(kind) => startMove(kind, open.id)} onClose={() => setOpenId(null)} />}
-      </Sheet>
+      </div>
       <StockMoveSheet request={move} data={data} onMotives={setMotives} onClose={() => setMove(null)} />
     </>
   );

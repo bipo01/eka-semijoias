@@ -90,7 +90,7 @@ describe('product form', { timeout: 20_000 }, () => {
     unlockSession();
     const user = userEvent.setup();
     renderAdmin('/admin/produtos/prod-p05');
-    const dialog = await screen.findByRole('dialog', { name: 'Editar peça' });
+    const dialog = await screen.findByRole('region', { name: 'Editar peça' });
     const photos = () => within(within(dialog).getByRole('list', { name: 'Fotos da peça' })).getAllByRole('button', { name: /^(Principal, foto 1|Foto \d+):/ });
     const before = photos().map((b) => b.getAttribute('aria-label'));
     expect(before.length).toBeGreaterThanOrEqual(2);
@@ -106,7 +106,7 @@ describe('product form', { timeout: 20_000 }, () => {
     unlockSession();
     const user = userEvent.setup();
     renderAdmin('/admin/produtos/prod-p02');
-    const dialog = await screen.findByRole('dialog', { name: 'Editar peça' });
+    const dialog = await screen.findByRole('region', { name: 'Editar peça' });
     const promo = within(dialog).getByLabelText(/Preço promocional/);
     await user.clear(promo);
     await user.type(promo, '200,00');
@@ -119,7 +119,7 @@ describe('product form', { timeout: 20_000 }, () => {
     unlockSession();
     const user = userEvent.setup();
     const { router } = renderAdmin('/admin/produtos/prod-p02');
-    const dialog = await screen.findByRole('dialog', { name: 'Editar peça' });
+    const dialog = await screen.findByRole('region', { name: 'Editar peça' });
     const name = within(dialog).getByLabelText(/Nome da peça/);
     await user.clear(name);
     await user.type(name, 'Argola Cravejada Grande');
@@ -138,7 +138,7 @@ describe('product form', { timeout: 20_000 }, () => {
     unlockSession();
     const user = userEvent.setup();
     renderAdmin('/admin/produtos/prod-p02');
-    const dialog = await screen.findByRole('dialog', { name: 'Editar peça' });
+    const dialog = await screen.findByRole('region', { name: 'Editar peça' });
     // Another device moves this product to the end of the list while the form is open.
     useCatalog.setState((s) => ({ data: { ...s.data, products: s.data.products.map((p) => (p.id === 'prod-p02' ? { ...p, order: 999 } : p)) } }));
     await user.type(within(dialog).getByLabelText(/Nome da peça/), ' Nova');
@@ -151,7 +151,7 @@ describe('product form', { timeout: 20_000 }, () => {
     unlockSession();
     const user = userEvent.setup();
     const { router } = renderAdmin('/admin/produtos/prod-p02');
-    const dialog = await screen.findByRole('dialog', { name: 'Editar peça' });
+    const dialog = await screen.findByRole('region', { name: 'Editar peça' });
     const name = within(dialog).getByLabelText(/Nome da peça/);
     await user.clear(name);
     await user.type(name, 'Argola Cravejada Média');

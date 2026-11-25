@@ -14,6 +14,7 @@ import { deleteCustomer, fetchCustomer, useCustomer, type Customer } from '../li
 import { adminPath } from '../lib/paths';
 import { CustomerForm } from './CustomerForm';
 import { StatusPill } from './OrdersPage';
+import { Loader } from '../Loader';
 
 /*
  * A customer's record: her data, what she bought (each purchase opens the
@@ -75,9 +76,7 @@ export function CustomerDetail({ id, onClose }: { id: string; onClose: () => voi
         </Button>
       </div>
     ) : (
-      <p className="py-10 text-center text-ink-muted" aria-busy="true">
-        Carregando…
-      </p>
+      <Loader variant="colar" label="Carregando a cliente…" />
     );
   }
 
@@ -158,9 +157,7 @@ export function CustomerDetail({ id, onClose }: { id: string; onClose: () => voi
           Pedidos
         </h3>
         {loaded.status === 'loading' ? (
-          <p className="text-sm text-ink-muted" aria-busy="true">
-            Carregando pedidos…
-          </p>
+          <Loader variant="perolas" label="Carregando pedidos…" size={44} className="py-4" />
         ) : loaded.status === 'error' ? (
           <p role="alert" className="text-sm text-danger">
             {loaded.message}{' '}

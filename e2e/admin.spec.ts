@@ -11,7 +11,9 @@ test.beforeEach(async ({ context }) => {
 async function unlock(page: Page) {
   await page.getByRole('group', { name: 'Teclado do PIN' }).waitFor();
   for (const d of PIN) await page.getByRole('button', { name: d, exact: true }).click();
-  await expect(page.getByRole('heading', { name: /^(Início|Produtos|Pedidos)$/, level: 1 })).toBeVisible();
+  // Any page of the panel: Início, a section, or a detail page (its h1 is the item's name).
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Teclado do PIN' })).toHaveCount(0);
 }
 
 async function axe(page: Page) {
@@ -130,7 +132,7 @@ test('admin: a new photo is uploaded on save and becomes the cover on the public
   // first one (already the main one, so no "Tornar principal"), a flaky failure on slow machines.
   await expect(photos.first()).toBeVisible();
   const before = await photos.count();
-  await page.locator('dialog input[type="file"]').first().setInputFiles('public/images/products/p02-argola-cravejada-960.webp');
+  await page.getByRole('region', { name: 'Editar peça' }).locator('input[type="file"]').first().setInputFiles('public/images/products/p02-argola-cravejada-960.webp');
   await expect(photos).toHaveCount(before + 1, { timeout: 15_000 });
   // A tap on the photo near its remove button (but outside it) picks the photo: it must never remove
   // it (the remove target once covered half the tile and deleted photos on the phone).
@@ -170,7 +172,7 @@ test('admin: stock, order and confirmation; the visitor page sells out live', as
   await unlock(page);
   await page.goto('/admin/estoque');
   await page.getByRole('button', { name: new RegExp(product.name) }).first().click();
-  const editor = page.getByRole('dialog', { name: product.name });
+  const editor = page.getByRole('region', { name: product.name });
   await editor.getByRole('switch', { name: 'Controlar estoque desta peça' }).click();
   await editor.getByRole('textbox', { name: 'Unidades' }).fill('1');
   await editor.getByRole('button', { name: 'Salvar estoque' }).click();
@@ -198,7 +200,7 @@ test('admin: stock, order and confirmation; the visitor page sells out live', as
   const card = page.getByRole('button', { name: new RegExp(`Bia Teste.*nº ${number}`) });
   await expect(card).toBeVisible({ timeout: 10_000 });
   await card.click();
-  const detail = page.getByRole('dialog', { name: `Pedido nº ${number}` });
+  const detail = page.getByRole('region', { name: `Pedido nº ${number}` });
   await detail.getByRole('button', { name: /Só confirmar/ }).click();
   await expect(page.getByText('Pedido confirmado.')).toBeVisible();
 
@@ -251,7 +253,7 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await expect(page.getByText(/Pix salvo/)).toBeVisible();
   await page.getByRole('link', { name: /^Pedidos/ }).click();
   await page.getByRole('button', { name: new RegExp(`Carla Pagadora.*nº ${number}`) }).click();
-  const detail = page.getByRole('dialog', { name: `Pedido nº ${number}` });
+  const detail = page.getByRole('region', { name: `Pedido nº ${number}` });
   await detail.getByRole('button', { name: 'Cobrar por Pix' }).click();
   const sheet = page.getByRole('dialog', { name: `Cobrar pedido nº ${number} por Pix` });
   await sheet.getByRole('textbox', { name: /Frete/ }).fill('20,00');
@@ -302,7 +304,7 @@ test('messages: the owner creates her own variation and the site uses it', async
   await expect(page.getByRole('heading', { name: 'Mensagens das clientes' })).toBeVisible();
   const card = page.locator('li').filter({ has: page.getByRole('heading', { name: 'Dúvida sobre uma peça' }) });
   await card.getByRole('button', { name: /Personalizar/ }).click();
-  const editor = page.getByRole('dialog', { name: 'Dúvida sobre uma peça' });
+  const editor = page.getByRole('region', { name: 'Dúvida sobre uma peça' });
   await editor.getByRole('button', { name: /Nova variação/ }).click();
   await editor.getByRole('textbox', { name: 'Nome da variação' }).fill('Minha teste');
   const text = editor.getByRole('textbox', { name: 'Texto' });
@@ -322,7 +324,7 @@ test('messages: the owner creates her own variation and the site uses it', async
   // Back to the built-in default (deleting her variation).
   await page.goto('/admin/mensagens');
   await page.locator('li').filter({ has: page.getByRole('heading', { name: 'Dúvida sobre uma peça' }) }).getByRole('button', { name: /Personalizar/ }).click();
-  const again = page.getByRole('dialog', { name: 'Dúvida sobre uma peça' });
+  const again = page.getByRole('region', { name: 'Dúvida sobre uma peça' });
   await again.getByRole('button', { name: /Minha teste/ }).click();
   await again.getByRole('button', { name: 'Excluir variação' }).click();
   await page.getByRole('dialog', { name: /Excluir “Minha teste”/ }).getByRole('button', { name: 'Excluir' }).click();

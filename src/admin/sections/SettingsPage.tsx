@@ -436,7 +436,7 @@ function StoreChecklist() {
               {!item.done && EDITED_IN_SITE[item.key] && (
                 <>
                   {' · '}
-                  <Link to={`${adminPath('site')}?secao=${EDITED_IN_SITE[item.key]}`} className="text-copper underline underline-offset-4">
+                  <Link to={adminPath('site', EDITED_IN_SITE[item.key]!)} className="text-copper underline underline-offset-4">
                     Preencher na aba Site
                   </Link>
                 </>

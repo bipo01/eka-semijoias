@@ -67,6 +67,8 @@
     html { scrollbar-width: auto; scrollbar-color: var(--c-rose) var(--c-ivory); }
   }
   dialog { color: inherit; }
+  /* Panel: the scrollbar's room is always kept, so a short tab and a long one start at the same x. */
+  html:has(.admin-ui) { scrollbar-gutter: stable; }
   /* The panel's headings use the semibold cut (loaded with the admin chunk). */
   .admin-ui :is(h2, h3) { font-weight: 600; }
   dialog::backdrop { background: rgb(43 29 24 / 0.42); }
@@ -240,4 +242,51 @@ html:has(dialog[open]) { overflow: hidden; }
   }
   dialog.sheet, dialog.sheet[open] { transform: none !important; transition-duration: 120ms !important; }
   .motion-lift { transform: none !important; }
+}
+
+/*
+ * Loading animation (src/components/ui/Loader.tsx), designed in ChatGPT. The block fades in after a
+ * beat so a quick load never flashes it.
+ */
+@layer components {
+  .eka-loader { animation: eka-loader-in 400ms var(--ease) 180ms both; }
+  .eka-loader svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  @keyframes eka-loader-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* brilho: the gem draws itself, a sparkle orbits, a soft shine on the table facet */
+  .eka-loader-gem { stroke-dasharray: 100; animation: eka-loader-draw 3.2s ease-in-out infinite; }
+  .eka-loader-orbit { transform-origin: 36px 36px; animation: eka-loader-orbit 3.2s linear infinite; }
+  .eka-loader-sparkle { animation: eka-loader-twinkle 1.6s ease-in-out infinite; }
+  .eka-loader-shine { animation: eka-loader-shine 3.2s ease-in-out infinite; }
+  @keyframes eka-loader-draw {
+    0% { stroke-dashoffset: 100; opacity: 0.4; }
+    40%, 80% { stroke-dashoffset: 0; opacity: 1; }
+    100% { stroke-dashoffset: 0; opacity: 0.4; }
+  }
+  @keyframes eka-loader-orbit { to { transform: rotate(360deg); } }
+  @keyframes eka-loader-twinkle { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+  @keyframes eka-loader-shine { 0%, 100% { opacity: 0; } 55% { opacity: 0.24; } }
+
+  /* colar: the pendant swings on its chain, a glint crosses the stone */
+  .eka-loader-pendant { transform-origin: 36px 34px; animation: eka-loader-swing 2.8s ease-in-out infinite; }
+  .eka-loader-glint { animation: eka-loader-glint 2.8s ease-in-out infinite; }
+  @keyframes eka-loader-swing { 0%, 100% { transform: rotate(-13deg); } 50% { transform: rotate(13deg); } }
+  @keyframes eka-loader-glint { 0%, 35%, 65%, 100% { opacity: 0; } 50% { opacity: 1; } }
+
+  /* pérolas: three pearls breathe and light up in turn */
+  .eka-loader-pearl { transform-box: fill-box; transform-origin: center; animation: eka-loader-breathe 2.4s ease-in-out infinite; }
+  .eka-loader-pearl-light { animation: eka-loader-illuminate 2.4s ease-in-out infinite; }
+  .eka-loader-pearl-second, .eka-loader-pearl-second .eka-loader-pearl-light { animation-delay: 0.3s; }
+  .eka-loader-pearl-third, .eka-loader-pearl-third .eka-loader-pearl-light { animation-delay: 0.6s; }
+  @keyframes eka-loader-breathe { 0%, 65%, 100% { transform: scale(1); } 30% { transform: scale(1.12); } }
+  @keyframes eka-loader-illuminate { 0%, 65%, 100% { opacity: 0.15; } 30% { opacity: 0.95; } }
+
+  @keyframes eka-loader-pulse { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .eka-loader { animation: none; }
+    .eka-loader svg * { animation: none !important; stroke-dashoffset: 0; }
+    .eka-loader-shine { opacity: 0.12; }
+    .eka-loader-pearl-light { opacity: 0.35; }
+    .eka-loader svg { animation: eka-loader-pulse 2.8s ease-in-out infinite; }
+  }
 }

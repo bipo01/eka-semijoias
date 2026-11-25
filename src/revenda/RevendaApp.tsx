@@ -33,6 +33,7 @@ import { whatsappUrl } from '../lib/whatsapp';
 import { useCatalog } from '../store/catalog';
 import { toast } from '../store/ui';
 import { acceptContract, acceptInvite, cancelSale, fetchInvite, fetchMe, login, logout, registerSale, reportRepasse, type InviteView, type Me } from './api';
+import { Loader } from '../components/ui/Loader';
 
 /*
  * /revenda — the reseller's own panel (docs/revenda/PLAN.md §3): login with
@@ -173,7 +174,7 @@ function InvitePage() {
     }
   }
 
-  if (!textsReady) return <Shell><p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando…</p></Shell>;
+  if (!textsReady) return <Shell><Loader variant="colar" label="Carregando…" /></Shell>;
   if (loadError) {
     return (
       <Shell>
@@ -187,7 +188,7 @@ function InvitePage() {
       </Shell>
     );
   }
-  if (!view) return <Shell><p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando…</p></Shell>;
+  if (!view) return <Shell><Loader variant="colar" label="Carregando…" /></Shell>;
   const c = view.contract;
   const greeting = fillString(t.greeting, { primeiro_nome: view.firstName });
   const intro = c ? t.text : t.textNoContract;
@@ -850,9 +851,7 @@ function PanelPage() {
             </Button>
           </div>
         ) : (
-          <p className="py-10 text-center text-ink-muted" aria-busy="true">
-            Carregando seu painel…
-          </p>
+          <Loader variant="colar" label="Carregando seu painel…" />
         )}
       </Shell>
     );
@@ -955,6 +954,14 @@ function PanelPage() {
   );
 }
 
+function FullLoader() {
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-ivory">
+      <Loader variant="colar" label="Abrindo o seu painel…" />
+    </main>
+  );
+}
+
 export default function RevendaApp() {
   useEffect(() => applyAppHead('reseller'), []);
   return (
@@ -981,8 +988,8 @@ function LoginGate() {
     };
   }, []);
   const textsReady = useSectionsReady();
-  if (state === 'checking') return <div className="min-h-dvh bg-ivory" aria-busy="true" />;
+  if (state === 'checking') return <FullLoader />;
   if (state === 'in') return <Navigate to="/revenda/painel" replace />;
-  if (!textsReady) return <div className="min-h-dvh bg-ivory" aria-busy="true" />;
+  if (!textsReady) return <FullLoader />;
   return <LoginPage />;
 }

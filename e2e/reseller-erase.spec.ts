@@ -39,7 +39,7 @@ test('admin: ends a partnership and erases the reseller data for good', async ({
 
   await page.goto('/admin/revendedoras');
   await page.getByRole('button', { name: new RegExp(name) }).first().click();
-  const detail = page.getByRole('dialog', { name });
+  const detail = page.getByRole('region', { name });
   await expect(detail).toBeVisible();
   // While she is active there is nothing to erase.
   await detail.getByRole('tab', { name: 'Dados' }).click();

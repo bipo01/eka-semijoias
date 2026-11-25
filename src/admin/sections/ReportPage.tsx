@@ -15,6 +15,7 @@ import { formatDateTime } from '../lib/contact';
 import { downloadText, fileDate } from '../lib/download';
 import { useOrders } from '../lib/orders';
 import { ADMIN_BASE } from '../lib/paths';
+import { Loader } from '../Loader';
 
 const dayLabel = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' });
 const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: '2-digit' });
@@ -177,7 +178,7 @@ export function ReportPage() {
   const report = useMemo(() => computeReport(orders, period), [orders, period]);
   const [now] = useState(() => Date.now());
 
-  if (state.status === 'loading') return <p className="py-10 text-center text-ink-muted" aria-busy="true">Carregando relatório…</p>;
+  if (state.status === 'loading') return <Loader label="Carregando relatório…" />;
   if (state.status === 'error') {
     return (
       <div role="alert" className="flex flex-col items-center gap-3 py-10 text-center">

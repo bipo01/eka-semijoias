@@ -33,7 +33,7 @@ test('site content: a testimonial added in the admin shows live, is deleted and 
   await unlock(page);
   await page.goto('/admin/site');
   await page.getByRole('button', { name: 'Editar depoimentos' }).click();
-  const editor = page.getByRole('dialog', { name: 'Depoimentos' });
+  const editor = page.getByRole('region', { name: 'Depoimentos' }).first();
   await editor.getByRole('button', { name: 'Novo depoimento' }).click();
   await editor.getByRole('textbox', { name: /O que a cliente disse/ }).fill('Uso a argola todos os dias e continua linda.');
   await editor.getByRole('textbox', { name: /^Nome/ }).fill('Bruna S.');

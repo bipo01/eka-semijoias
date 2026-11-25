@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Plus, Search } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Sheet } from '../../components/ui/Sheet';
@@ -10,43 +10,39 @@ import { matchesCustomer, useCustomerList, useCustomers } from '../lib/customers
 import { CustomerDetail, placeOf } from './CustomerDetail';
 import { CustomerForm } from './CustomerForm';
 import { Avatar } from '../ui';
+import { DetailPage, useListPlace } from '../DetailPage';
+import { Loader } from '../Loader';
+import { adminPath } from '../lib/paths';
 
 /*
  * Painel → Clientes (docs/revenda/PLAN.md §1): search, list with what each
  * customer bought, "Nova cliente" and her record. A link from an order opens
- * /admin/clientes?cliente=<id>.
+ * /admin/clientes/<id> (the old ?cliente=<id> still works).
  */
 
 export function CustomersPage() {
   const state = useCustomerList();
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
-  const [params, setParams] = useSearchParams();
-  const openId = params.get('cliente');
+  // /admin/clientes/<id> opens her record as a page (the list stays mounted behind it); ?cliente=<id> too.
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const { customerId } = useParams();
+  const openId = customerId ?? null;
+  useListPlace(!!openId);
+  const legacy = params.get('cliente');
+  useEffect(() => {
+    if (legacy) navigate(adminPath('clientes', encodeURIComponent(legacy)), { replace: true });
+  }, [legacy, navigate]);
   const customers = useMemo(() => (state.status === 'ready' ? state.customers : []), [state]);
   const visible = useMemo(() => customers.filter((c) => matchesCustomer(c, query)), [customers, query]);
   const openName = customers.find((c) => c.id === openId)?.name;
 
-  const open = (id: string) =>
-    setParams((p) => {
-      p.set('cliente', id);
-      return p;
-    });
-  const close = () =>
-    setParams(
-      (p) => {
-        p.delete('cliente');
-        return p;
-      },
-      { replace: true },
-    );
+  const open = (id: string) => navigate(adminPath('clientes', encodeURIComponent(id)));
+  const close = () => navigate(adminPath('clientes'));
 
   if (state.status === 'loading' || state.status === 'idle') {
-    return (
-      <p className="py-10 text-center text-ink-muted" aria-busy="true">
-        Carregando clientes…
-      </p>
-    );
+    return <Loader variant="colar" label={openId ? 'Carregando a cliente…' : 'Carregando clientes…'} />;
   }
   if (state.status === 'error') {
     return (
@@ -61,6 +57,12 @@ export function CustomersPage() {
 
   return (
     <>
+      {openId && (
+        <DetailPage header={{ title: openName ?? 'Cliente', backTo: adminPath('clientes'), backLabel: 'Clientes' }}>
+          <CustomerDetail key={openId} id={openId} onClose={close} />
+        </DetailPage>
+      )}
+      <div hidden={!!openId}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-sm text-ink-muted">
           {customers.length ? `${customers.length} ${customers.length === 1 ? 'cliente cadastrada' : 'clientes cadastradas'}.` : 'Cadastre quem compra com você.'}
@@ -117,6 +119,7 @@ export function CustomersPage() {
         </EmptyState>
       )}
 
+      </div>
       <Sheet open={creating} onClose={() => setCreating(false)} title="Nova cliente" side="right">
         {creating && (
           <CustomerForm
@@ -130,9 +133,6 @@ export function CustomersPage() {
             }}
           />
         )}
-      </Sheet>
-      <Sheet open={!!openId} onClose={close} title={openName ?? 'Cliente'} side="right">
-        {openId && <CustomerDetail key={openId} id={openId} onClose={close} />}
       </Sheet>
     </>
   );

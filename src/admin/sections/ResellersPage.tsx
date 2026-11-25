@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Award, BarChart3, BellRing, BriefcaseBusiness, CalendarDays, ChevronRight, CircleOff, Info, Layers, Users, Wallet, Copy, Download, ExternalLink, HandCoins, KeyRound, Pause, Pencil, Play, Plus, Trash2, UserPlus } from 'lucide-react';
-import { Button, ButtonAnchor } from '../../components/ui/Button';
+import { Button, ButtonAnchor, ButtonLink } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { TextArea, TextField } from '../../components/ui/Field';
 import { WhatsAppIcon } from '../../components/ui/Icons';
@@ -35,6 +35,9 @@ import { SwitchRow } from '../FormBits';
 import { Avatar, Card, CARD, Empty, Pill, Tabs, type Tone } from '../ui';
 import { useLeads } from '../lib/leads';
 import { asset } from '../../lib/assets';
+import { DetailPage, useListPlace } from '../DetailPage';
+import { Loader } from '../Loader';
+import { adminPath } from '../lib/paths';
 import { formatDateTime, formatPhone } from '../lib/contact';
 import { downloadText, fileDate } from '../lib/download';
 import { checkContract, clearRepasseReport, eraseReseller, erasureBlocker, isError, markKitPaid, newInvite, patchReseller, saveProgram, settlementsCsv, showcaseLink, useProgram, useResellerDetail, useResellers, type ResellerSummary } from '../lib/resellers';
@@ -201,7 +204,7 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
   const [busy, setBusy] = useState(false);
   // null = not chosen yet: opens on Acertos while a repasse waits, otherwise on Resumo.
   const [chosenTab, setTab] = useState<DetailTab | null>(null);
-  if (state.status === 'loading') return <p className="py-8 text-center text-ink-muted" aria-busy="true">Carregando…</p>;
+  if (state.status === 'loading') return <Loader variant="colar" label="Carregando a ficha…" />;
   if (state.status === 'error') return <p role="alert" className="py-8 text-center text-danger">{state.message}</p>;
   const { reseller, kits, sales, acceptances, invitePendingUntil } = state.data;
   const open = kits.find((k) => k.status === 'aberta') ?? null;
@@ -288,7 +291,7 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
         </p>
       )}
 
-      <div className="sticky top-0 z-10 -mx-5 bg-ivory/95 px-5 backdrop-blur supports-[backdrop-filter]:bg-ivory/85">
+      <div className="sticky top-16 z-10 -mx-4 bg-ivory/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-ivory/85 lg:top-[76px] lg:mx-0 lg:px-0">
         <Tabs
           label={`Ficha de ${first}`}
           panelId={panelId}
@@ -791,7 +794,7 @@ const inputToCents = (v: string) => parseBRL(v) ?? NaN;
 
 function ProgramPanel() {
   const { state, reload } = useProgram();
-  if (state.status === 'loading') return <p className="py-8 text-center text-ink-muted" aria-busy="true">Carregando…</p>;
+  if (state.status === 'loading') return <Loader label="Carregando o programa…" />;
   if (state.status === 'error') return <p role="alert" className="py-8 text-center text-danger">{state.message}</p>;
   return <ProgramForm key={JSON.stringify(state.data.program)} program={state.data.program} onSaved={reload} />;
 }
@@ -885,13 +888,18 @@ function ProgramForm({ program, onSaved }: { program: Program; onSaved: () => vo
 }
 
 export function ResellersPage() {
-  // Links from Início: ?aba=fichas, ?r=<reseller id> (opens her), ?nova=1 (new reseller).
+  // /admin/revendedoras/<id> opens her as a page (the list stays mounted behind it). Links from
+  // Início: ?aba=fichas, ?nova=1 (new reseller); the old ?r=<id> still opens her.
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { resellerId } = useParams();
+  const openId = resellerId ?? null;
+  const setOpenId = (id: string | null) => navigate(id ? adminPath('revendedoras', encodeURIComponent(id)) : adminPath('revendedoras'));
+  useListPlace(!!openId);
   const asked = params.get('aba');
   const [tab, setTabState] = useState<Tab>(TABS.includes(asked as Tab) ? (asked as Tab) : 'revendedoras');
   const { state } = useResellers();
   const { state: leadsState } = useLeads();
-  const [openId, setOpenId] = useState<string | null>(params.get('r'));
   const [creating, setCreating] = useState<{ lead?: ResellerLead } | null>(params.get('nova') ? {} : null);
   const [created, setCreated] = useState<{ reseller: Reseller; token: string | null } | null>(null);
   const list = state.status === 'ready' ? state.data.resellers : [];
@@ -903,7 +911,9 @@ export function ResellersPage() {
 
   // The link did its job: drop it so a reload or "back" does not reopen the same thing.
   useEffect(() => {
-    if (params.has('aba') || params.has('r') || params.has('nova'))
+    const legacy = params.get('r');
+    if (legacy) navigate(adminPath('revendedoras', encodeURIComponent(legacy)), { replace: true });
+    else if (params.has('aba') || params.has('nova'))
       setParams(
         (p) => {
           p.delete('aba');
@@ -913,15 +923,30 @@ export function ResellersPage() {
         },
         { replace: true },
       );
-  }, [params, setParams]);
+  }, [params, setParams, navigate]);
 
   function setTab(t: Tab) {
     setTabState(t);
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {tab === 'revendedoras' && state.status === 'ready' && list.length > 0 && <NetworkSummary list={list} />}
+    <>
+    {openId && (
+      <DetailPage header={{ title: open?.reseller.name ?? 'Revendedora', backTo: adminPath('revendedoras'), backLabel: 'Revendedoras' }}>
+        {state.status === 'loading' ? (
+          <Loader variant="colar" label="Carregando a revendedora…" />
+        ) : open && program ? (
+          <ResellerDetailView key={open.reseller.id} id={open.reseller.id} program={program} onClose={() => setOpenId(null)} />
+        ) : (
+          <Empty title="Revendedora não encontrada" action={<ButtonLink to={adminPath('revendedoras')} variant="secondary">Ver revendedoras</ButtonLink>}>
+            O cadastro pode ter sido apagado.
+          </Empty>
+        )}
+      </DetailPage>
+    )}
+    <div hidden={!!openId} className="flex flex-col gap-5">
+      {/* The summary and the actions stay put on every tab: tabs change the content, not the page. */}
+      {state.status === 'loading' ? <div aria-hidden="true" className="h-[124px] animate-pulse rounded-[22px] bg-champagne/70 sm:h-[72px]" /> : list.length > 0 && <NetworkSummary list={list} />}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs
           label="Revendas"
@@ -929,22 +954,18 @@ export function ResellersPage() {
           onChange={setTab}
           items={[
             { id: 'revendedoras', label: 'Revendedoras', count: shown.length },
-            { id: 'fichas', label: 'Fichas', count: freshLeads || undefined, alert: true },
+            { id: 'fichas', label: 'Fichas', count: freshLeads, alert: true },
             { id: 'programa', label: 'Programa' },
           ]}
         />
-        {tab === 'revendedoras' && (
-          <Button onClick={() => setCreating({})} className="shrink-0 whitespace-nowrap max-sm:w-full">
-            <UserPlus size={18} strokeWidth={1.75} aria-hidden="true" /> Nova revendedora
-          </Button>
-        )}
+        <Button onClick={() => setCreating({})} className="shrink-0 whitespace-nowrap max-sm:w-full">
+          <UserPlus size={18} strokeWidth={1.75} aria-hidden="true" /> Nova revendedora
+        </Button>
       </div>
 
       {tab === 'revendedoras' &&
         (state.status === 'loading' ? (
-          <p className="py-10 text-center text-ink-muted" aria-busy="true">
-            Carregando revendedoras…
-          </p>
+          <Loader variant="colar" label="Carregando revendedoras…" />
         ) : state.status === 'error' ? (
           <p role="alert" className="py-10 text-center text-danger">
             {state.message}
@@ -990,9 +1011,6 @@ export function ResellersPage() {
       {tab === 'fichas' && <LeadsPage onEffectivate={(lead) => setCreating({ lead })} />}
       {tab === 'programa' && <ProgramPanel />}
 
-      <Sheet open={!!open && !!program} onClose={() => setOpenId(null)} title={open ? open.reseller.name : 'Revendedora'} side="right" className="!w-[min(100vw,520px)]">
-        {open && program && <ResellerDetailView key={open.reseller.id} id={open.reseller.id} program={program} onClose={() => setOpenId(null)} />}
-      </Sheet>
       <Sheet
         open={!!creating || !!created}
         onClose={() => {
@@ -1034,5 +1052,6 @@ export function ResellersPage() {
         )}
       </Sheet>
     </div>
+    </>
   );
 }
