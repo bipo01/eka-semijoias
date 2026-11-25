@@ -383,9 +383,14 @@ describe('reseller program', () => {
     expect((await erase()).json.error.message).toContain('Encerre a parceria');
     const openKit = (await fresh()).kits[0]; // the sale moved the kit's stamp
     expect((await a.req(`/api/admin/kits/${kit.id}/settle`, { body: { updatedAt: openKit.updatedAt, returned: [] } })).status).toBe(200);
+    // The partnership only ends once the repasse is received (ending removes her access to it)…
+    const early = await a.req(`/api/admin/resellers/${reseller.id}`, { method: 'PATCH', body: { updatedAt: (await fresh()).reseller.updatedAt, status: 'encerrada' } });
+    expect(early.status).toBe(409);
+    expect((await a.req(`/api/admin/kits/${kit.id}/paid`, { body: { paid: true } })).status).toBe(200);
     const ended = await a.req(`/api/admin/resellers/${reseller.id}`, { method: 'PATCH', body: { updatedAt: (await fresh()).reseller.updatedAt, status: 'encerrada' } });
     expect(ended.status).toBe(200);
-    // Not while the store has not received the settlement.
+    // …and if "recebido" is unmarked afterwards, her data cannot be erased until it is received.
+    expect((await a.req(`/api/admin/kits/${kit.id}/paid`, { body: { paid: false } })).status).toBe(200);
     const unpaid = await erase();
     expect(unpaid.status).toBe(409);
     expect(unpaid.json.error.message).toContain('falta receber');
@@ -418,7 +423,8 @@ describe('reseller program', () => {
 
   it('repasse: the reseller reports she paid the store, the owner confirms or clears the report', async () => {
     const a = await admin();
-    const [p] = await plainProducts(1);
+    // A product from the end of the list: the other files take the first ones and track their stock meanwhile.
+    const p = (await plainProducts(100)).at(-1);
     const v = p.variants[0];
     const price = p.promoPrice ?? p.price;
     const { reseller, token } = await newReseller(a);
@@ -481,5 +487,18 @@ describe('reseller program', () => {
     const none = await r.req(`/api/revenda/settlements/${k2.id}/report`, { body: {} });
     expect(none.status).toBe(409);
     expect(none.json.error.message).toBe('Este acerto não tem repasse.');
+
+    // The first repasse is still not received: ending the partnership (which ends her access) waits.
+    let stamp = (await a.req(`/api/admin/resellers/${reseller.id}`)).json.reseller.updatedAt;
+    const end = await a.req(`/api/admin/resellers/${reseller.id}`, { method: 'PATCH', body: { updatedAt: stamp, status: 'encerrada' } });
+    expect(end.status).toBe(409);
+    expect(end.json.error.message).toContain('de repasse a receber');
+    // Paused, she loses access (her report is refused); received, the partnership can end.
+    const paused = await a.req(`/api/admin/resellers/${reseller.id}`, { method: 'PATCH', body: { updatedAt: stamp, status: 'pausada' } });
+    expect(paused.status).toBe(200);
+    expect((await r.req(`/api/revenda/settlements/${kit.id}/report`, { body: {} })).status).toBe(401);
+    await a.req(`/api/admin/kits/${kit.id}/paid`, { body: { paid: true } });
+    stamp = paused.json.reseller.updatedAt;
+    expect((await a.req(`/api/admin/resellers/${reseller.id}`, { method: 'PATCH', body: { updatedAt: stamp, status: 'encerrada' } })).status).toBe(200);
   });
 });

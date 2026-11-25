@@ -407,6 +407,7 @@ export function defaultSections(f: ContentFacts): Sections {
         noPix: 'Combine com a ÉKA como fazer o repasse.',
         reported: 'Você avisou que pagou. Quando a ÉKA conferir, aparece aqui como recebido.',
         whatsapp: 'Oi! Aqui é {primeiro_nome}. Fiz o repasse de {total} do acerto da minha maleta. Segue o comprovante.',
+        whatsappNoPix: 'Oi! Aqui é {primeiro_nome}. Quero combinar o repasse de {total} do acerto da minha maleta.',
       },
     },
   };

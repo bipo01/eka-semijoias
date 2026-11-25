@@ -6,6 +6,7 @@ import { defaultSections, factsOf } from '../content/defaults';
 import type { Sections, SiteContent } from '../data/content';
 import { createCatalogSeed } from '../data/seed';
 import { ApiError } from '../lib/api';
+import { crc16 } from '../lib/pix';
 import { useCatalog, type CatalogStatus } from '../store/catalog';
 import type { InviteView, Me } from './api';
 import RevendaApp from './RevendaApp';
@@ -115,26 +116,30 @@ const settled = (over: Partial<NonNullable<Me['history'][number]['settlement']>>
   closedAt: '2026-11-24T15:00:00.000Z',
   settlement: { at: '2026-11-24T15:00:00.000Z', soldCents: 19980, percent: 25, commissionCents: 4995, missingCents: 0, dueCents: 14985, returned: [], missing: [], ...over },
 });
-const PIX = { key: '65999998888', name: 'EKA SEMIJOIAS', city: 'CUIABA' };
+const PIX = { key: '+5565999998888', name: 'EKA SEMIJOIAS', city: 'CUIABA' };
 
 describe('RevendaApp repasse (the customer pays her; she passes the store its part)', () => {
   it('shows what she owes with the store Pix carrying the exact amount, and records "Já fiz o repasse"', async () => {
     server.reported = [];
     const user = userEvent.setup();
     show('/revenda/painel', { me: { ...me, history: [settled()], pix: PIX }, storeWhatsapp: '5565999998888' });
-    const card = await screen.findByRole('region', { name: 'Repasse do acerto' });
+    const card = await screen.findByRole('region', { name: 'Repasse do acerto de 24/11' });
     expect(within(card).getByText('R$ 149,85')).toBeInTheDocument();
     const code = within(card).getByRole('textbox') as HTMLTextAreaElement;
     expect(code.value).toContain('5406149.85'); // amount
     expect(code.value).toContain('REPkitab12'); // reference in her bank statement
     expect(code.value).toContain('65999998888');
+    expect(crc16(code.value.slice(0, -4))).toBe(code.value.slice(-4)); // banks refuse a wrong checksum
     expect(within(card).getByRole('img', { name: /QR Code Pix de R\$\s149,85/ })).toBeInTheDocument();
+    expect(within(card).getByText('(65) 99999-8888', { exact: false })).toBeInTheDocument();
     const receipt = within(card).getByRole('link', { name: /Enviar comprovante no WhatsApp/ });
     expect(decodeURIComponent(receipt.getAttribute('href')!)).toContain('Oi! Aqui é Bruna. Fiz o repasse de R$ 149,85 do acerto da minha maleta.');
 
     await user.click(within(card).getByRole('button', { name: 'Já fiz o repasse' }));
     expect(server.reported).toEqual(['kit_ab12']);
     expect(await within(card).findByText(/Você avisou que pagou/)).toBeInTheDocument();
+    // The tapped button is gone: focus moves to the confirmation.
+    expect(document.activeElement).toHaveTextContent(/Você avisou que pagou/);
     expect(within(card).queryByRole('button', { name: 'Já fiz o repasse' })).not.toBeInTheDocument();
     expect(within(card).queryByRole('textbox')).not.toBeInTheDocument();
     // The history tells where each repasse stands.
@@ -144,23 +149,25 @@ describe('RevendaApp repasse (the customer pays her; she passes the store its pa
 
   it('without a store Pix, never shows a code and points to the store', async () => {
     show('/revenda/painel', { me: { ...me, history: [settled()], pix: null } });
-    const card = await screen.findByRole('region', { name: 'Repasse do acerto' });
+    const card = await screen.findByRole('region', { name: /^Repasse do acerto/ });
     expect(within(card).getByText(builtIn.repasse!.noPix)).toBeInTheDocument();
     expect(within(card).queryByRole('textbox')).not.toBeInTheDocument();
     expect(within(card).getByRole('button', { name: 'Já fiz o repasse' })).toBeInTheDocument();
+    const talk = within(card).getByRole('link', { name: /Falar com a ÉKA no WhatsApp/ });
+    expect(decodeURIComponent(talk.getAttribute('href')!)).toContain('Quero combinar o repasse de R$ 149,85');
   });
 
   it('hides the card once the store confirmed it, and when there was nothing to pass', async () => {
     show('/revenda/painel', { me: { ...me, history: [settled({ paidAt: '2026-11-25T13:00:00.000Z', reportedAt: '2026-11-24T21:30:00.000Z' }), { ...settled({ dueCents: 0 }), id: 'kit_zero' }], pix: PIX } });
     expect(await screen.findByRole('heading', { level: 1, name: 'Seu painel' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Repasse do acerto' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /^Repasse do acerto/ })).not.toBeInTheDocument();
   });
 
   it('a section she saved before the repasse texts existed still shows them', async () => {
     const { repasse: _drop, ...old } = custom;
     show('/revenda/painel', { content: { revenda: old }, me: { ...me, history: [settled()], pix: PIX } });
     expect(await screen.findByRole('heading', { level: 1, name: 'Sua revenda' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Repasse do acerto' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /^Repasse do acerto/ })).toBeInTheDocument();
     expect(screen.getByText(builtIn.repasse!.text)).toBeInTheDocument();
   });
 

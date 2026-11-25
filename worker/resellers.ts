@@ -323,6 +323,12 @@ export async function handlePatchReseller(ctx: Context): Promise<Response> {
   if (p.status === 'encerrada') {
     const open = await db.prepare(`SELECT id FROM kits WHERE reseller_id = ?1 AND status = 'aberta'`).bind(reseller.id).first();
     if (open) throw new HttpError('conflict', 'Faça o acerto da maleta antes de encerrar a parceria.');
+    // Ending the partnership ends her access: her last repasse would vanish from her panel.
+    const owed = await db
+      .prepare(`SELECT COALESCE(SUM(json_extract(data, '$.settlement.dueCents')), 0) AS owed FROM kits WHERE reseller_id = ?1 AND status = 'fechada' AND json_extract(data, '$.settlement.paidAt') IS NULL AND COALESCE(json_extract(data, '$.settlement.dueCents'), 0) > 0`)
+      .bind(reseller.id)
+      .first<{ owed: number }>();
+    if (owed && owed.owed > 0) throw new HttpError('conflict', `Ela ainda tem ${formatBRL(owed.owed)} de repasse a receber. Marque o repasse como recebido em "Acertos" antes de encerrar a parceria (ou pause a revendedora).`);
   }
   const at = nextStamp(stamp);
   const next: Reseller = { ...reseller, updatedAt: at };
@@ -355,7 +361,8 @@ export async function handlePatchReseller(ctx: Context): Promise<Response> {
   try {
     await db.batch([
       resellerUnchanged(db, reseller.id, stamp),
-      ...(next.status === 'encerrada' ? [guard(db, `NOT EXISTS (SELECT 1 FROM kits WHERE reseller_id = ?1 AND status = 'aberta')`, reseller.id)] : []),
+      // No open kit and no repasse to receive (a settlement or an unmarked "recebido" may land meanwhile).
+      ...(next.status === 'encerrada' && reseller.status !== 'encerrada' ? [guard(db, `NOT EXISTS (SELECT 1 FROM kits WHERE reseller_id = ?1 AND (${KIT_BLOCKS_ERASURE}))`, reseller.id)] : []),
       db.prepare('UPDATE resellers SET slug = ?2, whatsapp = ?3, status = ?4, updated_at = ?5, data = ?6 WHERE id = ?1').bind(reseller.id, next.slug, next.whatsapp, next.status, at, JSON.stringify(parsed.data)),
       // Paused or ended: her sessions end now.
       ...(blocked ? [db.prepare('DELETE FROM reseller_sessions WHERE reseller_id = ?1').bind(reseller.id)] : []),
@@ -363,7 +370,7 @@ export async function handlePatchReseller(ctx: Context): Promise<Response> {
     ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
-    if (isGuardMiss(error)) throw new HttpError('conflict', next.status === 'encerrada' ? 'Faça o acerto da maleta antes de encerrar a parceria.' : 'Os dados desta revendedora mudaram em outro aparelho. Confira e salve de novo.');
+    if (isGuardMiss(error)) throw new HttpError('conflict', next.status === 'encerrada' ? 'Faça o acerto da maleta e receba o repasse antes de encerrar a parceria.' : 'Os dados desta revendedora mudaram em outro aparelho. Confira e salve de novo.');
     if (/UNIQUE constraint failed: resellers\.whatsapp/i.test(message)) throw new HttpError('conflict', 'Já existe uma revendedora com este WhatsApp.');
     if (/UNIQUE constraint failed: resellers\.slug/i.test(message)) throw new HttpError('conflict', 'Este endereço de mostruário já é de outra revendedora.');
     throw toHttpError(error);

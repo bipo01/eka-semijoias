@@ -18,7 +18,7 @@ import { firstNameOf } from '../data/messages';
 import { daysLeft, PAYMENT_LABEL, PAYMENT_METHODS, repassePixTxid, repasseState, type KitLineState, type PaymentMethod, type ResellerSale } from '../data/revenda';
 import { PixCopyField, QrCode } from '../components/pay/PixCode';
 import { useBusiness } from '../hooks/useBusiness';
-import { buildPixPayload, pixText } from '../lib/pix';
+import { buildPixPayload, formatPixKey, pixText } from '../lib/pix';
 import { FINISH_LABEL } from '../data/schema';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useSection, useSectionsReady } from '../hooks/useSection';
@@ -659,6 +659,7 @@ function repasseTexts(section: RevendaTexts) {
       noPix: 'Combine com a ÉKA como fazer o repasse.',
       reported: 'Você avisou que pagou. Quando a ÉKA conferir, aparece aqui como recebido.',
       whatsapp: 'Oi! Aqui é {primeiro_nome}. Fiz o repasse de {total} do acerto da minha maleta. Segue o comprovante.',
+      whatsappNoPix: 'Oi! Aqui é {primeiro_nome}. Quero combinar o repasse de {total} do acerto da minha maleta.',
     }
   );
 }
@@ -682,7 +683,7 @@ function RepasseLine({ settlement }: { settlement: NonNullable<Me['history'][num
  * A settled cycle whose repasse the store has not confirmed yet: the amount, the store's Pix with
  * that exact amount, "Já fiz o repasse" and the receipt through the store's WhatsApp.
  */
-function RepasseCard({ me, entry, onChanged }: { me: Me; entry: Me['history'][number]; onChanged: () => void }) {
+function RepasseCard({ me, entry, onReported }: { me: Me; entry: Me['history'][number]; onReported: (settlement: NonNullable<Me['history'][number]['settlement']>) => void }) {
   const t = repasseTexts(useSection('revenda'));
   const biz = useBusiness();
   const [busy, setBusy] = useState(false);
@@ -693,16 +694,24 @@ function RepasseCard({ me, entry, onChanged }: { me: Me; entry: Me['history'][nu
     () => (me.pix ? buildPixPayload({ ...me.pix, amountCents: settlement.dueCents, txid: repassePixTxid(entry.id) }) : null),
     [me.pix, settlement.dueCents, entry.id],
   );
-  const message = fillString(t.whatsapp, { primeiro_nome: me.reseller.firstName, total: amount });
+  const message = fillString(code ? t.whatsapp : (t.whatsappNoPix ?? t.whatsapp), { primeiro_nome: me.reseller.firstName, total: amount });
   const titleId = `repasse-${entry.id}`;
+  const date = shortDate(entry.closedAt ?? settlement.at);
+  const status = useRef<HTMLParagraphElement>(null);
+  const [justReported, setJustReported] = useState(false);
+  // The button she tapped is gone: move focus to the confirmation, so it is read out and kept in view.
+  useEffect(() => {
+    if (justReported && state === 'reported') status.current?.focus();
+  }, [justReported, state]);
 
   async function report() {
     if (busy) return;
     setBusy(true);
     try {
-      await reportRepasse(entry.id);
+      const { settlement: saved } = await reportRepasse(entry.id);
       toast('Pronto! A ÉKA recebeu o seu aviso.', { tone: 'success' });
-      onChanged();
+      setJustReported(true);
+      onReported(saved);
     } catch (err) {
       toast(errorMessage(err), { tone: 'error' });
     } finally {
@@ -714,11 +723,11 @@ function RepasseCard({ me, entry, onChanged }: { me: Me; entry: Me['history'][nu
     <section aria-labelledby={titleId} className="flex flex-col gap-4 rounded-[14px] border border-copper/40 bg-white p-5 shadow-[var(--shadow-1)]">
       <div className="flex flex-col gap-1">
         <h2 id={titleId} className="font-display text-title">
-          {t.title}
+          {t.title} <span className="sr-only">de {date}</span>
         </h2>
         <p className="font-display text-[2.2rem] leading-none">{amount}</p>
         <p className="text-sm text-ink-muted">
-          Acerto de {shortDate(entry.closedAt ?? settlement.at)} · vendeu <span className="price">{formatBRL(settlement.soldCents)}</span>, comissão{' '}
+          Acerto de {date} · vendeu <span className="price">{formatBRL(settlement.soldCents)}</span>, comissão{' '}
           <span className="price">{formatBRL(settlement.commissionCents)}</span>
           {settlement.missingCents > 0 && (
             <>
@@ -729,7 +738,7 @@ function RepasseCard({ me, entry, onChanged }: { me: Me; entry: Me['history'][nu
       </div>
 
       {state === 'reported' ? (
-        <p role="status" className="flex items-start gap-2 rounded-[10px] bg-champagne/60 p-3 text-sm">
+        <p ref={status} tabIndex={-1} className="flex items-start gap-2 rounded-[10px] bg-champagne/60 p-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-copper">
           <Clock3 size={18} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-copper" />
           <span>
             {t.reported} <span className="text-ink-muted">Avisado em {dateTime(settlement.reportedAt!)}.</span>
@@ -742,6 +751,8 @@ function RepasseCard({ me, entry, onChanged }: { me: Me; entry: Me['history'][nu
           <div className="flex flex-col items-center gap-2 border-t border-line pt-4">
             <QrCode value={code} label={`QR Code Pix de ${amount} para a ÉKA`} className="size-[168px] ring-1 ring-line" />
             <p className="text-center text-sm text-ink-muted">
+              Chave Pix: <span className="break-all text-ink">{formatPixKey(me.pix.key)}</span>
+              <br />
               Recebedor: <span className="text-ink">{pixText(me.pix.name, 25)}</span>
             </p>
           </div>
@@ -752,12 +763,13 @@ function RepasseCard({ me, entry, onChanged }: { me: Me; entry: Me['history'][nu
 
       <div className="flex flex-col gap-2">
         {state === 'pending' && (
-          <Button size="lg" block disabled={busy} aria-busy={busy} onClick={() => void report()}>
+          // Secondary: the main action of the card is paying (copying the Pix code).
+          <Button size="lg" variant={code ? 'secondary' : 'primary'} block disabled={busy} aria-busy={busy} onClick={() => void report()}>
             <CheckCircle2 size={19} strokeWidth={1.5} /> {busy ? 'Enviando…' : 'Já fiz o repasse'}
           </Button>
         )}
-        <ButtonAnchor href={whatsappUrl(biz.whatsapp, message)} variant={state === 'pending' ? 'secondary' : 'primary'} block>
-          <WhatsAppIcon size={18} /> Enviar comprovante no WhatsApp
+        <ButtonAnchor href={whatsappUrl(biz.whatsapp, message)} variant={state === 'pending' ? 'ghost' : 'secondary'} block>
+          <WhatsAppIcon size={18} /> {code ? 'Enviar comprovante no WhatsApp' : 'Falar com a ÉKA no WhatsApp'}
         </ButtonAnchor>
       </div>
     </section>
@@ -860,7 +872,16 @@ function PanelPage() {
         .filter((h) => h.settlement && (repasseState(h.settlement) === 'pending' || repasseState(h.settlement) === 'reported'))
         .reverse()
         .map((h) => (
-          <RepasseCard key={h.id} me={me} entry={h} onChanged={load} />
+          <RepasseCard
+            key={h.id}
+            me={me}
+            entry={h}
+            onReported={(settlement) => {
+              // Show it at once (the server confirmed it), then refresh the rest of the panel.
+              setMe((m) => (m ? { ...m, history: m.history.map((x) => (x.id === h.id ? { ...x, settlement } : x)) } : m));
+              load();
+            }}
+          />
         ))}
       <Summary me={me} />
       {!me.contractDue && me.kit && me.kit.lines.some((l) => l.available > 0) && (

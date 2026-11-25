@@ -477,6 +477,7 @@ function RevendaForm() {
         <TextInput path={['repasse', 'noPix']} label="Quando a chave Pix da loja não está cadastrada" long rows={2} />
         <TextInput path={['repasse', 'reported']} label="Depois que ela avisa que pagou" long rows={2} />
         <TextInput path={['repasse', 'whatsapp']} label="Mensagem para enviar o comprovante" long rows={3} hint="{primeiro_nome} é o nome dela e {total} é o valor do repasse." />
+        <TextInput path={['repasse', 'whatsappNoPix']} label="Mensagem quando não há chave Pix (para combinar o repasse)" long rows={3} hint="{primeiro_nome} é o nome dela e {total} é o valor do repasse." />
       </Group>
     </>
   );

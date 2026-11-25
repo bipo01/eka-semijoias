@@ -157,6 +157,12 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
     reload();
   }
 
+  // Repasse not received yet: ending the partnership would hide it from her panel.
+  const owedCents = kits.reduce((sum, k) => {
+    const st = k.status === 'fechada' && k.settlement ? repasseState(k.settlement) : 'none';
+    return sum + (st === 'pending' || st === 'reported' ? k.settlement!.dueCents : 0);
+  }, 0);
+
   async function setStatus(status: ResellerStatus) {
     if (busy) return;
     setBusy(true);
@@ -354,10 +360,15 @@ function ResellerDetailView({ id, program, onClose }: { id: string; program: Pro
             Reativar revendedora
           </button>
         )}
-        {reseller.status !== 'encerrada' && !open && (
+        {reseller.status !== 'encerrada' && !open && owedCents === 0 && (
           <button type="button" className="min-h-11 self-start text-sm text-danger underline underline-offset-4" disabled={busy} onClick={() => setEnding(true)}>
             Encerrar parceria
           </button>
+        )}
+        {reseller.status !== 'encerrada' && !open && owedCents > 0 && (
+          <p className="text-sm text-ink-muted">
+            Para encerrar a parceria, marque antes o repasse de <span className="price">{formatBRL(owedCents)}</span> como recebido em “Acertos”. Encerrar tira o acesso dela, e ela deixaria de ver o Pix do repasse.
+          </p>
         )}
       </div>
       {reseller.status === 'encerrada' && (

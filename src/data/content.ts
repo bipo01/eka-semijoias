@@ -324,6 +324,8 @@ export const sectionSchemas = {
         reported: req(200),
         /** {primeiro_nome}, {total} */
         whatsapp: req(300),
+        /** {primeiro_nome}, {total} — without a store Pix (she pays in person or as agreed). */
+        whatsappNoPix: req(300),
       })
       .optional(),
   }),

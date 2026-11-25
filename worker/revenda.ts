@@ -623,7 +623,8 @@ export async function handleReportRepasse(ctx: Context): Promise<Response> {
         title: `Repasse informado · ${reseller.name.split(/\s+/)[0]}`,
         body: `${formatBRL(settlement.dueCents)} do acerto de ${shortDate(kit.closedAt ?? settlement.at)}. Confira e marque como recebido.`,
         url: '/admin/revendedoras',
-        tag: `rev-${reseller.id}`,
+        // Its own tag: a sale or contract notice from her must not replace this one.
+        tag: `repasse-${id}`,
       }),
     );
     return json({ settlement });
