@@ -102,7 +102,7 @@ export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', classN
       }}
     >
       {(open || mounted) && (
-        <div ref={contentRef} tabIndex={-1} className={cx('flex max-h-[inherit] flex-col outline-none', contentHeight(side, className))} style={side === 'center' ? { maxHeight: 'calc(100dvh - 32px)' } : undefined}>
+        <div ref={contentRef} tabIndex={-1} className={cx('sheet-body flex flex-col outline-none', contentHeight(side, className))} style={side === 'center' ? { maxHeight: 'calc(var(--vvh, 100dvh) - 32px)' } : undefined}>
           {side === 'bottom' && <div aria-hidden="true" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line md:hidden" />}
           <div className={cx('flex shrink-0 items-center gap-2 px-5 pt-3 pb-2', hideTitle && 'justify-end', headerClassName)}>
             <h2 id={titleId} className={cx('font-display text-display-m flex-1', hideTitle && 'sr-only')}>

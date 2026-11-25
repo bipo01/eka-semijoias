@@ -17,6 +17,8 @@
     -moz-osx-font-smoothing: grayscale;
     min-height: 100dvh;
   }
+  /* Lining figures in the display type: Cormorant's old-style digits made "Pedido nº 1001" read "ıooı". */
+  h1, h2, h3, .font-display { font-variant-numeric: lining-nums; }
   h1, h2, h3 {
     font-family: var(--font-display);
     font-weight: 500;
@@ -77,8 +79,6 @@
   html:has(.admin-ui) { scrollbar-gutter: stable; }
   /* The panel's headings use the semibold cut (loaded with the admin chunk). */
   .admin-ui :is(h2, h3) { font-weight: 600; }
-  /* Lining figures in the panel's display type: Cormorant's old-style digits made "Pedido nº 1003" read "ıooʒ". */
-  .admin-ui :is(h1, h2, h3, .font-display) { font-variant-numeric: lining-nums; }
   /* The search field's clear button in the brand's color (the browser's own is a blue "×" on Android). */
   input[type='search']::-webkit-search-cancel-button {
     -webkit-appearance: none;
@@ -176,7 +176,11 @@
   .range:active::-webkit-slider-thumb { transform: scale(1.12); }
 }
 
-/* Sheets and drawers on top of native <dialog>. */
+/* Sheets and drawers on top of native <dialog>. `--kb` = the part of the window the on-screen keyboard
+   covers while a sheet is open on a touch screen, `--vot` the hidden part above the visible area and
+   `--vvh` its height (`keyboardArea` in src/lib/scrollLock.ts). Sheets stay anchored to the window and take the hidden parts
+   as padding: their ivory fills the strip behind Safari's glass toolbar and the keyboard, and their
+   content (`.sheet-body`, at most `--sheet-max` tall) sits in the visible area. */
 dialog.sheet {
   margin: 0;
   padding: 0;
@@ -191,19 +195,27 @@ dialog.sheet::backdrop { transition: opacity var(--dur-2) var(--ease), overlay v
 dialog.sheet[open]::backdrop { opacity: 1; }
 @starting-style { dialog.sheet[open]::backdrop { opacity: 0; } }
 
+/* --sheet-max is reset on every sheet: a sheet opened from inside another would inherit it. */
+dialog.sheet { padding-bottom: var(--kb, 0px); --sheet-max: none; }
+dialog.sheet-left, dialog.sheet-right, dialog.sheet-full { padding-top: var(--vot, 0px); }
+dialog.sheet > .sheet-body { max-height: var(--sheet-max, none); }
+
 dialog.sheet-bottom {
+  --sheet-max: min(92dvh, 860px, calc(var(--vvh, 100dvh) - 16px));
   inset: auto 0 0 0;
   width: 100%;
-  max-height: min(92dvh, 860px);
+  max-height: calc(var(--sheet-max) + var(--kb, 0px));
   border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   transform: translateY(100%);
 }
 dialog.sheet-bottom[open] { transform: translateY(0); }
 @starting-style { dialog.sheet-bottom[open] { transform: translateY(100%); } }
 
+/* Full-height sheets span the window with top/bottom 0 (not 100dvh): Safari on iOS 26 shrinks the window
+   for the keyboard, and dvh does not follow. */
 dialog.sheet-left, dialog.sheet-right {
   inset: 0 auto 0 0;
-  height: 100dvh;
+  height: auto;
   width: min(88vw, 400px);
   transform: translateX(-100%);
 }
@@ -215,7 +227,8 @@ dialog.sheet-left[open], dialog.sheet-right[open] { transform: translateX(0); }
 }
 
 dialog.sheet-center {
-  inset: 0;
+  inset: var(--vot, 0px) 0 var(--kb, 0px) 0;
+  padding-bottom: 0;
   margin: auto;
   width: min(calc(100vw - 32px), 420px);
   border-radius: 16px;
@@ -225,15 +238,17 @@ dialog.sheet-center {
 dialog.sheet-center[open] { opacity: 1; transform: none; }
 @starting-style { dialog.sheet-center[open] { opacity: 0; transform: scale(0.98); } }
 
-dialog.sheet-full { inset: 0; width: 100vw; height: 100dvh; max-height: 100dvh; opacity: 0; }
+dialog.sheet-full { inset: 0; width: 100vw; height: auto; max-height: none; opacity: 0; }
 dialog.sheet-full[open] { opacity: 1; }
 @starting-style { dialog.sheet-full[open] { opacity: 0; } }
 
 @media (min-width: 768px) {
   dialog.sheet-bottom.md-right {
+    --sheet-max: none;
+    padding-top: var(--vot, 0px);
     inset: 0 0 0 auto;
-    height: 100dvh;
-    max-height: 100dvh;
+    height: auto;
+    max-height: none;
     width: 440px;
     border-radius: 0;
     transform: translateX(100%);
@@ -241,7 +256,10 @@ dialog.sheet-full[open] { opacity: 1; }
   dialog.sheet-bottom.md-right[open] { transform: translateX(0); }
   @starting-style { dialog.sheet-bottom.md-right[open] { transform: translateX(100%); } }
   dialog.sheet-bottom.md-center {
-    inset: 0;
+    --sheet-max: min(92dvh, 860px, calc(var(--vvh, 100dvh) - 32px));
+    inset: var(--vot, 0px) 0 var(--kb, 0px) 0;
+    padding-bottom: 0;
+    max-height: var(--sheet-max);
     margin: auto;
     width: 480px;
     border-radius: var(--radius-sheet);

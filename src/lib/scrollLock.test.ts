@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { lockPageScroll, pageScrollY } from './scrollLock';
+import { keyboardArea, lockPageScroll, pageScrollY } from './scrollLock';
 
 function pointer(coarse: boolean) {
   vi.stubGlobal('matchMedia', (q: string) => ({ matches: coarse && q.includes('coarse'), media: q, addEventListener() {}, removeEventListener() {} }));
@@ -36,5 +36,42 @@ describe('page scroll lock under sheets', () => {
     const release = lockPageScroll();
     expect(document.body.style.position).toBe('');
     release();
+  });
+
+  it('publishes the area the keyboard leaves visible while a sheet is open, and clears it after', () => {
+    pointer(true);
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const listeners = new Map<string, () => void>();
+    const vv = { height: 714, offsetTop: 0, addEventListener: (t: string, f: () => void) => listeners.set(t, f), removeEventListener: (t: string) => listeners.delete(t) };
+    vi.stubGlobal('visualViewport', vv);
+    const setInner = (h: number) => Object.defineProperty(window, 'innerHeight', { value: h, configurable: true });
+    setInner(714);
+    const release = lockPageScroll();
+    const root = document.documentElement.style;
+    const vars = () => [root.getPropertyValue('--kb'), root.getPropertyValue('--vot'), root.getPropertyValue('--vvh')];
+    expect(vars()).toEqual(['', '', '']);
+    // Measured on iPhone 17 (iOS 26.5). The search opens focused: the window keeps its height and the
+    // keyboard covers its bottom.
+    vv.height = 377;
+    listeners.get('resize')!();
+    expect(vars()).toEqual(['337px', '0px', '377px']);
+    // A tap on the price filter: Safari shrinks the window to 438 and scrolls (offsetTop 276).
+    setInner(438);
+    vv.height = 404;
+    vv.offsetTop = 276;
+    listeners.get('scroll')!();
+    expect(vars()).toEqual(['0px', '34px', '404px']);
+    // Only Safari's toolbar moving is not a keyboard.
+    setInner(714);
+    vv.height = 670;
+    vv.offsetTop = 0;
+    listeners.get('resize')!();
+    expect(vars()).toEqual(['', '', '']);
+    expect(keyboardArea(714)).toBeNull();
+    vv.height = 377;
+    listeners.get('resize')!();
+    release();
+    expect(vars()).toEqual(['', '', '']);
+    expect(listeners.size).toBe(0);
   });
 });
