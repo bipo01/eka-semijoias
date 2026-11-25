@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Link, useBlocker, useNavigate } from 'react-router-dom';
+import { Link, useBlocker, useLocation, useNavigate } from 'react-router-dom';
 import { Copy, Plus } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -17,6 +17,7 @@ import { DetailPage } from '../DetailPage';
 import { adminPath } from '../lib/paths';
 import { save } from '../lib/persist';
 import { PhotoManager } from './PhotoManager';
+import { standInSearch } from './StandInPhotos';
 import { VariantsEditor } from './VariantsEditor';
 import {
   buildProduct,
@@ -60,6 +61,8 @@ export function restoreProduct(data: Catalog, product: Product, index: number): 
 
 export function ProductForm({ source }: { source: FormSource }) {
   const navigate = useNavigate();
+  // Back to the list as she left it (the stand-in photos filter stays on).
+  const listPath = adminPath('produtos') + standInSearch(useLocation().search);
   const formId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const data = useCatalog((s) => s.data);
@@ -142,7 +145,7 @@ export function ProductForm({ source }: { source: FormSource }) {
     );
     setSaving(null);
     if (!ok) return;
-    leave(then === 'new' ? adminPath('produtos', 'nova') : adminPath('produtos'));
+    leave(then === 'new' ? adminPath('produtos', 'nova') : listPath);
   }
 
   async function remove() {
@@ -150,7 +153,7 @@ export function ProductForm({ source }: { source: FormSource }) {
     const current = useCatalog.getState().data;
     const index = current.products.findIndex((p) => p.id === draft.id);
     const removed = current.products[index];
-    if (!removed) return leave(adminPath('produtos'));
+    if (!removed) return leave(listPath);
     leaving.current = true;
     setSaving('Excluindo…');
     const ok = await save((d) => ({ ...d, products: d.products.filter((p) => p.id !== removed.id) }), {
@@ -158,7 +161,7 @@ export function ProductForm({ source }: { source: FormSource }) {
       action: { label: 'Desfazer', onClick: () => void save((d) => restoreProduct(d, removed, index), 'Peça restaurada.') },
     });
     setSaving(null);
-    if (ok) navigate(adminPath('produtos'));
+    if (ok) navigate(listPath);
     else leaving.current = false;
   }
 
@@ -170,11 +173,11 @@ export function ProductForm({ source }: { source: FormSource }) {
   return (
     <DetailPage
       label={draft.isNew ? 'Nova peça' : 'Editar peça'}
-      header={{ title: draft.isNew ? (source.kind === 'copy' ? 'Nova peça (cópia)' : 'Nova peça') : draft.name.trim() || 'Editar peça', backTo: adminPath('produtos'), backLabel: 'Produtos' }}
+      header={{ title: draft.isNew ? (source.kind === 'copy' ? 'Nova peça (cópia)' : 'Nova peça') : draft.name.trim() || 'Editar peça', backTo: listPath, backLabel: 'Produtos' }}
       footer={
         <div className="flex items-center justify-between gap-3">
           {draft.isNew ? (
-            <Button variant="ghost" onClick={() => navigate(adminPath('produtos'))}>
+            <Button variant="ghost" onClick={() => navigate(listPath)}>
               Cancelar
             </Button>
           ) : (

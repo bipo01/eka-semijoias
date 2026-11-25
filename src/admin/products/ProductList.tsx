@@ -1,5 +1,5 @@
 import { useState, type PointerEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { GripVertical, Star } from 'lucide-react';
 import { IconButton } from '../../components/ui/Button';
 import { Img } from '../../components/ui/Img';
@@ -11,6 +11,7 @@ import { MoveButtons } from '../FormBits';
 import { adminPath } from '../lib/paths';
 import { save } from '../lib/persist';
 import { move } from '../lib/reorder';
+import { StandInTag, standInSearch } from './StandInPhotos';
 
 const GAP = 8; // px between rows (gap-2)
 
@@ -31,11 +32,14 @@ interface ProductListProps {
   categoryName: Map<string, string>;
   /** Receives the visible product ids in their new order. */
   onReorder: (ids: string[]) => void;
+  /** Pieces still on a stand-in photo: their thumbnail is tagged "Provisória". */
+  standIn?: Set<string>;
 }
 
 /** Product rows with drag-to-reorder (pointer events) and up/down buttons as the accessible path. */
-export function ProductList({ products, categoryName, onReorder }: ProductListProps) {
+export function ProductList({ products, categoryName, onReorder, standIn }: ProductListProps) {
   const [drag, setDrag] = useState<Drag | null>(null);
+  const keep = standInSearch(useLocation().search);
   const ids = products.map((p) => p.id);
   const clampIndex = (i: number) => Math.max(0, Math.min(products.length - 1, i));
   const target = drag ? clampIndex(drag.index + Math.round(drag.offset / drag.rowHeight)) : null;
@@ -65,7 +69,7 @@ export function ProductList({ products, categoryName, onReorder }: ProductListPr
       {products.map((p, i) => {
         const dragging = drag?.index === i;
         const image = p.images[0];
-        const editPath = adminPath('produtos', p.id);
+        const editPath = adminPath('produtos', p.id) + keep;
         return (
           <li
             key={p.id}
@@ -76,12 +80,13 @@ export function ProductList({ products, categoryName, onReorder }: ProductListPr
             style={{ transform: `translateY(${dragging ? drag.offset : rowShift(i)}px)` }}
           >
             <div className="grid grid-cols-[64px_minmax(0,1fr)_auto] gap-x-3">
-              <Link to={editPath} tabIndex={-1} aria-hidden="true" className="row-span-2 self-start">
+              <Link to={editPath} tabIndex={-1} aria-hidden="true" className="relative row-span-2 self-start">
                 {image ? (
                   <Img {...productImageSources(image, true)} alt="" ratio="4 / 5" frameClassName={cx('w-16 rounded-[8px]', !p.available && 'opacity-60')} width={64} height={80} />
                 ) : (
                   <span className="block aspect-[4/5] w-16 rounded-[8px] bg-champagne" />
                 )}
+                {standIn?.has(p.id) && <StandInTag className="absolute inset-x-1 bottom-1 text-center" />}
               </Link>
               {/* The name's link stretches over the whole text column: a tap on the category or price opens the piece too. */}
               <div className="relative min-w-0 py-0.5">
@@ -92,6 +97,7 @@ export function ProductList({ products, categoryName, onReorder }: ProductListPr
                 <p className="truncate text-sm text-ink-muted">
                   {categoryName.get(p.categoryId) ?? 'Sem categoria'}
                   {!p.available && ' · Indisponível'}
+                  {standIn?.has(p.id) && <span className="sr-only"> · Foto provisória</span>}
                 </p>
                 <Price price={p.price} promoPrice={p.promoPrice} size="sm" className="mt-0.5" />
               </div>

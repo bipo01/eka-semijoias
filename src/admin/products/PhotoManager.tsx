@@ -11,6 +11,7 @@ import { toast } from '../../store/ui';
 import { move } from '../lib/reorder';
 import { altFor, imageFinish, type DraftErrors, type ProductDraft } from './productDraft';
 import { photoBlob } from './standardize/photoSource';
+import { StandInTag } from './StandInPhotos';
 import StandardizeSheet, { type StandardizedPhoto } from './standardize/StandardizeSheet';
 
 const MAX_PHOTOS = 20;
@@ -154,8 +155,23 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
     }));
   }
 
+  const standIns = draft.images.filter((img) => img.placeholder).length;
+
   return (
     <div className="flex flex-col gap-3">
+      {standIns > 0 && (
+        <div role="note" className="flex items-start gap-3 rounded-2xl border border-[#ecd6b4] bg-warning-tint/70 p-3.5 text-sm leading-snug">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-warning shadow-[0_1px_4px_rgb(138_90_18/0.18)]">
+            <Camera size={18} strokeWidth={1.75} aria-hidden="true" />
+          </span>
+          <p className="min-w-0 text-ink">
+            <span className="block font-medium">{standIns === 1 ? 'Esta peça está com uma foto provisória.' : `Esta peça está com ${standIns} fotos provisórias.`}</span>
+            <span className="mt-0.5 block text-ink-muted">
+              Adicione fotos reais desta peça e remova as marcadas como <span className="font-medium text-warning">Provisória</span> (no ×). Depois, toque em Salvar.
+            </span>
+          </p>
+        </div>
+      )}
       <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-1 lg:mx-0 lg:px-0" aria-label="Fotos da peça">
         {draft.images.map((img, i) => {
           const hasError = !!errors[`alt:${img.id}`];
@@ -169,12 +185,21 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
               <button
                 type="button"
                 aria-pressed={img.id === selectedId}
-                aria-label={`${i === 0 ? 'Principal, foto 1' : `Foto ${i + 1}`}: ${img.alt || 'sem descrição'}`}
+                // The name starts with what the tile shows ("Principal", "Provisória"), in that order.
+                aria-label={`${i === 0 ? `Principal${img.placeholder ? ', provisória' : ''}, foto 1` : `${img.placeholder ? 'Provisória, foto' : 'Foto'} ${i + 1}`}: ${img.alt || 'sem descrição'}`}
                 onClick={() => onSelect(img.id)}
                 className="absolute inset-0 rounded-[10px]"
               >
                 <Img {...productImageSources(img, true)} alt="" ratio="4 / 5" frameClassName="h-full w-full" width={88} height={110} />
-                {i === 0 && <span className="absolute bottom-1 left-1 rounded-full bg-ink/80 px-2 text-[0.75rem] leading-5 text-on-dark">Principal</span>}
+                {i === 0 && <span className={cx('absolute left-1 rounded-full bg-ink/80 px-2 text-[0.75rem] leading-5 text-on-dark', img.placeholder ? 'bottom-[26px]' : 'bottom-1')}>Principal</span>}
+                {/* Bottom strip, clear of the remove button; "Principal" moves up above it. The space keeps the
+                    two words apart in the button's text ("Principal Provisória"). */}
+                {img.placeholder && (
+                  <>
+                    {' '}
+                    <StandInTag className="absolute inset-x-1 bottom-1 text-center" />
+                  </>
+                )}
               </button>
               {/* The remove target is the visible circle plus a small margin (32 px, above the 24 px
                   minimum): a bigger one covered half the tile, and a tap meant to pick the photo

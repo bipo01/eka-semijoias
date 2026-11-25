@@ -91,7 +91,7 @@ describe('product form', { timeout: 20_000 }, () => {
     const user = userEvent.setup();
     renderAdmin('/admin/produtos/prod-p05');
     const dialog = await screen.findByRole('region', { name: 'Editar peça' });
-    const photos = () => within(within(dialog).getByRole('list', { name: 'Fotos da peça' })).getAllByRole('button', { name: /^(Principal, foto 1|Foto \d+):/ });
+    const photos = () => within(within(dialog).getByRole('list', { name: 'Fotos da peça' })).getAllByRole('button', { name: /^(Principal(, provisória)?, foto 1|(Provisória, foto|Foto) \d+):/ });
     const before = photos().map((b) => b.getAttribute('aria-label'));
     expect(before.length).toBeGreaterThanOrEqual(2);
     await user.click(within(dialog).getByRole('button', { name: 'Remover foto 1' }));

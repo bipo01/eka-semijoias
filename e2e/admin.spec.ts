@@ -128,7 +128,7 @@ test('admin: a new photo is uploaded on save and becomes the cover on the public
   await unlock(page);
   const uploads: string[] = [];
   page.on('response', (r) => r.url().endsWith('/api/admin/media') && uploads.push(String(r.status())));
-  const photos = page.getByRole('list', { name: 'Fotos da peça' }).getByRole('button', { name: /^(Principal, foto 1|Foto \d+):/ });
+  const photos = page.getByRole('list', { name: 'Fotos da peça' }).getByRole('button', { name: /^(Principal(, provisória)?, foto 1|(Provisória, foto|Foto) \d+):/ });
   // Count only once the photos are on screen: counting an empty list made the "new" photo the
   // first one (already the main one, so no "Tornar principal"), a flaky failure on slow machines.
   await expect(photos.first()).toBeVisible();
