@@ -16,6 +16,9 @@ describe('limits read from the section schemas', () => {
     expect(textLimit('depoimentos', ['items', 3, 'text'])).toBe(400);
     expect(textLimit('sobre', ['image', 'alt'])).toBe(200); // through the nullable image
     expect(textLimit('inicio', ['nope'])).toBe(0);
+    // Through the hero's migration step (z.preprocess), into the slides and their frames.
+    expect(textLimit('inicio', ['hero', 'slides', 2, 'alt'])).toBe(200);
+    expect(textLimit('inicio', ['hero', 'slides', 0, 'frames', 'celular', 'image', 'alt'])).toBe(200);
   });
 
   it('knows which texts are required and which images may be removed', () => {
@@ -23,13 +26,14 @@ describe('limits read from the section schemas', () => {
     expect(isRequired('contato', ['header', 'eyebrow'])).toBe(false);
     expect(isNullable('sobre', ['image'])).toBe(true);
     expect(isNullable('compartilhar', ['image'])).toBe(true);
-    expect(isNullable('inicio', ['hero', 'image'])).toBe(false);
+    expect(isNullable('inicio', ['hero', 'slides', 0, 'image'])).toBe(false);
   });
 
   it('finds list limits', () => {
     expect(listLimits('depoimentos', ['items'])).toEqual({ min: 0, max: 12 });
     expect(listLimits('cuidados', ['steps'])).toEqual({ min: 1, max: 12 });
     expect(listLimits('inicio', ['instagram'])).toEqual({ min: 0, max: 6 });
+    expect(listLimits('inicio', ['hero', 'slides'])).toEqual({ min: 1, max: 5 });
   });
 });
 

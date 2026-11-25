@@ -1,6 +1,7 @@
 import { useId, useState, type ChangeEvent } from 'react';
 import { ImagePlus, Images, Loader2, Trash2 } from 'lucide-react';
 import { Button, buttonClass } from '../../../components/ui/Button';
+import { Sheet } from '../../../components/ui/Sheet';
 import { TextField } from '../../../components/ui/Field';
 import { Img } from '../../../components/ui/Img';
 import { cx } from '../../../components/ui/cx';
@@ -42,10 +43,12 @@ interface ImageFieldProps {
   altMax?: number;
   /** Field key, for focusing an error. */
   fieldKey?: string;
+  /** Hide the preview when the form shows the photo elsewhere (e.g. the hero framing editor). */
+  preview?: boolean;
 }
 
 /** Site image: preview, description, upload, pick from the product photos and (when allowed) remove. */
-export function ImageField({ label, hint, value, onChange, wide = false, allowRemove = false, emptyText, ratio, error, altError, altMax = 200, fieldKey }: ImageFieldProps) {
+export function ImageField({ label, hint, value, onChange, wide = false, allowRemove = false, emptyText, ratio, error, altError, altMax = 200, fieldKey, preview = true }: ImageFieldProps) {
   const uid = useId();
   const [busy, setBusy] = useState(false);
   const [choosing, setChoosing] = useState(false);
@@ -72,7 +75,7 @@ export function ImageField({ label, hint, value, onChange, wide = false, allowRe
         </p>
         {hint && <p className="text-sm text-ink-muted">{hint}</p>}
       </div>
-      <div className={cx('overflow-hidden rounded-[12px] border border-line', wide ? 'max-w-[420px]' : 'max-w-[200px]')}>
+      {preview && <div className={cx('overflow-hidden rounded-[12px] border border-line', wide ? 'max-w-[420px]' : 'max-w-[200px]')}>
         {value ? (
           <Img {...contentImagePreview(value, wide)} alt={value.alt || 'Foto sem descrição'} ratio={ratio ?? (wide ? '16 / 9' : '4 / 5')} />
         ) : (
@@ -80,7 +83,7 @@ export function ImageField({ label, hint, value, onChange, wide = false, allowRe
             {emptyText ?? 'Sem foto'}
           </div>
         )}
-      </div>
+      </div>}
       <div className="flex flex-wrap gap-2">
         <label
           className={cx(
@@ -162,5 +165,49 @@ export function ImageInput({ path, label, hint, wide, emptyText, ratio }: { path
       altMax={textLimit(id, [...path, 'alt']) || 200}
       fieldKey={key}
     />
+  );
+}
+
+/** Adding a list photo (gallery, hero slide): send a new one or pick a product photo. */
+export function AddPhoto({ open, onClose, onPick, profile = 'product', title = 'Adicionar foto' }: { open: boolean; onClose: () => void; onPick: (img: ContentImage) => void; profile?: ImageProfile; title?: string }) {
+  const [busy, setBusy] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+
+  async function upload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    const result = await photoFromFile(file, profile);
+    setBusy(false);
+    if (!result.ok) return void toast(result.message, { tone: 'error' });
+    onPick({ src: result.src, thumb: result.thumb, alt: '' });
+    onClose();
+  }
+
+  return (
+    <>
+      <Sheet open={open && !choosing} onClose={() => !busy && onClose()} title={title} side="center">
+        <div className="flex flex-col gap-2">
+          <label className={cx(buttonClass('primary', 'md', true), 'cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-copper', busy && 'pointer-events-none opacity-50')}>
+            <input type="file" accept="image/*" className="sr-only" onChange={upload} disabled={busy} />
+            {busy ? <Loader2 size={18} strokeWidth={1.5} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <ImagePlus size={18} strokeWidth={1.5} aria-hidden="true" />}
+            {busy ? 'Preparando foto…' : 'Enviar foto'}
+          </label>
+          <Button variant="secondary" block onClick={() => setChoosing(true)} disabled={busy}>
+            <Images size={18} strokeWidth={1.5} aria-hidden="true" /> Escolher das fotos das peças
+          </Button>
+        </div>
+      </Sheet>
+      <ProductPhotoChooser
+        open={open && choosing}
+        onClose={() => setChoosing(false)}
+        onPick={(img) => {
+          setChoosing(false);
+          onClose();
+          onPick({ src: img.src, ...(img.thumb ? { thumb: img.thumb } : {}), alt: img.alt });
+        }}
+      />
+    </>
   );
 }

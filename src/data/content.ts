@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FRAME_DEFAULT, INTERVAL_DEFAULT, INTERVAL_MAX, INTERVAL_MIN, SLIDES_MAX, ZOOM_MAX, ZOOM_MIN, type HeroFrameId } from './heroFrames';
 import { imageSrc } from './imageSrc';
 
 /*
@@ -84,16 +85,76 @@ export type Testimonial = z.infer<typeof testimonialSchema>;
 /** "Name · City", either one alone, or nothing (a testimonial may go out with the comment only). */
 export const testimonialSignature = (t: { name: string; city: string }) => [t.name.trim(), t.city.trim()].filter(Boolean).join(' · ');
 
+/** Longest slide name. */
+export const SLIDE_NAME_MAX = 30;
+
+const percent = z.number().int('Use um número inteiro.').min(0, 'Escolha um ponto dentro da foto.').max(100, 'Escolha um ponto dentro da foto.');
+
+/** How a slide shows on one screen shape (src/data/heroFrames.ts): its own photo and/or framing. */
+export const heroFrameSchema = z.object({
+  /** A photo only for this screen; without it the frame shows the slide's main photo. */
+  image: contentImageSchema.optional(),
+  /** Focus point, in % of the photo from the left/top: it stays in place when zooming. */
+  x: percent.default(FRAME_DEFAULT.x),
+  y: percent.default(FRAME_DEFAULT.y),
+  zoom: z.number().min(ZOOM_MIN, `O zoom vai de ${ZOOM_MIN * 100}% a ${ZOOM_MAX * 100}%.`).max(ZOOM_MAX, `O zoom vai de ${ZOOM_MIN * 100}% a ${ZOOM_MAX * 100}%.`).default(FRAME_DEFAULT.zoom),
+});
+export type HeroFrame = z.infer<typeof heroFrameSchema>;
+
+export const heroSlideSchema = z.object({
+  id: itemIdSchema,
+  /** Her name for the slide ("Brinco e colar"): the panel's title and the slider's dot label. Optional. */
+  name: text(SLIDE_NAME_MAX).default(''),
+  alt: text(200),
+  /** The main photo, used by every frame without its own. */
+  image: contentImageSchema,
+  /** Only the frames she adjusted (a missing one is the main photo, centered). */
+  frames: z
+    .object({
+      celular: heroFrameSchema.optional(),
+      tablet: heroFrameSchema.optional(),
+      quadrado: heroFrameSchema.optional(),
+      computador: heroFrameSchema.optional(),
+      amplo: heroFrameSchema.optional(),
+    } satisfies Record<HeroFrameId, z.ZodType>)
+    .default({}),
+});
+export type HeroSlide = z.infer<typeof heroSlideSchema>;
+
+/**
+ * The hero was one photo (`image`) before the slider: a stored section of that time reads as a
+ * single slide with the automatic framing, so nothing she saved breaks.
+ */
+function migrateHero(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const { image, ...rest } = value as Record<string, unknown> & { image?: unknown };
+  if ('slides' in rest || image === undefined) return rest;
+  const alt = image && typeof image === 'object' && typeof (image as { alt?: unknown }).alt === 'string' ? (image as { alt: string }).alt : '';
+  return { ...rest, slides: [{ id: 'principal', alt, image, frames: {} }] };
+}
+
 export const sectionSchemas = {
   inicio: stamped({
-    hero: z.object({
-      title: req(60),
-      highlight: text(30),
-      subtitle: text(160),
-      primaryCta: req(30),
-      secondaryCta: text(30),
-      image: contentImageSchema,
-    }),
+    hero: z.preprocess(
+      migrateHero,
+      z.object({
+        title: req(60),
+        highlight: text(30),
+        subtitle: text(160),
+        primaryCta: req(30),
+        secondaryCta: text(30),
+        slides: z.array(heroSlideSchema).min(1, 'Deixe pelo menos 1 foto.').max(SLIDES_MAX, `No máximo ${SLIDES_MAX} fotos.`),
+        /** Off: only the first photo shows, still (the others stay saved for later). */
+        rotate: z.boolean().default(true),
+        /** Seconds between slides. */
+        interval: z
+          .number()
+          .int('Use um número inteiro.')
+          .min(INTERVAL_MIN, `Escolha entre ${INTERVAL_MIN} e ${INTERVAL_MAX} segundos.`)
+          .max(INTERVAL_MAX, `Escolha entre ${INTERVAL_MIN} e ${INTERVAL_MAX} segundos.`)
+          .default(INTERVAL_DEFAULT),
+      }),
+    ),
     titles: z.object({
       categories: req(40),
       featured: req(40),
@@ -363,7 +424,10 @@ export function contentImageSources(content: SiteContent | undefined): string[] 
   };
   const s = content;
   if (s.inicio) {
-    push(s.inicio.hero.image);
+    for (const slide of s.inicio.hero.slides) {
+      push(slide.image);
+      for (const frame of Object.values(slide.frames)) push(frame?.image);
+    }
     push(s.inicio.resellerBand.image);
     for (const img of s.inicio.instagram) push(img);
   }
@@ -371,6 +435,14 @@ export function contentImageSources(content: SiteContent | undefined): string[] 
   push(s.revendedoras?.hero.image);
   push(s.compartilhar?.image);
   return out;
+}
+
+function mapSlideImages(slide: HeroSlide, fn: (img: ContentImage) => ContentImage): HeroSlide {
+  const frames: HeroSlide['frames'] = {};
+  for (const [id, frame] of Object.entries(slide.frames) as [HeroFrameId, HeroFrame | undefined][]) {
+    if (frame) frames[id] = frame.image ? { ...frame, image: fn(frame.image) } : frame;
+  }
+  return { ...slide, image: fn(slide.image), frames };
 }
 
 /** Applies `fn` to every image of a section (immutably), e.g. to swap data URLs for uploaded keys. */
@@ -381,7 +453,7 @@ export function mapSectionImages<K extends SectionId>(id: K, data: Sections[K], 
       const s = d as Sections['inicio'];
       return {
         ...s,
-        hero: { ...s.hero, image: fn(s.hero.image) },
+        hero: { ...s.hero, slides: s.hero.slides.map((slide) => mapSlideImages(slide, fn)) },
         resellerBand: { ...s.resellerBand, image: fn(s.resellerBand.image) },
         instagram: s.instagram.map((img) => ({ ...fn(img), id: img.id })),
       } as Sections[K];

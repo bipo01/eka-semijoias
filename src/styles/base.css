@@ -38,6 +38,34 @@
     box-shadow: 0 0 0 2px var(--c-ink);
   }
   ::selection { background: var(--c-champagne); color: var(--c-ink); }
+
+  /*
+   * Scrollbars: a rose-gold pill floating on the ivory page (12 px), a thinner one (9 px) inside
+   * panels, lists and text areas; darker on hover, copper while dragged. Chrome/Edge/Safari style
+   * the ::-webkit-scrollbar parts (they ignore them once scrollbar-color is set, so the standard
+   * properties go to Firefox only). Phones keep their overlay scrollbars.
+   */
+  @supports selector(::-webkit-scrollbar) {
+    ::-webkit-scrollbar { width: 9px; height: 9px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      min-height: 44px;
+      border: 2px solid transparent;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--c-rose-light), var(--c-rose)) padding-box;
+    }
+    ::-webkit-scrollbar-thumb:horizontal { background: linear-gradient(90deg, var(--c-rose-light), var(--c-rose)) padding-box; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--c-rose) padding-box; }
+    ::-webkit-scrollbar-thumb:active { background: var(--c-copper) padding-box; }
+    html::-webkit-scrollbar { width: 12px; }
+    html::-webkit-scrollbar-track { background: var(--c-ivory); box-shadow: inset 1px 0 0 var(--c-line); }
+    html::-webkit-scrollbar-thumb { min-height: 64px; border-width: 3px; }
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-width: thin; scrollbar-color: var(--c-rose) transparent; }
+    html { scrollbar-width: auto; scrollbar-color: var(--c-rose) var(--c-ivory); }
+  }
   dialog { color: inherit; }
   dialog::backdrop { background: rgb(43 29 24 / 0.42); }
 }

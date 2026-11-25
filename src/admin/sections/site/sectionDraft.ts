@@ -19,6 +19,8 @@ interface Def {
   shape?: Record<string, Node>;
   element?: Node;
   innerType?: Node;
+  /** A pipe (z.preprocess): the schema after the step. */
+  out?: Node;
   checks?: { _zod: { def: { check: string; maximum?: number; minimum?: number } } }[];
 }
 interface Node {
@@ -31,8 +33,11 @@ const WRAPPERS = new Set(['optional', 'nullable', 'default', 'catch', 'readonly'
 
 function unwrap(node: Node): Node {
   let n = node;
-  while (WRAPPERS.has(n.def.type) && n.def.innerType) n = n.def.innerType;
-  return n;
+  for (;;) {
+    if (WRAPPERS.has(n.def.type) && n.def.innerType) n = n.def.innerType;
+    else if (n.def.type === 'pipe' && n.def.out) n = n.def.out;
+    else return n;
+  }
 }
 
 /** The schema of a field of a section; numeric segments (any index) step into list items. */

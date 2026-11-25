@@ -142,7 +142,7 @@ describe('site content', () => {
     const a = await admin();
     const up = await a.req('/api/admin/media', { raw: webpBytes(`hero-${randomUUID()}`), type: 'image/webp' });
     expect(up.status).toBe(201);
-    const hero = (src: string) => upsert('inicio', { ...defaults.inicio, hero: { ...defaults.inicio.hero, image: { src, alt: 'Colar no colo' } } });
+    const hero = (src: string) => upsert('inicio', { ...defaults.inicio, hero: { ...defaults.inicio.hero, slides: [{ id: 's1', alt: 'Colar no colo', image: { src, alt: 'Colar no colo' }, frames: {} }] } });
     let c = await catalog();
     const missing = await send(a, c.version, [hero(`media/${'b'.repeat(64)}.webp`)]);
     expect(missing.status).toBe(422);
@@ -152,7 +152,37 @@ describe('site content', () => {
     const ok = await send(a, c.version, [hero(up.json.key)]);
     expect(ok.status).toBe(200);
     c = await catalog();
-    expect(c.content.inicio.hero.image).toEqual({ src: up.json.key, alt: 'Colar no colo' });
+    // A slide sent without a name (a panel opened before names existed) is stored with an empty one.
+    expect(c.content.inicio.hero.slides).toEqual([{ id: 's1', name: '', alt: 'Colar no colo', image: { src: up.json.key, alt: 'Colar no colo' }, frames: {} }]);
+  });
+
+  it('checks the photo of every hero screen and publishes the framing', async () => {
+    const a = await admin();
+    const main = await a.req('/api/admin/media', { raw: webpBytes(`hero-main-${randomUUID()}`), type: 'image/webp' });
+    const phone = await a.req('/api/admin/media', { raw: webpBytes(`hero-phone-${randomUUID()}`), type: 'image/webp' });
+    expect([main.status, phone.status]).toEqual([201, 201]);
+    const slides = (phoneSrc: string) => [
+      { id: 's1', alt: 'Anel na mão', image: { src: main.json.key, alt: 'Anel na mão' }, frames: { celular: { image: { src: phoneSrc, alt: '' }, x: 35, y: 30, zoom: 1.4 }, amplo: { x: 80, y: 50, zoom: 1 } } },
+      ...defaults.inicio.hero.slides.slice(0, 2),
+    ];
+    const inicio = (phoneSrc: string) => upsert('inicio', { ...defaults.inicio, hero: { ...defaults.inicio.hero, slides: slides(phoneSrc), interval: 8 } });
+    let c = await catalog();
+    // A photo only for the phone screen is checked like any other.
+    const missing = await send(a, c.version, [inicio(`media/${'d'.repeat(64)}.webp`)]);
+    expect(missing.status).toBe(422);
+    expect(missing.json.error.code).toBe('integrity');
+    expect((await send(a, c.version, [inicio('data:image/webp;base64,AAAA')])).status).toBe(400);
+    // Out of range framing never reaches the database.
+    const bad = upsert('inicio', { ...defaults.inicio, hero: { ...defaults.inicio.hero, slides: [{ ...slides(phone.json.key)[0], frames: { tablet: { x: 120, y: 50, zoom: 1 } } }] } });
+    expect((await send(a, c.version, [bad])).status).toBe(400);
+    const ok = await send(a, c.version, [inicio(phone.json.key)]);
+    expect(ok.status).toBe(200);
+    c = await catalog();
+    expect(c.content.inicio.hero.interval).toBe(8);
+    expect(c.content.inicio.hero.slides[0].frames).toEqual({ celular: { image: { src: phone.json.key, alt: '' }, x: 35, y: 30, zoom: 1.4 }, amplo: { x: 80, y: 50, zoom: 1 } });
+    expect(c.content.inicio.hero.slides.map((s: { id: string }) => s.id)).toEqual(['s1', 'colo', 'mao']);
+    // The uploaded photos are served.
+    for (const key of [main.json.key, phone.json.key]) expect((await fetch(`${BASE()}/${key}`)).status).toBe(200);
   });
 
   it('refuses unknown sections and invalid fields with the field message', async () => {

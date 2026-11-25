@@ -32,14 +32,15 @@ describe('site images', { timeout: 20_000 }, () => {
   it('uploads banners with the wide profile and saves them as uploaded photos', async () => {
     start();
     renderAdmin('/admin/site?secao=inicio');
-    const dialog = await screen.findByRole('dialog', { name: 'Página inicial' });
-    const hero = within(dialog).getByRole('group', { name: 'Foto da chamada' });
-    expect(within(hero).queryByRole('button', { name: /Remover/ })).not.toBeInTheDocument(); // the hero always has a photo
-    await userEvent.upload(within(hero).getByLabelText(/Enviar outra foto/), file());
+    // The first render here also loads the admin chunk (slow on a busy machine).
+    const dialog = await screen.findByRole('dialog', { name: 'Página inicial' }, { timeout: 5000 });
+    const band = within(dialog).getByRole('group', { name: 'Foto da faixa' });
+    expect(within(band).queryByRole('button', { name: /Remover/ })).not.toBeInTheDocument(); // the band always has a photo
+    await userEvent.upload(within(band).getByLabelText(/Enviar outra foto/), file());
     expect(processImage).toHaveBeenLastCalledWith(expect.any(File), { profile: 'wide' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
     await screen.findByText(/Página inicial: alterações salvas/);
-    const saved = mockServer.catalog.content?.inicio?.hero.image;
+    const saved = mockServer.catalog.content?.inicio?.resellerBand.image;
     expect(saved?.src).toMatch(/^media\//);
     expect(saved?.thumb).toMatch(/^media\//);
     expect(saved?.alt).toBe(''); // a new photo starts without the old picture's description

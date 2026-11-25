@@ -58,5 +58,8 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     css: false,
+    // Admin screens rendered in jsdom with user-event (lazy admin chunk, many fields) take a few seconds
+    // when the whole suite runs in parallel; 5 s timed out under load while each passes alone in ~1 s.
+    testTimeout: 15_000,
   },
 });

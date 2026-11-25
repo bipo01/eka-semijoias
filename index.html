@@ -21,9 +21,13 @@
     <meta property="og:image" content="https://eka-semijoias.eka-semijoias.workers.dev/og-image.jpg" />
     <meta property="og:locale" content="pt_BR" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preload" as="image" type="image/webp" href="%BASE_URL%images/lifestyle/l01-hero-pescoco-720.webp"
-      imagesrcset="%BASE_URL%images/lifestyle/l01-hero-pescoco-480.webp 480w, %BASE_URL%images/lifestyle/l01-hero-pescoco-720.webp 720w, %BASE_URL%images/lifestyle/l01-hero-pescoco-960.webp 960w"
-      imagesizes="(min-width: 768px) 55vw, 100vw" fetchpriority="high" />
+    <!-- First built-in hero slide, per screen (media, srcset and sizes match the <picture> of src/components/home/Hero.tsx and src/data/heroFrames.ts). -->
+    <link rel="preload" as="image" type="image/webp" media="(max-width: 767px)" href="%BASE_URL%images/hero/colo-celular-1024.webp"
+      imagesrcset="%BASE_URL%images/hero/colo-celular-640.webp 640w, %BASE_URL%images/hero/colo-celular-1024.webp 1024w, %BASE_URL%images/hero/colo-celular-1600.webp 1600w"
+      imagesizes="100vw" fetchpriority="high" />
+    <link rel="preload" as="image" type="image/webp" media="(min-width: 1280px) and (max-width: 1799px)" href="%BASE_URL%images/hero/colo-computador-1024.webp"
+      imagesrcset="%BASE_URL%images/hero/colo-computador-640.webp 640w, %BASE_URL%images/hero/colo-computador-1024.webp 1024w, %BASE_URL%images/hero/colo-computador-1600.webp 1600w"
+      imagesizes="55vw" fetchpriority="high" />
   </head>
   <body>
     <div id="root"></div>

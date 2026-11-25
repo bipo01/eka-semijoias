@@ -1,5 +1,6 @@
 import { defaultSections, type ContentFacts } from '../../src/content/defaults';
 import { createCatalogSeed } from '../../src/data/seed';
+import type { HeroSlide } from '../../src/data/content';
 import { absoluteImage, clip, DEFAULT_HERO, pageMeta } from '../seo';
 
 const ORIGIN = 'https://loja.example';
@@ -22,7 +23,7 @@ describe('page meta', () => {
       ...base,
       content: {
         compartilhar: { title: 'ÉKA', description: 'Semijoias em Cuiabá', image: { src: MEDIA, alt: '' } },
-        inicio: { ...d.inicio, hero: { ...d.inicio.hero, image: { src: MEDIA, alt: 'x' } } },
+        inicio: { ...d.inicio, hero: { ...d.inicio.hero, slides: [{ id: 's1', name: '', alt: 'x', image: { src: MEDIA, alt: 'x' }, frames: {} }] } },
       },
     };
     expect(pageMeta(at('/'), catalog)).toMatchObject({ title: 'ÉKA', description: 'Semijoias em Cuiabá', image: `${ORIGIN}/${MEDIA}`, preloadHero: false });
@@ -55,7 +56,9 @@ describe('page meta', () => {
   it('works without a catalog (database unavailable) with the built-in texts, never empty', () => {
     const share = defaultSections(none).compartilhar;
     expect(pageMeta(at('/'), null)).toMatchObject({ title: share.title, description: share.description, image: `${ORIGIN}/og-image.jpg`, preloadHero: true });
-    expect(DEFAULT_HERO).toBe(defaultSections(none).inicio.hero.image.src);
+    const first = defaultSections(none).inicio.hero.slides[0]!;
+    expect(DEFAULT_HERO).toEqual({ celular: first.frames.celular!.image!.src, computador: first.frames.computador!.image!.src });
+    expect(DEFAULT_HERO).toEqual({ celular: 'images/hero/colo-celular', computador: 'images/hero/colo-computador' });
   });
 
   it('never throws: malformed addresses and unexpected stored shapes fall back to the built-in tags', () => {
@@ -66,8 +69,28 @@ describe('page meta', () => {
     expect(pageMeta(at('/'), broken)).toMatchObject({ title: defaultSections(none).compartilhar.title, description: defaultSections(none).compartilhar.description });
   });
 
+  it('keeps the hero preloads only while the page opens on the built-in first photos', () => {
+    const base = createCatalogSeed();
+    const d = defaultSections(none).inicio;
+    const withHero = (hero: unknown) => ({ ...base, content: { inicio: { ...d, hero } } }) as never;
+    const [colo, mao, seda] = d.hero.slides as [HeroSlide, HeroSlide, HeroSlide];
+    // Her own texts with the built-in photos, or her framing of them: same files, preloads kept.
+    expect(pageMeta(at('/'), withHero({ ...d.hero, title: 'Outro título' })).preloadHero).toBe(true);
+    const reframed = { ...colo, frames: { ...colo.frames, celular: { ...colo.frames.celular!, x: 20, zoom: 1.5 } } };
+    expect(pageMeta(at('/'), withHero({ ...d.hero, slides: [reframed, mao, seda] })).preloadHero).toBe(true);
+    // Another photo first, or another photo on a preloaded screen: the preloads go (never a wasted download).
+    expect(pageMeta(at('/'), withHero({ ...d.hero, slides: [mao, colo, seda] })).preloadHero).toBe(false);
+    const ownPhone = { ...colo, frames: { ...colo.frames, celular: { image: { src: MEDIA, alt: '' }, x: 50, y: 50, zoom: 1 } } };
+    expect(pageMeta(at('/'), withHero({ ...d.hero, slides: [ownPhone, mao] })).preloadHero).toBe(false);
+    // A section saved before the slides (one photo, not parsed in the Worker).
+    expect(pageMeta(at('/'), withHero({ title: 'Brilho', image: { src: 'images/lifestyle/l01-hero-pescoco', alt: '' } })).preloadHero).toBe(false);
+    // Only the home page preloads it.
+    expect(pageMeta(at('/catalogo'), base).preloadHero).toBe(false);
+  });
+
   it('builds absolute picture URLs and clips text at a word', () => {
     expect(absoluteImage(MEDIA, ORIGIN)).toBe(`${ORIGIN}/${MEDIA}`);
+    expect(absoluteImage('images/hero/colo-computador', ORIGIN)).toBe(`${ORIGIN}/images/hero/colo-computador-1024.webp`);
     expect(absoluteImage('images/products/p01', ORIGIN)).toBe(`${ORIGIN}/images/products/p01-960.webp`);
     expect(absoluteImage('data:image/webp;base64,AA', ORIGIN)).toBeNull();
     expect(clip('Um  texto\ncom quebras', 100)).toBe('Um texto com quebras');
