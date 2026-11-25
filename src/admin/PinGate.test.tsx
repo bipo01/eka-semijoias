@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mockServer, TEST_PIN } from '../test/mockApi';
 import { polyfillDialog, renderAdmin, resetStores, unlockSession } from './testUtils';
@@ -27,6 +27,19 @@ describe('PIN gate', { timeout: 20_000 }, () => {
     await typePin(user, TEST_PIN);
     expect(await screen.findByRole('heading', { name: 'Produtos', level: 1 })).toBeInTheDocument();
     expect(mockServer.requests.filter((r) => r.path === '/api/admin/login')).toHaveLength(1);
+  });
+
+  it('keeps every digit of fast taps (two taps before a re-render)', async () => {
+    renderAdmin();
+    const keypad = await screen.findByRole('group', { name: 'Teclado do PIN' });
+    // Click all keys in one synchronous burst: React has no chance to re-render between them.
+    act(() => {
+      for (const digit of TEST_PIN) within(keypad).getByRole('button', { name: digit }).click();
+    });
+    expect(await screen.findByRole('heading', { name: 'Produtos', level: 1 })).toBeInTheDocument();
+    const login = mockServer.requests.filter((r) => r.path === '/api/admin/login');
+    expect(login).toHaveLength(1);
+    expect((login[0]!.body as { pin: string }).pin).toBe(TEST_PIN);
   });
 
   it('rejects a wrong PIN with an inline error and stays locked', async () => {

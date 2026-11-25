@@ -129,17 +129,35 @@ export default function AdminApp() {
         <Route element={<AdminShell />}>
           <Route index element={<HomePage />} />
           <Route path="mais" element={<MorePage />} />
-          <Route path="pedidos/:orderNumber?" element={<OrdersPage />} />
-          <Route path="clientes/:customerId?" element={<CustomersPage />} />
-          <Route path="estoque/:productId?" element={<StockPage />} />
+          <Route path="pedidos" element={<OrdersPage />}>
+            {/* The detail is drawn by the list page itself, which stays mounted (filters, scroll). */}
+            <Route path=":orderNumber" element={null} />
+          </Route>
+          <Route path="clientes" element={<CustomersPage />}>
+            {/* The detail is drawn by the list page itself, which stays mounted (filters, scroll). */}
+            <Route path=":customerId" element={null} />
+          </Route>
+          <Route path="estoque" element={<StockPage />}>
+            {/* The detail is drawn by the list page itself, which stays mounted (filters, scroll). */}
+            <Route path=":productId" element={null} />
+          </Route>
           <Route path="relatorio" element={<ReportPage />} />
-          <Route path="mensagens/:messageType?" element={<MessagesPage />} />
-          <Route path="site/:sectionId?" element={<SitePage />} />
+          <Route path="mensagens" element={<MessagesPage />}>
+            {/* The detail is drawn by the list page itself, which stays mounted (filters, scroll). */}
+            <Route path=":messageType" element={null} />
+          </Route>
+          <Route path="site" element={<SitePage />}>
+            {/* The detail is drawn by the list page itself, which stays mounted (filters, scroll). */}
+            <Route path=":sectionId" element={null} />
+          </Route>
           <Route path="produtos" element={<ProductsPage />}>
             <Route path=":productId" element={<ProductFormRoute />} />
           </Route>
           <Route path="categorias" element={<CategoriesPage />} />
-          <Route path="revendedoras/:resellerId?" element={<ResellersPage />} />
+          <Route path="revendedoras" element={<ResellersPage />}>
+            {/* The detail is drawn by the list page itself, which stays mounted (filters, scroll). */}
+            <Route path=":resellerId" element={null} />
+          </Route>
           <Route path="configuracoes" element={<SettingsPage />} />
           <Route path="backup" element={<BackupPage />} />
           <Route path="*" element={<Navigate to={ADMIN_BASE} replace />} />

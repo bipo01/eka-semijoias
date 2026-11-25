@@ -30,7 +30,14 @@ function failureMessage(error: unknown): string {
 /** PIN keypad. The PIN is checked by the server once all its digits are typed. */
 export function PinGate({ pinLength, onUnlock, embedded = false }: PinGateProps) {
   const maxLength = pinLength;
-  const [pin, setPin] = useState('');
+  const [pin, setPinState] = useState('');
+  // Fast taps can land before React re-renders: the ref always holds what was typed, so no digit is
+  // lost (two quick taps once kept only one, and the PIN came out short).
+  const typed = useRef('');
+  const setPin = (value: string) => {
+    typed.current = value;
+    setPinState(value);
+  };
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const boxesRef = useRef<HTMLDivElement>(null);
@@ -58,8 +65,9 @@ export function PinGate({ pinLength, onUnlock, embedded = false }: PinGateProps)
   }
 
   function press(digit: string) {
-    if (checking || pin.length >= maxLength) return;
-    const next = pin + digit;
+    const current = typed.current;
+    if (checking || current.length >= maxLength) return;
+    const next = current + digit;
     setPin(next);
     setError(null);
     if (next.length === maxLength) void check(next);
@@ -67,7 +75,7 @@ export function PinGate({ pinLength, onUnlock, embedded = false }: PinGateProps)
 
   function erase() {
     if (checking) return;
-    setPin((p) => p.slice(0, -1));
+    setPin(typed.current.slice(0, -1));
   }
 
   function submit() {

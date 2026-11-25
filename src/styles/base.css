@@ -27,6 +27,12 @@
   img { max-width: 100%; height: auto; }
   input, select, textarea { font-size: 16px; } /* prevents iOS zoom on focus */
   button { cursor: pointer; }
+  /*
+   * Controls answer every tap at once: without this, iOS Safari waits to tell a tap from a
+   * double-tap zoom and drops some quick taps in a row (digits of the PIN went missing). Pinch zoom
+   * still works.
+   */
+  a, button, summary, label, input, select, textarea, [role='button'], [role='tab'] { touch-action: manipulation; }
   button:disabled { cursor: not-allowed; }
   :focus-visible {
     outline: 2px solid var(--c-copper);

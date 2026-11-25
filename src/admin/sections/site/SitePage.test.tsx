@@ -44,6 +44,20 @@ describe('Painel → Site', { timeout: 20_000 }, () => {
     expect(await editor('Sobre')).toBeInTheDocument();
   });
 
+  it('keeps the list mounted behind the editor, so coming back keeps its place', async () => {
+    start();
+    const { router } = renderAdmin('/admin/site');
+    const heading = await screen.findByRole('heading', { name: 'Páginas' });
+    const sobre = screen.getByRole('heading', { name: 'Sobre' }).closest('li')!;
+    await userEvent.click(within(sobre).getByRole('button', { name: 'Editar Sobre' }));
+    await editor('Sobre');
+    expect(router.state.location.pathname).toBe('/admin/site/sobre');
+    await userEvent.click(back());
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/site'));
+    // The very same element: the page was hidden, not unmounted (an optional route segment once remounted it).
+    expect(screen.getByRole('heading', { name: 'Páginas' })).toBe(heading);
+  });
+
   it('opens the editor from a deep link and ignores unknown sections', async () => {
     start();
     const { router } = renderAdmin('/admin/site?secao=sobre');

@@ -331,3 +331,27 @@ test('messages: the owner creates her own variation and the site uses it', async
   await again.getByRole('button', { name: 'Salvar mensagens' }).click();
   await expect(page.getByText(/Mensagens salvas/)).toBeVisible();
 });
+
+test('admin: a detail is a page of the panel and "Voltar" brings the list back where it was', async ({ page }) => {
+  await page.goto('/admin');
+  await unlock(page);
+  await page.goto('/admin/estoque');
+  const rows = page.locator('main ul > li > button');
+  await expect(rows.first()).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 500));
+  await page.waitForTimeout(300);
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(200);
+  // Tap a row already on screen, without letting the test runner scroll to it first.
+  const box = await page.evaluate(() => {
+    const r = [...document.querySelectorAll('main ul > li > button')].map((b) => b.getBoundingClientRect()).find((r) => r.top > 120 && r.bottom < innerHeight - 120)!;
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  });
+  await page.mouse.click(box.x, box.y);
+  await expect(page).toHaveURL(/\/admin\/estoque\/[^/]+$/);
+  await expect(page.getByRole('link', { name: 'Voltar para Estoque' })).toBeVisible();
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await page.getByRole('link', { name: 'Voltar para Estoque' }).click();
+  await expect(page).toHaveURL(/\/admin\/estoque$/);
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(Math.round(before));
+});

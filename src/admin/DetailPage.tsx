@@ -1,4 +1,4 @@
-import { createContext, useContext, useInsertionEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { cx } from '../components/ui/cx';
 
 /*
@@ -46,25 +46,32 @@ export function DetailPage({ header, label, children, footer, className }: { hea
 }
 
 /**
- * Keeps a list's place while one of its items is open: the window scroll is read right before the
- * detail replaces the list (an insertion effect runs before the DOM changes), the detail starts at
- * the top, and the list comes back where it was.
+ * Keeps a list's place while one of its items is open: the window scroll is noted on every scroll and
+ * at the very tap that opens an item (a capturing click listener runs before the app navigates, so
+ * the page has not shrunk yet), the detail starts at the top, and the list comes back where it was.
+ * Reading it in an effect was too late: a short detail had already shrunk the page and clamped it.
  */
 export function useListPlace(detailOpen: boolean) {
   const saved = useRef(0);
+  const open = useRef(detailOpen);
+  useEffect(() => {
+    const note = () => {
+      if (!open.current) saved.current = window.scrollY;
+    };
+    window.addEventListener('scroll', note, { passive: true });
+    window.addEventListener('click', note, true);
+    return () => {
+      window.removeEventListener('scroll', note);
+      window.removeEventListener('click', note, true);
+    };
+  }, []);
   const first = useRef(true);
-  useInsertionEffect(() => {
-    if (detailOpen) saved.current = window.scrollY;
-  }, [detailOpen]);
   useLayoutEffect(() => {
+    open.current = detailOpen;
     if (first.current) {
       first.current = false;
       return;
     }
-    if (detailOpen) {
-      window.scrollTo({ top: 0 });
-      return;
-    }
-    window.scrollTo({ top: saved.current });
+    window.scrollTo({ top: detailOpen ? 0 : saved.current });
   }, [detailOpen]);
 }
