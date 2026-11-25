@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { cx } from '../components/ui/cx';
+import { pageScrollY } from '../lib/scrollLock';
 
 /*
  * A detail screen (a piece, an order, a reseller…) is a page inside the panel, never a layer over it:
@@ -55,8 +56,9 @@ export function useListPlace(detailOpen: boolean) {
   const saved = useRef(0);
   const open = useRef(detailOpen);
   useEffect(() => {
+    // pageScrollY: while a sheet pins the body (touch screens) window.scrollY reads 0.
     const note = () => {
-      if (!open.current) saved.current = window.scrollY;
+      if (!open.current) saved.current = pageScrollY();
     };
     window.addEventListener('scroll', note, { passive: true });
     window.addEventListener('click', note, true);

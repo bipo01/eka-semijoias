@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useUi } from '../../store/ui';
+import { lockPageScroll } from '../../lib/scrollLock';
 import { IconButton } from './Button';
 import { cx } from './cx';
 
@@ -57,6 +58,13 @@ export function Sheet({ open, onClose, title, hideTitle, side = 'bottom', classN
     if (open) return;
     const t = window.setTimeout(() => setMounted(false), 260);
     return () => window.clearTimeout(t);
+  }, [open]);
+
+  // Touch screens: the page under the sheet stays put while it is open (src/lib/scrollLock.ts). A layout
+  // effect, so that releasing it runs before the next page's own scroll (a detail opening at the top).
+  useLayoutEffect(() => {
+    if (!open) return;
+    return lockPageScroll();
   }, [open]);
 
   useEffect(() => {
