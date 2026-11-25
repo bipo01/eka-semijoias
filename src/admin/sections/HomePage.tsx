@@ -172,7 +172,7 @@ function Tile({ icon, label, value, hint, className }: { icon: ReactNode; label:
     <div className={cx(CARD, 'flex min-w-0 flex-col p-3 sm:p-4', className)}>
       <span className="mb-2 inline-flex size-9 items-center justify-center rounded-xl bg-champagne text-copper">{icon}</span>
       <p className="text-[0.8125rem] leading-tight text-ink-muted">{label}</p>
-      <p className="price mt-0.5 text-[1.375rem] leading-tight font-semibold whitespace-nowrap sm:text-[1.5rem]">{value}</p>
+      <p className="price mt-0.5 text-[1.375rem] leading-tight font-semibold whitespace-nowrap sm:text-[1.5rem] lg:text-[1.25rem] xl:text-[1.375rem]">{value}</p>
       {hint && <p className="mt-0.5 truncate text-xs text-ink-muted">{hint}</p>}
     </div>
   );

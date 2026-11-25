@@ -41,10 +41,10 @@ export function leadsCsv(leads: ResellerLead[]): string {
 
 const LEAD_STYLE: Record<LeadStatus, string> = {
   nova: 'bg-copper text-white',
-  analise: 'bg-champagne text-ink',
+  analise: 'bg-info-tint text-info',
   aprovada: 'bg-success-tint text-success',
   recusada: 'bg-danger-tint text-danger',
-  efetivada: 'border border-copper text-copper',
+  efetivada: 'bg-champagne text-copper',
 };
 type LeadFilter = 'abertas' | LeadStatus | 'todas';
 const LEAD_FILTERS: { id: LeadFilter; label: string }[] = [

@@ -169,14 +169,21 @@ function NetworkSummary({ list }: { list: ResellerSummary[] }) {
   ];
   return (
     <section aria-label="Resumo das revendas" className="on-dark relative isolate overflow-hidden rounded-[22px] bg-[linear-gradient(115deg,#4a2f24_0%,#6e4635_60%,#94654f_100%)] text-white shadow-[0_18px_36px_-20px_rgb(48_33_28/0.6)]">
-      <img src={asset('images/admin/revenda-hero-640.webp')} alt="" aria-hidden="true" className="absolute inset-y-0 right-0 -z-10 h-full w-1/2 object-cover object-right opacity-70 [mask-image:linear-gradient(90deg,transparent,black_60%)]" />
+      <img
+        src={asset('images/admin/revenda-hero-640.webp')}
+        srcSet={`${asset('images/admin/revenda-hero-640.webp')} 640w, ${asset('images/admin/revenda-hero-1280.webp')} 1280w`}
+        sizes="(min-width: 1024px) 1000px, 100vw"
+        alt=""
+        className="absolute inset-0 -z-10 size-full object-cover object-[right_40%]"
+      />
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgb(60_38_29/0.95)_0%,rgb(60_38_29/0.85)_55%,rgb(60_38_29/0.35)_100%)]" />
       <dl className="grid grid-cols-2 sm:grid-cols-4">
         {cells.map((c, i) => (
-          <div key={c.label} className={cx('flex min-w-0 items-center gap-3 px-4 py-4 sm:px-5', i % 2 === 1 && 'border-l border-white/15', i > 1 && 'border-t border-white/15 sm:border-t-0', i === 2 && 'sm:border-l')}>
-            <c.icon size={22} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-rose-light" />
+          <div key={c.label} className={cx('flex min-w-0 items-center gap-2.5 px-3.5 py-3.5 sm:gap-3 sm:px-5 sm:py-4', i % 2 === 1 && 'border-l border-white/15', i > 1 && 'border-t border-white/15 sm:border-t-0', i === 2 && 'sm:border-l')}>
+            <c.icon size={20} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-rose-light" />
             <div className="flex min-w-0 flex-col-reverse">
               <dt className="text-xs text-white/75">{c.label}</dt>
-              <dd className="price truncate text-[1.125rem] leading-tight font-semibold">{c.value}</dd>
+              <dd className="price text-[1rem] leading-tight font-semibold whitespace-nowrap sm:text-[1.125rem]">{c.value}</dd>
             </div>
           </div>
         ))}
@@ -911,7 +918,7 @@ export function ResellersPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      {state.status === 'ready' && list.length > 0 && <NetworkSummary list={list} />}
+      {tab === 'revendedoras' && state.status === 'ready' && list.length > 0 && <NetworkSummary list={list} />}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs
           label="Revendas"
@@ -966,7 +973,7 @@ export function ResellersPage() {
         ) : (
           <Empty
             title="Sua rede começa aqui"
-            image={<img src={asset('images/admin/revenda-vazia-320.webp')} alt="" width={112} height={112} className="mb-1 size-28 rounded-2xl object-cover" />}
+            image={<img src={asset('images/admin/maleta-320.webp')} alt="" width={112} height={112} className="mb-1 size-28 rounded-2xl object-cover" />}
             action={
               <Button variant="secondary" onClick={() => setTab('fichas')}>
                 Ver fichas de cadastro

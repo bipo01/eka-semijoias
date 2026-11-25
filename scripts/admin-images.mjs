@@ -23,7 +23,6 @@ const JOBS = [
   ['vitrine', 'vitrine', [320], 1],
   ['tudo-em-dia', 'tudo-em-dia', [320], 1],
   ['revenda-hero', 'revenda-hero', [640, 1280], 5 / 2],
-  ['revenda-vazia', 'revenda-vazia', [320], 1],
 ];
 
 mkdirSync(OUT, { recursive: true });

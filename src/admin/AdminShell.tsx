@@ -98,7 +98,7 @@ function Sidebar({ openOrders }: { openOrders: number }) {
         end={i.path === ''}
         className={({ isActive }) =>
           cx(
-            'group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-[0.9375rem] transition-colors duration-[160ms]',
+            'group relative flex min-h-10 items-center gap-3 rounded-xl px-3 text-[0.9375rem] transition-colors duration-[160ms]',
             isActive ? 'bg-white/[0.09] text-white' : 'text-[#d9c6bb] hover:bg-white/[0.05] hover:text-white',
           )
         }
@@ -116,7 +116,7 @@ function Sidebar({ openOrders }: { openOrders: number }) {
   );
   return (
     <aside className="on-dark fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col bg-espresso text-on-dark lg:flex">
-      <div className="relative overflow-hidden px-6 pt-7 pb-6">
+      <div className="relative overflow-hidden px-6 pt-6 pb-5">
         <div aria-hidden="true" className="pointer-events-none absolute -top-16 -right-20 size-56 rounded-full bg-[radial-gradient(circle,rgb(230_190_164/0.18),transparent_65%)]" />
         <Link to={ADMIN_BASE} className="relative block w-fit">
           <img src={asset('brand/eka-lockup-white.svg')} alt="ÉKA Semijoias" width={96} height={32} className="h-8 w-auto opacity-95" />
@@ -126,7 +126,7 @@ function Sidebar({ openOrders }: { openOrders: number }) {
       <nav aria-label="Seções do painel" className="no-scrollbar flex-1 overflow-y-auto px-3 pb-4">
         <ul className="flex flex-col gap-0.5">{item(HOME)}</ul>
         {NAV_GROUPS.map((g) => (
-          <div key={g.title} className="mt-5">
+          <div key={g.title} className="mt-4">
             <p className="eyebrow mb-1.5 px-3 text-[0.625rem] tracking-[0.18em] text-[#a88d80]">{g.title}</p>
             <ul className="flex flex-col gap-0.5">{g.items.map(item)}</ul>
           </div>
@@ -188,14 +188,15 @@ export function AdminShell() {
     <div className="admin-ui min-h-dvh bg-ivory">
       <Sidebar openOrders={openOrders} />
       <div className="lg:pl-[248px]">
-        <header className={cx('sticky top-0 z-20 border-b border-line/80 bg-ivory/92 backdrop-blur supports-[backdrop-filter]:bg-ivory/80', home && 'max-lg:border-transparent max-lg:bg-transparent')}>
+        {home && <h1 className="sr-only">{section.label}</h1>}
+        <header className={cx('sticky top-0 z-20 border-b border-line/80 bg-ivory/92 backdrop-blur supports-[backdrop-filter]:bg-ivory/80', home && 'border-transparent bg-transparent lg:hidden')}>
           <div className="mx-auto flex h-16 max-w-[1080px] items-center gap-3 px-4 lg:h-[76px] lg:px-8">
             <Link to={ADMIN_BASE} className={cx('shrink-0 lg:hidden', home && 'hidden')} aria-label="Início do painel">
               <img src={asset('brand/eka-monogram-copper.svg')} alt="" width={34} height={34} className="size-[34px]" />
             </Link>
             <div className="min-w-0 flex-1">
               <p className="eyebrow hidden text-[0.625rem] tracking-[0.18em] text-ink-muted lg:block">{NAV_GROUPS.find((g) => g.items.includes(section))?.title ?? 'Painel da loja'}</p>
-              <h1 className={cx('truncate font-display text-[1.75rem] leading-tight font-semibold lg:text-[2rem]', home && 'sr-only')}>{section.label}</h1>
+              {!home && <h1 className="truncate font-display text-[1.75rem] leading-tight font-semibold lg:text-[2rem]">{section.label}</h1>}
               {home && <img src={asset('brand/eka-lockup-copper.svg')} alt="" width={84} height={28} className="h-7 w-auto lg:hidden" />}
             </div>
             {current === 'produtos' && (
