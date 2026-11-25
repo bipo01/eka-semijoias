@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, LogOut, Plus } from 'lucide-react';
 import { ButtonLink } from '../components/ui/Button';
@@ -193,6 +193,14 @@ export function AdminShell() {
   useNewReceiptNotice();
   const openOrders = useOpenOrders();
   useExternalUpdateNotice();
+  // A new section starts at the top (the window kept the last page's scroll: Configurações opened
+  // halfway down after a scrolled "Mais"). Details keep their own rules (useListPlace).
+  const lastSection = useRef(current);
+  useLayoutEffect(() => {
+    if (lastSection.current === current) return;
+    lastSection.current = current;
+    window.scrollTo({ top: 0 });
+  }, [current]);
   const [detailState, setDetailState] = useState<DetailHeader | null>(null);
   // Only one detail shows at a time; keep the setter stable and skip identical updates.
   const setDetail = useCallback((next: DetailHeader | null) => {

@@ -83,8 +83,9 @@ export function ProductList({ products, categoryName, onReorder }: ProductListPr
                   <span className="block aspect-[4/5] w-16 rounded-[8px] bg-champagne" />
                 )}
               </Link>
-              <div className="min-w-0 py-0.5">
-                <Link to={editPath} className="line-clamp-2 leading-snug font-medium hover:text-copper">
+              {/* The name's link stretches over the whole text column: a tap on the category or price opens the piece too. */}
+              <div className="relative min-w-0 py-0.5">
+                <Link to={editPath} className="line-clamp-2 leading-snug font-medium after:absolute after:inset-0 after:content-[''] hover:text-copper">
                   <span className="sr-only">Editar </span>
                   {p.name}
                 </Link>
