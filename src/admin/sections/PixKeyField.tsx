@@ -45,11 +45,14 @@ export function pixKeyStatus(kind: PixKeyKind, value: string): { error?: string;
 }
 
 export function PixKeyField({
+  id,
   kind,
   value,
   error,
   onChange,
 }: {
+  /** Id of the key input (the store meter focuses it). */
+  id?: string;
   kind: PixKeyKind;
   value: string;
   /** Error from the last save attempt (shown over the live status). */
@@ -113,6 +116,7 @@ export function PixKeyField({
       </SelectField>
       <TextField
         ref={input}
+        id={id}
         label="Chave Pix"
         value={value}
         error={shown}

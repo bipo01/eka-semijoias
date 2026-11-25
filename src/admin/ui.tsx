@@ -84,6 +84,10 @@ export interface TabItem<T extends string> {
   count?: number | undefined;
   /** Counts that need her attention get the copper badge. */
   alert?: boolean | undefined;
+  /** Read instead of the bare number ("faltam 2"). */
+  countLabel?: string | undefined;
+  /** Nothing left to do here: a small green check. */
+  done?: boolean | undefined;
 }
 
 /**
@@ -137,8 +141,17 @@ export function Tabs<T extends string>({ items, value, onChange, label, panelId,
                     t.alert && (t.count ?? 0) > 0 ? 'bg-copper text-white' : selected ? 'bg-champagne text-ink' : 'bg-white/70 text-ink-muted',
                   )}
                 >
-                  {t.count}
+                  {t.countLabel ? <span aria-hidden="true">{t.count}</span> : t.count}
+                  {t.countLabel && <span className="sr-only">{`, ${t.countLabel}`}</span>}
                 </span>
+              )}
+              {t.done && !badge && (
+                <>
+                  <svg aria-hidden="true" viewBox="0 0 16 16" className="size-3.5 shrink-0 text-success" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
+                  </svg>
+                  <span className="sr-only">, completo</span>
+                </>
               )}
               {underline && <span aria-hidden="true" className={cx('absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-copper transition-opacity', selected ? 'opacity-100' : 'opacity-0')} />}
             </button>

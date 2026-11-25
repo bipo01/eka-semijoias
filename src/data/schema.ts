@@ -138,6 +138,12 @@ export const settingsSchema = z.object({
   lowStockThreshold: z.number().int().min(0).max(20).optional(),
   /** WhatsApp message templates the owner changed (src/data/messages.ts); absent = built-in defaults. */
   messages: messageSettingsSchema.optional(),
+  /**
+   * When the owner last saved "Informações da loja": from then on the values shown there (even the
+   * starting ones, like the Instagram handle or a 6-month warranty) count as her answers in the panel's
+   * "Complete as informações da loja" meter (src/admin/lib/setup.ts).
+   */
+  confirmedAt: isoDate.optional(),
 });
 
 export const MAX_PRODUCTS = 500;

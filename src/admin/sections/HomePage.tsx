@@ -2,7 +2,6 @@ import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart3, BriefcaseBusiness, CalendarClock, ChevronRight, ClipboardCheck, ExternalLink, Gem, HandCoins, Handshake, Layers, PackageMinus, PackagePlus, Plus, ReceiptText, ShoppingBag, UserPlus, Users } from 'lucide-react';
 import { cx } from '../../components/ui/cx';
-import { pendingChecklist } from '../../config/business';
 import { awaitingReview } from '../../data/orders';
 import { computeReport, periodRange } from '../../data/report';
 import { daysLeft, kitValueCents, salesTotalCents } from '../../data/revenda';
@@ -14,7 +13,7 @@ import { useOrders } from '../lib/orders';
 import { ADMIN_BASE } from '../lib/paths';
 import { useResellers } from '../lib/resellers';
 import { CARD, SectionHeading, type Tone } from '../ui';
-import { DONE_WHEN } from './SettingsPage';
+import { setupStatus } from '../lib/setup';
 
 /*
  * Painel → Início: the day at a glance. A dark hero with the month's sales, today's numbers, what needs
@@ -114,9 +113,9 @@ function useTodos(resellers: ResellersState): { todos: Todo[]; loading: boolean;
     const stock = catalog.stock ?? {};
     const soldOut = catalog.products.filter((p) => stock[p.id] && Object.values(stock[p.id]!).every((n) => n === 0)).length;
     if (soldOut) todos.push({ key: 'soldout', to: a('estoque'), title: plural(soldOut, 'peça esgotada', 'peças esgotadas'), detail: 'Registre uma entrada quando chegar mais', tone: 'danger', icon: <PackageMinus {...ICON} />, rank: 5 });
-    const done = pendingChecklist.filter((i) => DONE_WHEN[i.key]?.(catalog.settings, catalog.content)).length;
-    if (done < pendingChecklist.length)
-      todos.push({ key: 'setup', to: a('configuracoes'), title: 'Complete os dados da loja', detail: `${done} de ${pendingChecklist.length} preenchidas`, tone: 'muted', icon: <ClipboardCheck {...ICON} />, rank: 9 });
+    const setup = setupStatus(catalog);
+    if (setup.next)
+      todos.push({ key: 'setup', to: a('configuracoes'), title: 'Complete os dados da loja', detail: `${setup.done} de ${setup.total} preenchidas`, tone: 'muted', icon: <ClipboardCheck {...ICON} />, rank: 9 });
     todos.sort((x, y) => x.rank - y.rank);
     return {
       todos,

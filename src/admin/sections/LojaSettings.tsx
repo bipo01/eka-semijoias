@@ -43,7 +43,7 @@ const facts = ({ updatedAt: _at, ...rest }: Loja): Omit<Loja, 'updatedAt'> => re
 
 function TriState({ name, label, where, value, onChange }: { name: string; label: string; where: string; value: boolean | null; onChange: (v: boolean | null) => void }) {
   return (
-    <fieldset className="flex flex-col gap-2">
+    <fieldset id={`oferta-${name.replace(/^loja-/, '')}`} className="flex flex-col gap-2">
       <legend className="text-sm font-medium">{label}</legend>
       <div className="flex flex-wrap gap-2">
         {CHOICES.map((c) => (
@@ -122,6 +122,7 @@ export function LojaSettings() {
         <TriState key={f.key} name={`loja-${f.key}`} label={f.label} where={f.where} value={form[f.key]} onChange={(v) => set(f.key, v)} />
       ))}
       <SelectField
+        id="oferta-installments"
         label="Parcelamento sem juros"
         value={String(form.installments)}
         hint="Aparece nos destaques da página inicial, por exemplo “Parcelamento em até 3x”."
@@ -134,6 +135,7 @@ export function LojaSettings() {
         ))}
       </SelectField>
       <TextField
+        id="oferta-plating"
         label="Banho das peças"
         optional
         placeholder="Ex.: banho de ouro 18k"

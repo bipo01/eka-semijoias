@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/Button';
 import { cx } from '../../../components/ui/cx';
 import { SECTION_LABEL, type SiteContent } from '../../../data/content';
 import { useCatalog } from '../../../store/catalog';
+import { AreaChecklist } from '../../SetupProgress';
 import { SectionEditor, sectionState } from './SectionEditor';
 import { isSiteSectionId, SITE_GROUPS, SITE_SECTION_INFO, type SiteSectionId } from './siteSections';
 
@@ -89,6 +90,7 @@ export function SitePage() {
       <p className="text-sm text-ink-muted">
         Textos e fotos do site. Ao salvar, muda na hora para todo mundo, e dá para voltar ao original.
       </p>
+      <AreaChecklist area="site" place="área" hideWhenComplete className="-mt-4" />
       {SITE_GROUPS.map((group) => (
         <section key={group.title} aria-labelledby={`site-${group.title}`} className="flex flex-col gap-3">
           <div>

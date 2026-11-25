@@ -1,11 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, ChevronRight, Circle } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { TextArea, TextField } from '../../components/ui/Field';
-import { cx } from '../../components/ui/cx';
-import { business, pendingChecklist } from '../../config/business';
-import type { SiteContent } from '../../data/content';
 import type { Settings } from '../../data/schema';
 import { DEFAULT_LOW_STOCK } from '../../data/stock';
 import { formatPixKey, normalizePixKey, pixKeyKind, pixText, type PixKeyKind } from '../../lib/pix';
@@ -16,7 +12,8 @@ import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
 import { useAdminSession } from '../AdminContext';
 import { maskPhone, parseInstagram, parsePhone } from '../lib/contact';
-import { adminPath } from '../lib/paths';
+import type { SetupArea } from '../lib/setup';
+import { AreaChecklist, SetupOverview, useSetupStatus } from '../SetupProgress';
 import { Tabs } from '../ui';
 import { save } from '../lib/persist';
 import { LojaSettings } from './LojaSettings';
@@ -24,25 +21,6 @@ import { PixKeyField } from './PixKeyField';
 import { PushSettings } from './PushSettings';
 import { changePin, signalSessionLost } from '../lib/session';
 import { countInput } from '../../lib/countInput';
-
-/** Checklist items completed by a settings field or a site section; the others stay open. */
-// Instagram and warranty start with unconfirmed values from business.ts, so they only
-// count as done once they differ from those starting values. The store facts start from
-// business.ts too, so they count only once she answered them ("O que a loja oferece" saved).
-export const DONE_WHEN: Partial<Record<string, (s: Settings, content: SiteContent | undefined) => boolean>> = {
-  whatsapp: (s) => !!s.whatsapp,
-  instagram: (s) => !!s.instagram && s.instagram !== business.instagram,
-  city: (s) => !!s.city.trim(),
-  showroom: (s) => !!s.showroom?.trim(),
-  warrantyMonths: (s) => s.warrantyMonths > 0 && s.warrantyMonths !== business.warrantyMonths,
-  pix: (s) => !!s.pix,
-  shipping: (_s, c) => c?.loja != null && c.loja.shipsNationwide !== null,
-  plating: (_s, c) => !!c?.loja?.plating.trim(),
-  hypoallergenic: (_s, c) => c?.loja != null && c.loja.hypoallergenic !== null,
-  reseller: (_s, c) => c?.loja != null && c.loja.consignment !== null && c.loja.noUpfrontInvestment !== null,
-  about: (_s, c) => c?.sobre !== undefined,
-  testimonials: (_s, c) => !!c?.depoimentos?.items.length,
-};
 
 interface StoreForm {
   announcement: string;
@@ -124,6 +102,8 @@ function StoreSettings() {
         ...d,
         settings: {
           ...result.patch,
+          // The values she just saw and saved are her answers now (see src/admin/lib/setup.ts).
+          confirmedAt: new Date().toISOString(),
           ...(d.settings.pix ? { pix: d.settings.pix } : {}),
           ...(d.settings.lowStockThreshold !== undefined ? { lowStockThreshold: d.settings.lowStockThreshold } : {}),
           ...(d.settings.messages ? { messages: d.settings.messages } : {}),
@@ -140,6 +120,7 @@ function StoreSettings() {
       <h2 className="font-display text-title">Informações da loja</h2>
       <TextField label="Aviso no topo do site" maxLength={140} hint={`${form.announcement.length}/140 caracteres`} {...field('announcement')} />
       <TextField
+        id="loja-whatsapp"
         label="WhatsApp que recebe os pedidos"
         inputMode="tel"
         autoComplete="tel-national"
@@ -148,6 +129,7 @@ function StoreSettings() {
         onChange={(e) => setForm((f) => ({ ...f, whatsapp: maskPhone(e.target.value) }))}
       />
       <TextField
+        id="loja-instagram"
         label="Instagram"
         placeholder="nomedaloja"
         autoCapitalize="none"
@@ -157,10 +139,10 @@ function StoreSettings() {
         {...field('instagram')}
         onBlur={() => setForm((f) => ({ ...f, instagram: parseInstagram(f.instagram) }))}
       />
-      <TextField label="Cidade/UF" placeholder="Ex.: Cuiabá/MT" maxLength={80} {...field('city')} />
-      <TextArea label="Showroom ou loja física" optional rows={2} maxLength={200} placeholder="Endereço" {...field('showroom')} />
+      <TextField id="loja-city" label="Cidade/UF" placeholder="Ex.: Cuiabá/MT" maxLength={80} {...field('city')} />
+      <TextArea id="loja-showroom" label="Showroom ou loja física" optional rows={2} maxLength={200} placeholder="Endereço" {...field('showroom')} />
       <TextField label="Horário de atendimento" optional maxLength={120} placeholder="Ex.: seg. a sex., 9h às 18h" {...field('openingHours')} />
-      <TextField label="Garantia (meses)" inputMode="numeric" maxLength={2} hint="Use 0 para não mostrar garantia no site." {...field('warrantyMonths')} />
+      <TextField id="loja-warranty" label="Garantia (meses)" inputMode="numeric" maxLength={2} hint="Use 0 para não mostrar garantia no site." {...field('warrantyMonths')} />
       <TextArea
         label="Regras da garantia"
         optional
@@ -239,6 +221,7 @@ function PixSettings() {
         </p>
       </div>
       <PixKeyField
+        id="pix-key"
         kind={form.kind}
         value={form.key}
         error={errors.key}
@@ -380,76 +363,6 @@ function PinSettings() {
   );
 }
 
-/** Checklist items filled in on the Site tab: a link opens that editor. */
-const EDITED_IN_SITE: Partial<Record<string, string>> = { about: 'sobre', testimonials: 'depoimentos' };
-/** Checklist items filled in another tab of Configurações (the rest are on the Loja tab itself). */
-const EDITED_IN_TAB: Partial<Record<string, Exclude<SettingsTab, 'loja'>>> = {
-  pix: 'pix',
-  shipping: 'oferta',
-  payment: 'oferta',
-  plating: 'oferta',
-  hypoallergenic: 'oferta',
-  reseller: 'oferta',
-};
-
-function StoreChecklist() {
-  const settings = useCatalog((s) => s.data.settings);
-  const content = useCatalog((s) => s.data.content);
-  const items = pendingChecklist.map((item) => ({ ...item, done: DONE_WHEN[item.key]?.(settings, content) ?? false }));
-  const done = items.filter((i) => i.done).length;
-  return (
-    <section aria-labelledby="checklist-title" className="rounded-2xl border border-line bg-white p-4 shadow-[0_2px_8px_rgb(48_33_28/0.04)]">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id="checklist-title" className="font-display text-title">
-          Complete as informações da loja
-        </h2>
-        <span className="price shrink-0 text-sm text-ink-muted">
-          {done} de {items.length}
-        </span>
-      </div>
-      <div aria-hidden="true" className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#efe4dc]">
-        <div className="h-full rounded-full bg-gradient-to-r from-rose to-copper" style={{ width: `${(done / items.length) * 100}%` }} />
-      </div>
-      <details className="group mt-2">
-        <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm text-copper [&::-webkit-details-marker]:hidden">
-          <ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" className="transition-transform group-open:rotate-90" /> Ver o que falta
-        </summary>
-      <ul className="mt-1 flex flex-col gap-2">
-        {items.map((item) => (
-          <li key={item.key} className="flex items-start gap-2.5 text-sm">
-            {item.done ? (
-              <CheckCircle2 size={18} strokeWidth={1.75} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
-            ) : (
-              <Circle size={18} strokeWidth={1.5} className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true" />
-            )}
-            <span className={cx(item.done && 'text-ink-muted')}>
-              <span className="sr-only">{item.done ? 'Feito: ' : 'A fazer: '}</span>
-              {item.label}
-              {!item.done && EDITED_IN_TAB[item.key] && (
-                <>
-                  {' · '}
-                  <Link to={settingsTabPath(EDITED_IN_TAB[item.key]!)} className="text-copper underline underline-offset-4">
-                    Preencher em {SETTINGS_TABS.find((t) => t.id === EDITED_IN_TAB[item.key])!.label}
-                  </Link>
-                </>
-              )}
-              {!item.done && EDITED_IN_SITE[item.key] && (
-                <>
-                  {' · '}
-                  <Link to={adminPath('site', EDITED_IN_SITE[item.key]!)} className="text-copper underline underline-offset-4">
-                    Preencher na aba Site
-                  </Link>
-                </>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-      </details>
-    </section>
-  );
-}
-
 /** The tabs of Configurações (`?aba=`): one subject each, so nothing has to be searched for. */
 export const SETTINGS_TABS = [
   { id: 'loja', label: 'Loja' },
@@ -461,10 +374,11 @@ export const SETTINGS_TABS = [
 ] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
 
-/** Link to a tab of Configurações. */
-export const settingsTabPath = (tab: SettingsTab) => (tab === 'loja' ? adminPath('configuracoes') : `${adminPath('configuracoes')}?aba=${tab}`);
+/** Tabs whose fields answer items of the store meter. */
+const SETUP_TAB: Partial<Record<SettingsTab, SetupArea>> = { loja: 'loja', oferta: 'oferta', pix: 'pix' };
 
 export function SettingsPage() {
+  const status = useSetupStatus();
   const [params, setParams] = useSearchParams();
   const asked = params.get('aba');
   const tab: SettingsTab = SETTINGS_TABS.some((t) => t.id === asked) ? (asked as SettingsTab) : 'loja';
@@ -480,13 +394,20 @@ export function SettingsPage() {
     );
   return (
     <div className="flex flex-col gap-4">
-      <Tabs label="Assunto" value={tab} onChange={go} items={SETTINGS_TABS.map((t) => ({ id: t.id, label: t.label }))} />
-      {tab === 'loja' && (
-        <>
-          <StoreChecklist />
-          <StoreSettings />
-        </>
-      )}
+      <SetupOverview current={SETUP_TAB[tab]} />
+      <Tabs
+        label="Assunto"
+        value={tab}
+        onChange={go}
+        items={SETTINGS_TABS.map((t) => {
+          const area = SETUP_TAB[t.id] && status.areas.find((a) => a.id === SETUP_TAB[t.id]);
+          if (!area) return { id: t.id, label: t.label };
+          const left = area.total - area.done;
+          return left ? { id: t.id, label: t.label, count: left, alert: true, countLabel: `${left === 1 ? 'falta' : 'faltam'} ${left}` } : { id: t.id, label: t.label, done: true };
+        })}
+      />
+      {SETUP_TAB[tab] && <AreaChecklist key={tab} area={SETUP_TAB[tab]!} />}
+      {tab === 'loja' && <StoreSettings />}
       {tab === 'oferta' && <LojaSettings />}
       {tab === 'pix' && <PixSettings />}
       {tab === 'avisos' && <PushSettings />}

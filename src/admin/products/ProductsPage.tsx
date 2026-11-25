@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Outlet, useParams } from 'react-router-dom';
+import { Outlet, useParams, useSearchParams } from 'react-router-dom';
 import { useListPlace } from '../DetailPage';
 import { Search } from 'lucide-react';
 import { BareInput } from '../../components/ui/Field';
@@ -8,6 +8,8 @@ import { byOrder, sortedCategories } from '../../data/catalog';
 import { matches } from '../../lib/search';
 import { useCatalog } from '../../store/catalog';
 import { save } from '../lib/persist';
+import { standInProducts } from '../lib/setup';
+import { AreaChecklist } from '../SetupProgress';
 import { reorderSubset } from '../lib/reorder';
 import { ProductList } from './ProductList';
 
@@ -17,14 +19,29 @@ export function ProductsPage() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const categories = sortedCategories(data);
   const categoryName = useMemo(() => new Map(data.categories.map((c) => [c.id, c.name])), [data.categories]);
+  // ?fotos=provisorias: only pieces still on a stand-in photo (the store meter links here).
+  const [params, setParams] = useSearchParams();
+  const standIn = useMemo(() => new Set(standInProducts(data.products).map((p) => p.id)), [data.products]);
+  const onlyStandIn = params.get('fotos') === 'provisorias' && standIn.size > 0;
+  const toggleStandIn = () =>
+    setParams(
+      (p) => {
+        const out = new URLSearchParams(p);
+        if (onlyStandIn) out.delete('fotos');
+        else out.set('fotos', 'provisorias');
+        return out;
+      },
+      { replace: true },
+    );
 
   const visible = useMemo(
     () =>
       [...data.products]
         .sort(byOrder)
         .filter((p) => !categoryId || p.categoryId === categoryId)
+        .filter((p) => !onlyStandIn || standIn.has(p.id))
         .filter((p) => matches(`${p.name} ${categoryName.get(p.categoryId) ?? ''} ${p.variants.map((v) => v.sku ?? '').join(' ')}`, query)),
-    [data.products, categoryId, categoryName, query],
+    [data.products, categoryId, categoryName, query, onlyStandIn, standIn],
   );
 
   // A piece open (/produtos/<id>): the list stays mounted, hidden, so filters and scroll come back.
@@ -41,6 +58,7 @@ export function ProductsPage() {
   return (
     <>
       <div hidden={detailOpen}>
+      <AreaChecklist area="produtos" place="área" hideWhenComplete className="mb-4" />
       <div className="flex flex-col gap-3">
         <BareInput
           type="search"
@@ -59,6 +77,11 @@ export function ProductsPage() {
               {c.name}
             </Chip>
           ))}
+          {standIn.size > 0 && (
+            <Chip selected={onlyStandIn} onClick={toggleStandIn}>
+              Fotos provisórias ({standIn.size})
+            </Chip>
+          )}
         </div>
       </div>
 

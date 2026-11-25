@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { createCatalogSeed } from '../../data/seed';
@@ -99,19 +99,48 @@ describe('Configurações in tabs', () => {
     renderAdmin('/admin/configuracoes');
     expect(await screen.findByRole('heading', { name: 'Informações da loja' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pix para receber os pedidos' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('tab', { name: 'Pix' }));
+    await userEvent.click(screen.getByRole('tab', { name: /^Pix/ }));
     expect(screen.getByRole('heading', { name: 'Pix para receber os pedidos' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Informações da loja' })).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Pix' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /^Pix/ })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('a pending item of the checklist leads to the tab where it is filled', async () => {
+  it('shows the whole store on every tab and, in each tab, what is missing there', async () => {
     unlockSession();
     mockServer.catalog = seed;
     useCatalog.setState({ data: seed, version: 1, status: 'ready' });
     renderAdmin('/admin/configuracoes');
-    await userEvent.click(await screen.findByRole('link', { name: 'Preencher em Pix' }));
+    const overview = await screen.findByRole('region', { name: 'Complete as informações da loja' });
+    expect(within(overview).getByRole('progressbar')).toHaveAttribute('aria-valuetext', '0 de 14');
+    // Each tab says how many are missing in it.
+    expect(screen.getByRole('tab', { name: /^Loja.*faltam 5$/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /^O que oferecemos.*faltam 5$/ })).toBeInTheDocument();
+    // Tab Loja lists only its own items.
+    const local = screen.getByRole('region', { name: 'Faltam 5 itens' });
+    expect(within(local).getByRole('button', { name: /Perfil oficial do Instagram/ })).toBeInTheDocument();
+    expect(within(local).queryByText('Chave Pix para receber os pedidos')).not.toBeInTheDocument();
+    // An area chip opens the tab where its items are filled; there the item focuses its field.
+    await userEvent.click(within(overview).getByRole('link', { name: /^Pix/ }));
     expect(await screen.findByRole('heading', { name: 'Pix para receber os pedidos' })).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Complete as informações da loja' })).getByRole('link', { name: /^Pix/ })).toHaveAttribute('aria-current', 'page');
+    await userEvent.click(within(screen.getByRole('region', { name: 'Falta 1 item' })).getByRole('button', { name: /Chave Pix para receber os pedidos/ }));
+    expect(screen.getByRole('textbox', { name: 'Chave Pix' })).toHaveFocus();
+  });
+
+  it('saving Informações da loja confirms the values shown, so items already right complete', async () => {
+    unlockSession();
+    const settings = { ...seed.settings, whatsapp: '5565999998888', city: 'Cuiabá/MT' };
+    mockServer.catalog = { ...seed, settings };
+    useCatalog.setState({ data: mockServer.catalog, version: 1, status: 'ready' });
+    renderAdmin('/admin/configuracoes');
+    expect(await screen.findByRole('region', { name: 'Faltam 3 itens' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar informações' }));
+    await screen.findByText('Informações da loja salvas.');
+    expect(Date.parse(mockServer.catalog.settings.confirmedAt ?? '')).not.toBeNaN();
+    const local = await screen.findByRole('region', { name: 'Tudo preenchido' });
+    expect(within(local).getByText('@ekasemijoias')).toBeInTheDocument();
+    expect(within(local).getByText('Não tem')).toBeInTheDocument(); // no showroom
+    expect(screen.getByRole('tab', { name: /^Loja, completo$/ })).toBeInTheDocument();
   });
 
   it('opens the tab named in the address, and Loja for an unknown one', async () => {

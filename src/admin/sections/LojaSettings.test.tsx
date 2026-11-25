@@ -6,7 +6,7 @@ import { useCatalog } from '../../store/catalog';
 import { mockServer } from '../../test/mockApi';
 import { polyfillDialog, renderAdmin, resetStores, unlockSession } from '../testUtils';
 import { installmentOptions } from './LojaSettings';
-import { DONE_WHEN } from './SettingsPage';
+import { setupStatus } from '../lib/setup';
 
 polyfillDialog();
 resetStores();
@@ -40,16 +40,18 @@ describe('“O que a loja oferece”', { timeout: 20_000 }, () => {
     expect(mockServer.catalog.settings).toEqual({ ...seed.settings, messages });
     await waitFor(() => expect(save).toBeDisabled());
 
-    // The checklist (tab Loja) marks what was answered.
-    await userEvent.click(screen.getByRole('tab', { name: 'Loja' }));
-    const checklist = await screen.findByRole('region', { name: 'Complete as informações da loja' });
-    const item = (label: string) => within(checklist).getAllByRole('listitem').find((li) => li.textContent?.includes(label));
-    expect(item('Se as peças são antialérgicas/sem níquel')).toHaveTextContent(/^Feito:/);
-    expect(item('Material e especificação do banho das peças')).toHaveTextContent(/^Feito:/);
+    // This tab's meter marks what was answered, with the answer; only the reseller question is left.
+    const local = await screen.findByRole('region', { name: 'Falta 1 item' });
+    const filled = within(within(local).getByRole('list', { name: 'Já preenchido' })).getAllByRole('listitem');
+    const row = (label: string) => filled.find((li) => li.textContent?.includes(label));
+    expect(row('Peças antialérgicas')).toHaveTextContent(/Sim$/);
+    expect(row('Banho das peças')).toHaveTextContent(/banho de ouro 18k$/);
+    expect(row('Parcelamento sem juros')).toHaveTextContent(/Até 3x$/);
     // Shipping was shown as “Sim” (the starting value) and saved with the card: now it is her answer.
     expect(mockServer.catalog.content?.loja?.shipsNationwide).toBe(true);
-    expect(item('Formas de envio e frete')).toHaveTextContent(/^Feito:/);
-    expect(item('Regras do programa de revendedoras (consignado, comissão)')).toHaveTextContent(/^A fazer:/); // “sem investimento” still “Não informar”
+    expect(row('Envio para todo o Brasil')).toHaveTextContent(/Sim$/);
+    // “sem investimento” is still “Não informar”.
+    expect(within(within(local).getByRole('list', { name: 'Falta preencher' })).getByRole('button', { name: /Revenda: consignado e investimento inicial/ })).toBeInTheDocument();
   });
 
   it('offers “Não mostrar” and 2x to 12x, keeping a stored value outside that range', () => {
@@ -59,7 +61,8 @@ describe('“O que a loja oferece”', { timeout: 20_000 }, () => {
 });
 
 describe('checklist', () => {
-  const done = (key: string, content: Parameters<NonNullable<(typeof DONE_WHEN)[string]>>[1]) => DONE_WHEN[key]!(seed.settings, content);
+  const done = (key: string, content: Parameters<typeof setupStatus>[0]['content']) =>
+    setupStatus({ settings: seed.settings, products: seed.products, content }).items.find((i) => i.key === key)!.done;
 
   it('counts the store facts only once she answered them', () => {
     expect(done('shipping', undefined)).toBe(false); // the unconfirmed starting value does not count
