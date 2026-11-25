@@ -21,7 +21,7 @@ test('three slides with controls; they change on their own and the pause button 
   await expect(region).toBeVisible();
   await expect(slides(page)).toHaveCount(3);
   await expect.poll(() => allSettled(page)).toEqual([true, true, true]);
-  // Only one set of controls is on screen (under the buttons on phones, on the photo from tablets up).
+  // One set of controls, on the photo at every size.
   await expect(page.getByRole('button', { name: /^Mostrar foto \d de 3/ })).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Mostrar foto 1 de 3' })).toHaveAttribute('aria-current', 'true');
   expect(await shown(page)).toBe(0);
@@ -45,7 +45,7 @@ test('three slides with controls; they change on their own and the pause button 
   await expect.poll(() => shown(page)).toBe(0);
 });
 
-test('the controls never sit on the headline: under the buttons on phones, on the photo from tablets up', async ({ page }, testInfo) => {
+test('the controls sit on the photo, never on the headline', async ({ page }, testInfo) => {
   await page.goto('/');
   const pause = page.getByRole('button', { name: 'Pausar a troca de fotos' });
   await expect(pause).toBeVisible();
@@ -54,8 +54,13 @@ test('the controls never sit on the headline: under the buttons on phones, on th
   const cta = (await page.getByRole('link', { name: /Ver catálogo/ }).boundingBox())!;
   expect(control.width).toBeGreaterThanOrEqual(44);
   expect(control.height).toBeGreaterThanOrEqual(44);
-  if (testInfo.project.name === 'mobile-chromium') {
-    expect(control.y).toBeGreaterThanOrEqual(cta.y + cta.height);
+  expect(control.y).toBeGreaterThanOrEqual(box.y);
+  if (testInfo.project.name.startsWith('mobile')) {
+    // Phones: on the photo, right side, above the headline that overlaps the photo's bottom.
+    const title = (await page.getByRole('heading', { level: 1 }).boundingBox())!;
+    expect(control.y + control.height).toBeLessThanOrEqual(title.y);
+    expect(control.x + control.width).toBeLessThanOrEqual(box.x + box.width);
+    expect(control.y + control.height).toBeLessThan(cta.y);
   } else {
     expect(control.y + control.height).toBeLessThanOrEqual(box.y + box.height);
     expect(control.x).toBeGreaterThanOrEqual(box.x);

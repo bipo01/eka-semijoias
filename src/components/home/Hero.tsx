@@ -231,9 +231,6 @@ export function Hero() {
   }
 
   const toggle = () => setChoice(playing ? 'pause' : 'play');
-  const controls = (className: string) => (
-    <Controls count={count} names={slides.map((s) => s.name)} current={current} playing={playing} slidesId={slidesId} onPick={go} onToggle={toggle} onFocusChange={setFocused} className={className} />
-  );
 
   return (
     <section aria-labelledby="hero-title" className="relative md:grid md:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] md:items-center md:gap-8 lg:gap-12">
@@ -277,7 +274,21 @@ export function Hero() {
             })}
           </div>
           <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 z-[3] h-[38%] bg-gradient-to-t from-ivory via-ivory/70 to-transparent md:hidden" />
-          {many && controls('absolute bottom-4 left-4 z-[4] hidden rounded-full bg-ivory/85 px-1 shadow-[var(--shadow-1)] backdrop-blur-sm md:flex')}
+          {/* On the photo at every size. Phones: right, just above the headline (it covers the bottom 9rem of the
+              photo through -mt-36); from tablets up: bottom left, clear of the floating WhatsApp button. */}
+          {many && (
+            <Controls
+              count={count}
+              names={slides.map((s) => s.name)}
+              current={current}
+              playing={playing}
+              slidesId={slidesId}
+              onPick={go}
+              onToggle={toggle}
+              onFocusChange={setFocused}
+              className="absolute right-3 bottom-[calc(9rem+0.75rem)] z-[4] flex rounded-full bg-ivory/85 px-1 shadow-[var(--shadow-1)] backdrop-blur-sm md:right-auto md:bottom-4 md:left-4"
+            />
+          )}
         </div>
       </div>
       <div className="relative z-10 -mt-36 px-[var(--gutter)] pb-8 md:order-1 md:mt-0 md:py-12 md:pr-0 md:pl-[max(var(--gutter),calc((100vw-1200px)/2))] lg:py-16">
@@ -296,8 +307,6 @@ export function Hero() {
             </Link>
           )}
         </div>
-        {/* On phones the headline covers the bottom of the photo, so the controls sit under the buttons, never on the jewelry. */}
-        {many && controls('mt-4 flex justify-center sm:-ml-3 sm:justify-start md:hidden')}
       </div>
     </section>
   );

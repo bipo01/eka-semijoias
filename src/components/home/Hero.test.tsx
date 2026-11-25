@@ -26,8 +26,7 @@ const shown = () => slides().findIndex((s) => s.getAttribute('aria-hidden') !== 
 /** jsdom loads no images: settle every photo on the page by hand. */
 const loadAll = () => document.querySelectorAll('img').forEach((img) => fireEvent.load(img));
 const tick = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
-// The controls exist twice (under the buttons on phones, on the photo from tablets up); jsdom applies no CSS.
-const pauseButton = () => screen.getAllByRole('button', { name: /troca de fotos/ })[0]!;
+const pauseButton = () => screen.getByRole('button', { name: /troca de fotos/ });
 
 function mockReducedMotion(reduce: boolean) {
   window.matchMedia = vi.fn((query: string) => ({
@@ -120,11 +119,11 @@ describe('Hero slider', () => {
     expect(screen.getByRole('region', { name: 'Fotos em destaque' })).toHaveAttribute('aria-roledescription', 'carrossel');
     expect(slides().map((s) => s.getAttribute('aria-label'))).toEqual(['1 de 3: Brinco e colar', '2 de 3: Anel e pulseira', '3 de 3: Pulseira na seda']);
     expect(slides().map((s) => s.getAttribute('aria-hidden'))).toEqual([null, 'true', 'true']);
-    const dots = screen.getAllByRole('button', { name: /Mostrar foto \d de 3/ }).slice(0, 3);
+    const dots = screen.getAllByRole('button', { name: /Mostrar foto \d de 3/ });
     expect(dots[0]).toHaveAttribute('aria-current', 'true');
     fireEvent.click(dots[2]!);
     expect(shown()).toBe(2);
-    expect(screen.getAllByRole('button', { name: 'Mostrar foto 3 de 3: Pulseira na seda' })[0]).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: 'Mostrar foto 3 de 3: Pulseira na seda' })).toHaveAttribute('aria-current', 'true');
     expect(pauseButton()).toHaveAccessibleName('Pausar a troca de fotos');
   });
 
