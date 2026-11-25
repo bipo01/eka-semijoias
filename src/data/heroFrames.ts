@@ -136,8 +136,8 @@ export function firstHeroSlide(hero: unknown): HeroSlide | null {
   if (Array.isArray(h.slides)) {
     const s = h.slides[0] as Partial<HeroSlide> | undefined;
     if (!s || typeof s !== 'object' || !s.image || typeof s.image.src !== 'string') return null;
-    return { id: String(s.id ?? 'slide'), alt: String(s.alt ?? ''), image: s.image, frames: s.frames && typeof s.frames === 'object' ? s.frames : {} };
+    return { id: String(s.id ?? 'slide'), name: typeof s.name === 'string' ? s.name : '', alt: String(s.alt ?? ''), image: s.image, frames: s.frames && typeof s.frames === 'object' ? s.frames : {} };
   }
   const image = h.image as ContentImage | undefined;
-  return image && typeof image.src === 'string' ? { id: 'principal', alt: image.alt ?? '', image, frames: {} } : null;
+  return image && typeof image.src === 'string' ? { id: 'principal', name: '', alt: image.alt ?? '', image, frames: {} } : null;
 }

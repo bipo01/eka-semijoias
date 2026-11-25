@@ -8,7 +8,7 @@ import { dragFocus, firstHeroSlide, framePlacement, frameStyle, frameVars, HERO_
 const none: ContentFacts = { warrantyMonths: null, whatsapp: null, shipsNationwide: null, hypoallergenic: null, installments: null, plating: null, consignment: null, noUpfrontInvestment: null };
 const MEDIA = `media/${'a'.repeat(64)}.webp`;
 const inicio = () => defaultSections(none).inicio;
-const slide = (over: Partial<HeroSlide> = {}): HeroSlide => ({ id: 's1', alt: 'Colar no colo', image: { src: MEDIA, alt: 'Colar no colo' }, frames: {}, ...over });
+const slide = (over: Partial<HeroSlide> = {}): HeroSlide => ({ id: 's1', name: '', alt: 'Colar no colo', image: { src: MEDIA, alt: 'Colar no colo' }, frames: {}, ...over });
 const withSlides = (slides: unknown[], extra: Record<string, unknown> = {}) => ({ ...inicio(), hero: { ...inicio().hero, slides, ...extra } });
 
 describe('hero frames', () => {
@@ -59,7 +59,7 @@ describe('hero frames', () => {
 
   it('read the first slide of any stored hero shape', () => {
     expect(firstHeroSlide({ slides: [slide()] })?.image.src).toBe(MEDIA);
-    expect(firstHeroSlide({ image: { src: MEDIA, alt: 'x' } })).toEqual({ id: 'principal', alt: 'x', image: { src: MEDIA, alt: 'x' }, frames: {} });
+    expect(firstHeroSlide({ image: { src: MEDIA, alt: 'x' } })).toEqual({ id: 'principal', name: '', alt: 'x', image: { src: MEDIA, alt: 'x' }, frames: {} });
     for (const broken of [null, 42, {}, { slides: [] }, { slides: [null] }, { slides: [{ image: 3 }] }]) expect(firstHeroSlide(broken)).toBeNull();
   });
 
@@ -96,7 +96,7 @@ describe('hero slides schema', () => {
     const r = parseSection('inicio', old);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.data.hero.slides).toEqual([{ id: 'principal', alt: 'Colar Ponto de Luz no colo', image: { src: MEDIA, alt: 'Colar Ponto de Luz no colo' }, frames: {} }]);
+    expect(r.data.hero.slides).toEqual([{ id: 'principal', name: '', alt: 'Colar Ponto de Luz no colo', image: { src: MEDIA, alt: 'Colar Ponto de Luz no colo' }, frames: {} }]);
     expect(r.data.hero.interval).toBe(6);
     expect('image' in r.data.hero).toBe(false);
     // Through the public catalog too, and the site shows her photo (never the built-in ones).

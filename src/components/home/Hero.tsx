@@ -104,8 +104,13 @@ const isKeyboardFocus = (el: Element) => {
   }
 };
 
+/** ": Anel e pulseira" after a slide's number, when she named it. */
+const withName = (name: string | undefined) => (name?.trim() ? `: ${name.trim()}` : '');
+
 interface ControlsProps {
   count: number;
+  /** Her name of each slide (may be empty), read after the number. */
+  names: string[];
   current: number;
   playing: boolean;
   slidesId: string;
@@ -116,7 +121,7 @@ interface ControlsProps {
 }
 
 /** Dots (copper pill = the photo on screen) and pause/play; every control is a 44 px target. */
-function Controls({ count, current, playing, slidesId, onPick, onToggle, onFocusChange, className }: ControlsProps) {
+function Controls({ count, names, current, playing, slidesId, onPick, onToggle, onFocusChange, className }: ControlsProps) {
   const onFocus = (e: FocusEvent<HTMLDivElement>) => {
     if (isKeyboardFocus(e.target)) onFocusChange(true);
   };
@@ -130,7 +135,7 @@ function Controls({ count, current, playing, slidesId, onPick, onToggle, onFocus
           key={i}
           type="button"
           className="group flex size-11 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-copper"
-          aria-label={`Mostrar foto ${i + 1} de ${count}`}
+          aria-label={`Mostrar foto ${i + 1} de ${count}${withName(names[i])}`}
           aria-current={i === current ? 'true' : undefined}
           aria-controls={slidesId}
           onClick={() => onPick(i)}
@@ -226,7 +231,7 @@ export function Hero() {
 
   const toggle = () => setChoice(playing ? 'pause' : 'play');
   const controls = (className: string) => (
-    <Controls count={count} current={current} playing={playing} slidesId={slidesId} onPick={go} onToggle={toggle} onFocusChange={setFocused} className={className} />
+    <Controls count={count} names={slides.map((s) => s.name)} current={current} playing={playing} slidesId={slidesId} onPick={go} onToggle={toggle} onFocusChange={setFocused} className={className} />
   );
 
   return (
@@ -263,7 +268,7 @@ export function Hero() {
                   className="absolute inset-0 transition-opacity duration-[900ms] ease-in-out motion-reduce:transition-none"
                   // The photo coming in fades in above the one going out (which stays opaque below it): a true crossfade.
                   style={{ opacity: shown || under ? 1 : 0, zIndex: shown ? 2 : under ? 1 : 0 }}
-                  {...(many ? { role: 'group', 'aria-roledescription': 'slide', 'aria-label': `${i + 1} de ${count}`, 'aria-hidden': shown ? undefined : true } : {})}
+                  {...(many ? { role: 'group', 'aria-roledescription': 'slide', 'aria-label': `${i + 1} de ${count}${withName(slide.name)}`, 'aria-hidden': shown ? undefined : true } : {})}
                 >
                   <HeroPicture slide={slide} first={i === 0} onSettled={onSettled} />
                 </div>

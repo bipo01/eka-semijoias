@@ -151,18 +151,18 @@ function privacyBlocks(f: ContentFacts): Sections['privacidade']['blocks'] {
  * A built-in hero slide: every frame has its own art-directed photo
  * (public/images/hero/<slide>-<frame>-<width>.webp), centered; the main photo is the computer one.
  */
-function builtInSlide(id: string, alt: string): HeroSlide {
+function builtInSlide(id: string, name: string, alt: string): HeroSlide {
   const stem = (frame: string) => `${HERO_STEM_PREFIX}${id}-${frame}`;
   const frames: HeroSlide['frames'] = {};
   for (const frame of HERO_FRAME_IDS) frames[frame] = { image: { src: stem(frame), alt }, ...FRAME_DEFAULT };
-  return { id, alt, image: { src: stem('computador'), alt }, frames };
+  return { id, name, alt, image: { src: stem('computador'), alt }, frames };
 }
 
 /** Built-in hero slides (the first one is the photo the page preloads, see worker/seo.ts). */
 export const builtInHeroSlides = (): HeroSlide[] => [
-  builtInSlide('colo', 'Brinco Gota Cristal e Colar Ponto de Luz em ouro rosé, usados'),
-  builtInSlide('mao', 'Anel Solitário, aparador cravejado e Pulseira Riviera em ouro rosé, na mão'),
-  builtInSlide('seda', 'Pulseira Riviera e pingente gota em ouro rosé sobre seda'),
+  builtInSlide('colo', 'Brinco e colar', 'Brinco Gota Cristal e Colar Ponto de Luz em ouro rosé, usados'),
+  builtInSlide('mao', 'Anel e pulseira', 'Anel Solitário, aparador cravejado e Pulseira Riviera em ouro rosé, na mão'),
+  builtInSlide('seda', 'Pulseira na seda', 'Pulseira Riviera e pingente gota em ouro rosé sobre seda'),
 ];
 
 /** Built-in text of every section for the given facts. */

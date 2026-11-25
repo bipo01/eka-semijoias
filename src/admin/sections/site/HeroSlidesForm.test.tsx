@@ -171,6 +171,22 @@ describe('hero slides editor', { timeout: 30_000 }, () => {
     expect(hero.slides[3]!.image.src).toMatch(/^media\//);
   });
 
+  it('each photo can have her own name: the item title in the panel, saved with the slide', async () => {
+    const { dialog, list, slide } = await openEditor();
+    expect(within(list).getAllByRole('heading', { level: 4 }).map((h) => h.textContent)).toEqual([
+      'Foto 1 · Brinco e colar',
+      'Foto 2 · Anel e pulseira',
+      'Foto 3 · Pulseira na seda',
+    ]);
+    const name = within(slide(1)).getByRole('textbox', { name: /Nome da foto/ });
+    await userEvent.clear(name);
+    expect(within(slide(1)).getByRole('heading', { level: 4 })).toHaveTextContent(/^Foto 2$/);
+    await userEvent.type(name, 'Mão com anéis');
+    expect(within(slide(1)).getByRole('heading', { level: 4 })).toHaveTextContent('Foto 2 · Mão com anéis');
+    const hero = await save(dialog);
+    expect(hero.slides.map((s) => s.name)).toEqual(['Brinco e colar', 'Mão com anéis', 'Pulseira na seda']);
+  });
+
   it('keeps at least one photo and at most five', async () => {
     const { list } = await openEditor();
     await userEvent.click(within(list).getByRole('button', { name: 'Apagar foto 3' }));

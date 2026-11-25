@@ -152,7 +152,8 @@ describe('site content', () => {
     const ok = await send(a, c.version, [hero(up.json.key)]);
     expect(ok.status).toBe(200);
     c = await catalog();
-    expect(c.content.inicio.hero.slides).toEqual([{ id: 's1', alt: 'Colar no colo', image: { src: up.json.key, alt: 'Colar no colo' }, frames: {} }]);
+    // A slide sent without a name (a panel opened before names existed) is stored with an empty one.
+    expect(c.content.inicio.hero.slides).toEqual([{ id: 's1', name: '', alt: 'Colar no colo', image: { src: up.json.key, alt: 'Colar no colo' }, frames: {} }]);
   });
 
   it('checks the photo of every hero screen and publishes the framing', async () => {

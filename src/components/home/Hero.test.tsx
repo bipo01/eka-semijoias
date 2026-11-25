@@ -84,7 +84,7 @@ describe('Hero slider', () => {
   });
 
   it('applies her framing per screen', () => {
-    const own: HeroSlide = { id: 's1', alt: 'Anel', image: { src: MEDIA, alt: 'Anel' }, frames: { tablet: { x: 20, y: 75, zoom: 1.6 } } };
+    const own: HeroSlide = { id: 's1', name: '', alt: 'Anel', image: { src: MEDIA, alt: 'Anel' }, frames: { tablet: { x: 20, y: 75, zoom: 1.6 } } };
     show({ inicio: { ...inicio(), hero: { ...inicio().hero, slides: [own] } } });
     const img = document.querySelector('img')!;
     expect(img.style.getPropertyValue('--hx-tablet')).toBe('20%');
@@ -96,7 +96,7 @@ describe('Hero slider', () => {
   });
 
   it('a single photo is a plain picture: no carousel, no controls', () => {
-    const one: HeroSlide = { id: 's1', alt: 'Colar', image: { src: MEDIA, alt: 'Colar' }, frames: {} };
+    const one: HeroSlide = { id: 's1', name: '', alt: 'Colar', image: { src: MEDIA, alt: 'Colar' }, frames: {} };
     show({ inicio: { ...inicio(), hero: { ...inicio().hero, slides: [one] } } });
     expect(screen.queryByRole('region', { name: 'Fotos em destaque' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Mostrar foto/ })).not.toBeInTheDocument();
@@ -108,13 +108,13 @@ describe('Hero slider', () => {
     show();
     loadAll();
     expect(screen.getByRole('region', { name: 'Fotos em destaque' })).toHaveAttribute('aria-roledescription', 'carrossel');
-    expect(slides().map((s) => s.getAttribute('aria-label'))).toEqual(['1 de 3', '2 de 3', '3 de 3']);
+    expect(slides().map((s) => s.getAttribute('aria-label'))).toEqual(['1 de 3: Brinco e colar', '2 de 3: Anel e pulseira', '3 de 3: Pulseira na seda']);
     expect(slides().map((s) => s.getAttribute('aria-hidden'))).toEqual([null, 'true', 'true']);
     const dots = screen.getAllByRole('button', { name: /Mostrar foto \d de 3/ }).slice(0, 3);
     expect(dots[0]).toHaveAttribute('aria-current', 'true');
     fireEvent.click(dots[2]!);
     expect(shown()).toBe(2);
-    expect(screen.getAllByRole('button', { name: 'Mostrar foto 3 de 3' })[0]).toHaveAttribute('aria-current', 'true');
+    expect(screen.getAllByRole('button', { name: 'Mostrar foto 3 de 3: Pulseira na seda' })[0]).toHaveAttribute('aria-current', 'true');
     expect(pauseButton()).toHaveAccessibleName('Pausar a troca de fotos');
   });
 

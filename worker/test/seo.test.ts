@@ -23,7 +23,7 @@ describe('page meta', () => {
       ...base,
       content: {
         compartilhar: { title: 'ÉKA', description: 'Semijoias em Cuiabá', image: { src: MEDIA, alt: '' } },
-        inicio: { ...d.inicio, hero: { ...d.inicio.hero, slides: [{ id: 's1', alt: 'x', image: { src: MEDIA, alt: 'x' }, frames: {} }] } },
+        inicio: { ...d.inicio, hero: { ...d.inicio.hero, slides: [{ id: 's1', name: '', alt: 'x', image: { src: MEDIA, alt: 'x' }, frames: {} }] } },
       },
     };
     expect(pageMeta(at('/'), catalog)).toMatchObject({ title: 'ÉKA', description: 'Semijoias em Cuiabá', image: `${ORIGIN}/${MEDIA}`, preloadHero: false });

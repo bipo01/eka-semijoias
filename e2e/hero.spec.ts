@@ -22,7 +22,7 @@ test('three slides with controls; they change on their own and the pause button 
   await expect(slides(page)).toHaveCount(3);
   await expect.poll(() => allSettled(page)).toEqual([true, true, true]);
   // Only one set of controls is on screen (under the buttons on phones, on the photo from tablets up).
-  await expect(page.getByRole('button', { name: /^Mostrar foto \d de 3$/ })).toHaveCount(3);
+  await expect(page.getByRole('button', { name: /^Mostrar foto \d de 3/ })).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Mostrar foto 1 de 3' })).toHaveAttribute('aria-current', 'true');
   expect(await shown(page)).toBe(0);
 

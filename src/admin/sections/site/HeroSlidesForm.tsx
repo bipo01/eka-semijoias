@@ -21,7 +21,7 @@ import {
 } from '../../../data/heroFrames';
 import { siteImageSources } from '../../../lib/assets';
 import { toast } from '../../../store/ui';
-import { useEditor } from './fields';
+import { TextInput, useEditor } from './fields';
 import { AddPhoto, ImageField, photoFromFile } from './ImageField';
 import { ListField } from './ListEditor';
 import { getIn, pathKey, textLimit, type Path } from './sectionDraft';
@@ -56,7 +56,8 @@ export function HeroSlides() {
         itemName="foto"
         addLabel="Adicionar foto"
         onAdd={() => setAdding(true)}
-        deleteText={(s) => (s.alt.trim() ? `“${s.alt.trim()}”` : '')}
+        renderTitle={(s, i) => slideTitle(s, i)}
+        deleteText={(s) => (s.name.trim() || s.alt.trim() ? `“${s.name.trim() || s.alt.trim()}”` : '')}
         renderItem={(slide, _i, p) => <SlideFields slide={slide} path={p} />}
       />
       <IntervalField count={slides.length} />
@@ -65,8 +66,19 @@ export function HeroSlides() {
         profile="wide"
         title="Adicionar foto ao topo"
         onClose={() => setAdding(false)}
-        onPick={(img) => set(SLIDES, [...slides, { id: newItemId(), alt: img.alt, image: img, frames: {} }])}
+        onPick={(img) => set(SLIDES, [...slides, { id: newItemId(), name: '', alt: img.alt, image: img, frames: {} }])}
       />
+    </>
+  );
+}
+
+/** "Foto 2 · Anel e pulseira" (or "Foto 2" while it has no name). */
+function slideTitle(slide: HeroSlide, i: number) {
+  const name = slide.name.trim();
+  return (
+    <>
+      Foto {i + 1}
+      {name && <span className="font-normal text-ink-muted"> · {name}</span>}
     </>
   );
 }
@@ -123,6 +135,7 @@ function SlideFields({ slide, path }: { slide: HeroSlide; path: Path }) {
   const imageError = Object.entries(errors).find(([k]) => (k === imageKey || k.startsWith(`${imageKey}.`)) && k !== `${imageKey}.alt`)?.[1];
   return (
     <>
+      <TextInput path={[...path, 'name']} label="Nome da foto" hint="Para você reconhecer a foto aqui no painel." placeholder="Ex.: Brinco e colar" />
       <ImageField
         label="Foto principal"
         hint="Aparece nas telas que não têm foto própria. Ao trocar a foto, o enquadramento de cada tela recomeça."

@@ -85,6 +85,9 @@ export type Testimonial = z.infer<typeof testimonialSchema>;
 /** "Name · City", either one alone, or nothing (a testimonial may go out with the comment only). */
 export const testimonialSignature = (t: { name: string; city: string }) => [t.name.trim(), t.city.trim()].filter(Boolean).join(' · ');
 
+/** Longest slide name. */
+export const SLIDE_NAME_MAX = 30;
+
 const percent = z.number().int('Use um número inteiro.').min(0, 'Escolha um ponto dentro da foto.').max(100, 'Escolha um ponto dentro da foto.');
 
 /** How a slide shows on one screen shape (src/data/heroFrames.ts): its own photo and/or framing. */
@@ -100,6 +103,8 @@ export type HeroFrame = z.infer<typeof heroFrameSchema>;
 
 export const heroSlideSchema = z.object({
   id: itemIdSchema,
+  /** Her name for the slide ("Brinco e colar"): the panel's title and the slider's dot label. Optional. */
+  name: text(SLIDE_NAME_MAX).default(''),
   alt: text(200),
   /** The main photo, used by every frame without its own. */
   image: contentImageSchema,

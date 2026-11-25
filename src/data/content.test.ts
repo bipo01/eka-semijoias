@@ -157,7 +157,7 @@ describe('content change sets', () => {
     const FRAME = `media/${'f'.repeat(64)}.webp`;
     const edited = {
       ...inicio,
-      hero: { ...inicio.hero, slides: [{ id: 's1', alt: 'x', image: { src: MEDIA, alt: 'x' }, frames: { celular: { image: { src: FRAME, alt: '' }, x: 30, y: 70, zoom: 1.4 }, amplo: { x: 10, y: 50, zoom: 1 } } }] },
+      hero: { ...inicio.hero, slides: [{ id: 's1', name: '', alt: 'x', image: { src: MEDIA, alt: 'x' }, frames: { celular: { image: { src: FRAME, alt: '' }, x: 30, y: 70, zoom: 1.4 }, amplo: { x: 10, y: 50, zoom: 1 } } }] },
     };
     const content = { inicio: edited, compartilhar: { ...defaultSections(none).compartilhar, image: { src: 'images/lifestyle/l01-colo', alt: '' } } };
     const sources = contentImageSources(content);
