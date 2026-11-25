@@ -114,10 +114,10 @@ export function CatalogPage() {
       </nav>
 
         <div className="mt-4 grid grid-cols-2 gap-3 lg:mt-0 lg:flex lg:shrink-0">
-        <Button variant="secondary" size="sm" onClick={() => setFilterOpen(true)} className="lg:min-w-40">
+        <Button variant="secondary" size="sm" onClick={() => setFilterOpen(true)} className="max-[359px]:gap-1.5 max-[359px]:px-3 lg:min-w-40">
           <SlidersHorizontal size={18} strokeWidth={1.5} aria-hidden="true" /> Filtrar{activeCount > 0 && <span className="price">({activeCount})</span>}
         </Button>
-        <Button variant="secondary" size="sm" onClick={() => setSortOpen(true)} className="lg:min-w-40">
+        <Button variant="secondary" size="sm" onClick={() => setSortOpen(true)} className="max-[359px]:gap-1.5 max-[359px]:px-3 lg:min-w-40">
           <ArrowUpDown size={18} strokeWidth={1.5} aria-hidden="true" /> {filters.sort === 'destaques' ? 'Ordenar' : SORTS.find((s) => s.value === filters.sort)!.label}
         </Button>
         </div>

@@ -210,7 +210,7 @@ function OrderDetail({ order, onClose, onPurchase }: { order: Order; onClose: ()
             </Button>
             {next && (
               <Button variant="secondary" block disabled={busy} aria-busy={busy} onClick={() => void move(next.to)}>
-                {busy ? 'Salvando…' : order.status === 'enviado' ? 'Só confirmar (outra forma de pagamento)' : 'Marcar como pago'}
+                {busy ? 'Salvando…' : order.status === 'enviado' ? 'Confirmar sem Pix' : 'Marcar como pago'}
               </Button>
             )}
           </>

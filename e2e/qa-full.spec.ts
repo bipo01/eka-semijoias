@@ -16,8 +16,8 @@ test.describe.configure({ mode: 'serial' });
 
 const OUT = 'docs/qa/full';
 const PIN = '314159';
-const PUBLIC_WIDTHS = [360, 390, 768, 1280, 1440];
-const ADMIN_WIDTHS = [360, 768, 1440];
+const PUBLIC_WIDTHS = [320, 360, 390, 768, 1280, 1440];
+const ADMIN_WIDTHS = [320, 360, 768, 1440];
 const SECTIONS = ['inicio', 'depoimentos', 'perguntas', 'sobre', 'cuidados', 'garantia', 'revendedoras', 'contato', 'geral', 'privacidade', 'compartilhar'];
 const ADMIN_TABS = ['pedidos', 'clientes', 'revendedoras', 'produtos', 'estoque', 'relatorio', 'mensagens', 'site', 'categorias', 'configuracoes', 'backup'];
 
@@ -67,6 +67,21 @@ async function audit(page: Page, name: string) {
       if (scroller) continue;
       if ((r.right > vw + 1 || r.left < -1) && s.position !== 'fixed' && !el.closest('[aria-hidden="true"], .sr-only')) {
         if (['button', 'a', 'input', 'select', 'textarea', 'h1', 'h2', 'h3', 'p', 'img'].includes(el.tagName.toLowerCase())) out.push(`off-screen ${label(el)} (${Math.round(r.left)}..${Math.round(r.right)})`);
+      }
+      // A pill button's label on two lines reads broken ("Enviar pedido pelo / WhatsApp"): shorten it.
+      if ((el.tagName === 'BUTTON' || el.tagName === 'A') && /\brounded-full\b/.test(el.className) && /inline-flex|flex/.test(s.display) && !el.closest('.sr-only')) {
+        // Lines of visible text only (an icon beside the text is not a line).
+        const tops = new Set<number>();
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          if (!n.textContent?.trim() || n.parentElement?.closest('.sr-only, [aria-hidden="true"]')) continue;
+          // A count badge pinned to a corner (the bag's "3") is not a second line of the label.
+          if (n.parentElement && getComputedStyle(n.parentElement).position === 'absolute') continue;
+          const range = document.createRange();
+          range.selectNodeContents(n);
+          for (const q of Array.from(range.getClientRects())) if (q.width > 1 && q.height > 4) tops.add(Math.round((q.top + q.height / 2) / 6));
+        }
+        if (tops.size > 1) out.push(`button text wraps ${label(el)} (${Math.round(r.width)}px wide)`);
       }
       const clips = ['hidden', 'clip'].includes(s.overflowX) && s.textOverflow !== 'ellipsis' && el.scrollWidth > el.clientWidth + 2 && el.children.length === 0 && (el.textContent ?? '').trim().length > 0;
       if (clips && !el.closest('.sr-only')) out.push(`text cut ${label(el)} (${el.scrollWidth} > ${el.clientWidth})`);
@@ -206,6 +221,13 @@ for (const width of PUBLIC_WIDTHS) {
     }
     await page.getByRole('button', { name: /Sacola/ }).first().click();
     await shotDialog(page, `pub-drawer-sacola-${width}`, width);
+    // The order registered: the WhatsApp button the customer taps next.
+    const bag = page.getByRole('dialog');
+    await bag.getByPlaceholder('Seu nome').fill('Mariana Albuquerque');
+    await bag.getByPlaceholder('Cidade').fill('Cuiabá');
+    await bag.getByRole('button', { name: 'Finalizar pedido' }).click();
+    await bag.getByText(/Pedido nº \d+ registrado/).waitFor();
+    await shotDialog(page, `pub-drawer-pedido-registrado-${width}`, width);
     await context.close();
   });
 }

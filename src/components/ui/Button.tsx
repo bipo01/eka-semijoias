@@ -7,7 +7,9 @@ export type ButtonSize = 'md' | 'sm' | 'lg';
 
 export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize = 'md', block = false): string {
   return cx(
-    'inline-flex items-center justify-center gap-2 rounded-full font-medium select-none',
+    // A label that must wrap (a long one on a narrow phone, a large system font) stays centered, with
+    // balanced lines, instead of a ragged left-aligned block beside the icon.
+    'inline-flex items-center justify-center gap-2 rounded-full text-center leading-tight text-balance font-medium select-none',
     'transition-[background-color,color,border-color,box-shadow] duration-[160ms] ease-[var(--ease)]',
     'disabled:opacity-50 aria-disabled:opacity-50',
     size === 'lg' && 'min-h-13 px-7 text-[1.0625rem]',

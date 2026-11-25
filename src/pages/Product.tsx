@@ -329,7 +329,8 @@ function ProductView({ product }: { product: Product }) {
       {/* One-row sticky bar (mobile/tablet): price · add to bag · WhatsApp */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-ivory/95 pb-[var(--safe-bottom)] shadow-[var(--shadow-1)] backdrop-blur lg:hidden">
         <div className="container-x flex h-16 items-center gap-3">
-          <div className="min-w-0 shrink-0">
+          {/* Sold out: no price beside "Avise-me quando voltar", which then takes the whole row on one line. */}
+          <div className={cx('min-w-0 shrink-0', !purchasable && 'hidden')}>
             {qty > 1 ? (
               <span className="price block text-xs leading-none text-ink-muted">
                 {qty} × {formatBRL(effectivePrice(product))}

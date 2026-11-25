@@ -69,7 +69,7 @@ describe('bag checkout', () => {
     expect(screen.queryByText('Pague com Pix')).not.toBeInTheDocument();
     // The text after the order is the owner's (Painel → Site → Textos gerais) or the built-in one.
     expect(screen.getByText(/Agora envie o pedido pelo WhatsApp. A gente confirma a disponibilidade/)).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: /Enviar pedido pelo WhatsApp/ });
+    const link = screen.getByRole('link', { name: /Enviar pelo WhatsApp/ });
     const text = decodeURIComponent(link.getAttribute('href')!.split('text=')[1]!);
     expect(text).toContain('Fiz o pedido nº 1024 pelo site');
     expect(text).not.toContain('Pagamento');

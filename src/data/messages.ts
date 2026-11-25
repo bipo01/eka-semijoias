@@ -88,7 +88,7 @@ export interface MessageTypeInfo {
 export const MESSAGE_TYPE_INFO: Record<MessageType, MessageTypeInfo> = {
   pedido: {
     label: 'Pedido pela sacola',
-    description: 'A cliente finaliza a sacola e toca em “Enviar pedido pelo WhatsApp”.',
+    description: 'A cliente finaliza a sacola e toca em “Enviar pelo WhatsApp”.',
     group: 'cliente',
     vars: ['pedido', 'itens', 'total', 'nome', 'cidade', 'obs', 'loja'],
     required: ['itens'],

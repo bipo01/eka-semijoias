@@ -202,7 +202,7 @@ test('admin: stock, order and confirmation; the visitor page sells out live', as
   await expect(card).toBeVisible({ timeout: 10_000 });
   await card.click();
   const detail = page.getByRole('region', { name: `Pedido nº ${number}` });
-  await detail.getByRole('button', { name: /Só confirmar/ }).click();
+  await detail.getByRole('button', { name: 'Confirmar sem Pix' }).click();
   await expect(page.getByText('Pedido confirmado.')).toBeVisible();
 
   // 4. The open visitor page shows it sold out, without reload.

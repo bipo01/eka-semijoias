@@ -90,7 +90,7 @@ function RegisteredView({ order, onNavigate }: { order: RegisteredOrder; onNavig
           clearCart();
         }}
       >
-        <WhatsAppIcon size={22} /> {sent ? 'Enviar de novo pelo WhatsApp' : 'Enviar pedido pelo WhatsApp'}
+        <WhatsAppIcon size={22} /> {sent ? 'Enviar de novo' : 'Enviar pelo WhatsApp'}
       </ButtonAnchor>
       {sent ? (
         <ButtonLink

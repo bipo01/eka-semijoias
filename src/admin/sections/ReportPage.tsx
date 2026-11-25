@@ -54,9 +54,10 @@ export function reportCsv(orders: Order[]): string {
 
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string | undefined }) {
   return (
-    <div className="rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
+    <div className="@container rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
       <p className="text-sm text-ink-muted">{label}</p>
-      <p className="price mt-1 text-[1.5rem] leading-tight text-ink">{value}</p>
+      {/* One line, sized to the card: "R$" never apart from the amount, even "R$ 123.456,78" on a 320 px phone. */}
+      <p className="price mt-1 text-[clamp(0.9375rem,12.5cqi,1.5rem)] leading-tight whitespace-nowrap text-ink">{value}</p>
       {hint && <p className="mt-0.5 text-xs text-ink-muted">{hint}</p>}
     </div>
   );
@@ -108,7 +109,9 @@ function SalesChart({ buckets, monthly }: { buckets: Bucket[]; monthly: boolean 
           </span>
         ))}
       </div>
-      <table className="sr-only">
+      {/* The hiding box wraps the table: a table ignores the 1 px width of .sr-only and widened the page at 320 px. */}
+      <div className="sr-only">
+      <table>
         <caption>Vendas {monthly ? 'por mês' : 'por dia'}</caption>
         <thead>
           <tr>
@@ -127,6 +130,7 @@ function SalesChart({ buckets, monthly }: { buckets: Bucket[]; monthly: boolean 
           ))}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }

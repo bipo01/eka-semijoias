@@ -26,7 +26,7 @@ interface CheckoutStore {
   order: RegisteredOrder | null;
   /** The bag the order was registered from: a different bag means a new order. */
   cartSignature: string;
-  /** True once the customer tapped "Enviar pedido pelo WhatsApp". */
+  /** True once the customer tapped "Enviar pelo WhatsApp". */
   sent: boolean;
   setOrder: (order: RegisteredOrder, cartSignature: string) => void;
   markSent: () => void;

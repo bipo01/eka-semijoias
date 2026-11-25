@@ -87,7 +87,7 @@ test('add to bag, register the order and build the WhatsApp message', async ({ p
   expect(response.status()).toBe(201);
   const number = ((await response.json()) as { order: { number: number } }).order.number;
   await expect(dialog.getByRole('heading', { name: `Pedido nº ${number} registrado` })).toBeVisible();
-  const href = await dialog.getByRole('link', { name: 'Enviar pedido pelo WhatsApp' }).getAttribute('href');
+  const href = await dialog.getByRole('link', { name: 'Enviar pelo WhatsApp' }).getAttribute('href');
   const text = decodeURIComponent(href!.split('text=')[1]!);
   expect(href).toMatch(/^https:\/\/wa\.me\/\?text=/);
   expect(text).toBe(
