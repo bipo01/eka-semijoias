@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { cx } from '../components/ui/cx';
 import { pageScrollY } from '../lib/scrollLock';
 
@@ -30,15 +30,36 @@ export function useDetailHeader(header: DetailHeader) {
   useLayoutEffect(() => () => set(null), [set]);
 }
 
+/**
+ * Publishes the pinned footer's height as `--detail-footer` on the root while it is shown: toasts
+ * (src/components/ui/Toaster.tsx) rise above it, so "Foto removida · Desfazer" never covers "Salvar".
+ */
+function useFooterHeight(footer: HTMLDivElement | null) {
+  useLayoutEffect(() => {
+    if (!footer) return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty('--detail-footer', `${Math.round(footer.getBoundingClientRect().height)}px`);
+    publish();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(publish) : null;
+    observer?.observe(footer);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty('--detail-footer');
+    };
+  }, [footer]);
+}
+
 /** `label` names the page region for assistive tech (defaults to the title). */
 export function DetailPage({ header, label, children, footer, className }: { header: DetailHeader; label?: string; children: ReactNode; footer?: ReactNode; className?: string }) {
   useDetailHeader(header);
+  const [footerEl, setFooterEl] = useState<HTMLDivElement | null>(null);
+  useFooterHeight(footerEl);
   return (
     <section aria-label={label ?? header.title} className={cx('mx-auto w-full max-w-[760px]', className)}>
       {children}
       {footer && (
         // Pinned above the phone's bottom bar (64 px) and at the bottom of the window on desktop.
-        <div className="sticky bottom-[calc(64px+var(--safe-bottom))] z-10 -mx-4 mt-6 border-t border-line bg-ivory px-4 py-3 shadow-[0_-8px_20px_-14px_rgb(48_33_28/0.35)] lg:bottom-0 lg:-mx-6 lg:px-6">
+        <div ref={setFooterEl} className="sticky bottom-[calc(64px+var(--safe-bottom))] z-10 -mx-4 mt-6 border-t border-line bg-ivory px-4 py-3 shadow-[0_-8px_20px_-14px_rgb(48_33_28/0.35)] lg:bottom-0 lg:-mx-6 lg:px-6">
           {footer}
         </div>
       )}

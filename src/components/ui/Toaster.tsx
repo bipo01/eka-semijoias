@@ -55,7 +55,8 @@ export function Toaster({ raised }: { raised?: boolean }) {
       aria-live="polite"
       className={cx(
         'pointer-events-none fixed inset-x-0 z-[60] mx-auto flex w-full max-w-md flex-col gap-2 px-4',
-        raised ? 'bottom-[calc(80px+var(--safe-bottom))]' : 'bottom-[calc(16px+var(--safe-bottom))]',
+        // --detail-footer: a panel detail page's pinned footer ("Salvar"), set by src/admin/DetailPage.tsx.
+        raised ? 'bottom-[calc(80px+var(--safe-bottom)+var(--detail-footer,0px))]' : 'bottom-[calc(16px+var(--safe-bottom))]',
       )}
     >
       {toasts.map((t) => (
