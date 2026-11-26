@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { polyfillDialog } from '../admin/testUtils';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { defaultSections, factsOf } from '../content/defaults';
 import type { Sections, SiteContent } from '../data/content';
@@ -107,5 +109,29 @@ describe('PaymentPage texts', () => {
       });
       expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Pagamento do pedido nº 1024');
     });
+  });
+});
+
+describe('PaymentPage receipt', () => {
+  polyfillDialog();
+  beforeEach(() => {
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:receipt', revokeObjectURL: () => {} }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('opens the picked receipt full screen with a tap, to check it is the right one', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('heading', { level: 1 });
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])], 'Screenshot_2026-11-25.png', { type: 'image/png' });
+    await user.upload(document.querySelector<HTMLInputElement>('input[type=file]')!, file);
+    const open = await screen.findByRole('button', { name: 'Ver comprovante: Screenshot_2026-11-25.png' });
+    expect(open).toHaveTextContent('Toque para ver');
+    await user.click(open);
+    const viewer = await screen.findByRole('dialog', { name: 'Seu comprovante' });
+    expect(within(viewer).getByRole('img', { name: /Comprovante escolhido/ })).toHaveAttribute('src', 'blob:receipt');
+    await user.click(within(viewer).getByRole('button', { name: 'Está certo' }));
+    expect(screen.queryByRole('dialog', { name: 'Seu comprovante' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Enviar comprovante' })).toBeEnabled();
   });
 });

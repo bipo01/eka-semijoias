@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, FileText, ImageIcon, LoaderCircle, LockKeyhole, ReceiptText, RefreshCw, X } from 'lucide-react';
+import { CheckCircle2, Eye, FileText, ImageIcon, LoaderCircle, LockKeyhole, ReceiptText, RefreshCw, X } from 'lucide-react';
 import { TextField } from '../components/ui/Field';
 import { Lockup } from '../components/layout/Logo';
 import { PixCopyField, QrCode } from '../components/pay/PixCode';
 import { Button, ButtonAnchor } from '../components/ui/Button';
 import { WhatsAppIcon } from '../components/ui/Icons';
+import { Sheet } from '../components/ui/Sheet';
 import { Toaster } from '../components/ui/Toaster';
 import { cx } from '../components/ui/cx';
 import { sizeLabel } from '../data/catalog';
@@ -270,12 +271,16 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  /** The picked PDF, to open in the phone's viewer ("Ver comprovante"). */
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const busy = progress !== null;
 
   useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
+  useEffect(() => () => void (pdfUrl && URL.revokeObjectURL(pdfUrl)), [pdfUrl]);
 
   const pick = async (f: File | undefined) => {
     if (!f) return;
@@ -294,6 +299,14 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
     }
     setFile(copy);
     setPreview(copy.type.startsWith('image/') && !/heic|heif/i.test(copy.type) ? URL.createObjectURL(copy) : null);
+    setPdfUrl(isPdf(copy) ? URL.createObjectURL(copy) : null);
+  };
+
+  const clear = () => {
+    setFile(null);
+    setPreview(null);
+    setPdfUrl(null);
+    setViewing(false);
   };
 
   const onDrop = (e: DragEvent) => {
@@ -313,8 +326,7 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
         return;
       }
       await uploadReceipt(token, prepared.blob, prepared.type, (f) => setProgress(f));
-      setFile(null);
-      setPreview(null);
+      clear();
       onSent();
     } catch (err) {
       setError(errorMessage(err));
@@ -350,29 +362,49 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
         </label>
       ) : (
         <div className="flex items-center gap-3 rounded-[14px] border border-line bg-white p-3">
-          {preview ? (
-            <img src={preview} alt="Comprovante escolhido" className="h-20 w-16 shrink-0 rounded-[8px] object-cover object-top ring-1 ring-line" />
-          ) : (
-            <span className="inline-flex h-20 w-16 shrink-0 items-center justify-center rounded-[8px] bg-champagne text-copper">
-              {isPdf(file) ? <FileText size={26} strokeWidth={1.4} aria-hidden="true" /> : <ImageIcon size={26} strokeWidth={1.4} aria-hidden="true" />}
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm text-ink">{file.name}</p>
-            <p className="text-sm text-ink-muted">{kb(file.size)}</p>
-            {busy && (
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-champagne" role="progressbar" aria-label="Enviando comprovante" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((progress ?? 0) * 100)}>
-                <div className="h-full rounded-full bg-copper transition-[width] duration-200" style={{ width: `${Math.max(6, Math.round((progress ?? 0) * 100))}%` }} />
-              </div>
-            )}
-          </div>
+          {/* The whole thumbnail + name opens the receipt full screen, to check it is the right one. */}
+          {(() => {
+            const thumb = preview ? (
+              <img src={preview} alt="" className="h-20 w-16 shrink-0 rounded-[8px] object-cover object-top ring-1 ring-line" />
+            ) : (
+              <span className="inline-flex h-20 w-16 shrink-0 items-center justify-center rounded-[8px] bg-champagne text-copper">
+                {isPdf(file) ? <FileText size={26} strokeWidth={1.4} aria-hidden="true" /> : <ImageIcon size={26} strokeWidth={1.4} aria-hidden="true" />}
+              </span>
+            );
+            const text = (
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-sm text-ink">{file.name}</span>
+                <span className="block text-sm text-ink-muted">{kb(file.size)}</span>
+                {!busy && (preview || pdfUrl) && (
+                  <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-copper">
+                    <Eye size={16} strokeWidth={1.75} aria-hidden="true" /> Toque para ver
+                  </span>
+                )}
+                {busy && (
+                  <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-champagne" role="progressbar" aria-label="Enviando comprovante" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((progress ?? 0) * 100)}>
+                    <span className="block h-full rounded-full bg-copper transition-[width] duration-200" style={{ width: `${Math.max(6, Math.round((progress ?? 0) * 100))}%` }} />
+                  </span>
+                )}
+              </span>
+            );
+            const cls = 'flex min-w-0 flex-1 items-center gap-3 rounded-[10px] select-none [-webkit-touch-callout:none] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper';
+            if (busy || (!preview && !pdfUrl)) return <span className={cls}>{thumb}{text}</span>;
+            return pdfUrl ? (
+              <a href={pdfUrl} target="_blank" rel="noopener" aria-label={`Ver comprovante: ${file.name}`} className={cls}>
+                {thumb}
+                {text}
+              </a>
+            ) : (
+              <button type="button" onClick={() => setViewing(true)} aria-label={`Ver comprovante: ${file.name}`} className={cls}>
+                {thumb}
+                {text}
+              </button>
+            );
+          })()}
           {!busy && (
             <button
               type="button"
-              onClick={() => {
-                setFile(null);
-                setPreview(null);
-              }}
+              onClick={clear}
               aria-label="Trocar arquivo"
               className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-champagne hover:text-ink"
             >
@@ -392,6 +424,31 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
           e.target.value = '';
         }}
       />
+      {preview && file && (
+        <Sheet
+          open={viewing}
+          onClose={() => setViewing(false)}
+          title="Seu comprovante"
+          side="full"
+          footer={
+            <div className="mx-auto grid w-full max-w-md grid-cols-2 gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  clear();
+                  input.current?.click();
+                }}
+              >
+                Trocar arquivo
+              </Button>
+              <Button onClick={() => setViewing(false)}>Está certo</Button>
+            </div>
+          }
+        >
+          {/* Full width, scrolling down a long screenshot; the phone's own zoom works on it too. */}
+          <img src={preview} alt={`Comprovante escolhido: ${file.name}`} className="mx-auto block h-auto w-full max-w-md rounded-[10px] ring-1 ring-line" />
+        </Sheet>
+      )}
       {error && (
         <p role="alert" className="rounded-[10px] bg-[#f6e9e6] px-4 py-3 text-sm text-danger">
           {error}
