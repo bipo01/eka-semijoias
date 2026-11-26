@@ -316,7 +316,6 @@ export function ProductForm({ source }: { source: FormSource }) {
             })}
           </div>
           <SwitchRow label="Disponível no catálogo" hint="Desligado, a peça aparece como esgotada." checked={draft.available} onChange={(v) => set('available', v)} />
-          <SwitchRow label="Destaque na home" checked={draft.featured} onChange={(v) => set('featured', v)} />
         </FormSection>
 
         <FormSection title="Mais ações">

@@ -1,7 +1,6 @@
 import { CareTeaser } from '../components/home/CareTeaser';
 import { CategoryRail } from '../components/home/CategoryRail';
 import { Faq } from '../components/home/Faq';
-import { FeaturedProducts } from '../components/home/FeaturedProducts';
 import { Hero } from '../components/home/Hero';
 import { InstagramStrip } from '../components/home/InstagramStrip';
 import { NewArrivals } from '../components/home/NewArrivals';
@@ -17,7 +16,6 @@ export function HomePage() {
       <Hero />
       <TrustStrip />
       <CategoryRail />
-      <FeaturedProducts />
       <NewArrivals />
       <ResellerBand />
       <CareTeaser />

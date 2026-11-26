@@ -139,7 +139,6 @@ function InicioForm() {
       <Group title="Títulos das seções">
         <div className="grid gap-3 sm:grid-cols-2">
           <TextInput path={['titles', 'categories']} label="Categorias" />
-          <TextInput path={['titles', 'featured']} label="Peças em destaque" />
           <TextInput path={['titles', 'newArrivals']} label="Novidades" />
           <TextInput path={['titles', 'care']} label="Cuidados" />
           <TextInput path={['titles', 'testimonials']} label="Depoimentos" />

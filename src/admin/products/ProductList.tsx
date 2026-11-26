@@ -1,7 +1,6 @@
 import { useState, type PointerEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { GripVertical, Star } from 'lucide-react';
-import { IconButton } from '../../components/ui/Button';
+import { GripVertical } from 'lucide-react';
 import { Img } from '../../components/ui/Img';
 import { Price, Switch } from '../../components/ui/Misc';
 import { cx } from '../../components/ui/cx';
@@ -107,13 +106,6 @@ export function ProductList({ products, categoryName, onReorder, standIn }: Prod
                 <span aria-hidden="true" className="-mt-1 text-xs text-ink-muted">{p.available ? 'À venda' : 'Esgotada'}</span>
               </div>
               <div className="col-start-2 -ml-2.5 flex items-center">
-                <IconButton
-                  label={`Destaque na home: ${p.name}`}
-                  aria-pressed={p.featured}
-                  onClick={() => patchProduct(p.id, { featured: !p.featured })}
-                >
-                  <Star size={20} strokeWidth={1.5} fill={p.featured ? 'currentColor' : 'none'} className={p.featured ? 'text-copper' : 'text-ink-muted'} />
-                </IconButton>
                 <MoveButtons name={p.name} index={i} count={products.length} onMove={(to) => onReorder(move(ids, i, to))} />
               </div>
               <span
