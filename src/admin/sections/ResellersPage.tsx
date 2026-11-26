@@ -159,7 +159,11 @@ function ResellerCard({ item, onOpen }: { item: ResellerSummary; onOpen: () => v
 }
 
 /** The network at a glance, above the list. */
-function NetworkSummary({ list }: { list: ResellerSummary[] }) {
+/**
+ * The network at a glance. Shown on every tab, also with no reseller yet (zeros), and while the list
+ * loads as the same box with shimmering values: the page never jumps when the data arrives.
+ */
+function NetworkSummary({ list, loading }: { list: ResellerSummary[]; loading?: boolean }) {
   const active = list.filter((r) => r.reseller.status === 'ativa');
   const inKits = list.reduce((s, r) => s + (r.kit ? kitValueCents(r.kit.items) : 0), 0);
   const sold = list.reduce((s, r) => s + (r.kit ? salesTotalCents(r.sales) : 0), 0);
@@ -171,7 +175,7 @@ function NetworkSummary({ list }: { list: ResellerSummary[] }) {
     { label: 'A receber', value: formatBRL(toReceive), icon: Wallet },
   ];
   return (
-    <section aria-label="Resumo das revendas" className="on-dark relative isolate overflow-hidden rounded-[22px] bg-[linear-gradient(115deg,#4a2f24_0%,#6e4635_60%,#94654f_100%)] text-white shadow-[0_18px_36px_-20px_rgb(48_33_28/0.6)]">
+    <section aria-label="Resumo das revendas" aria-busy={loading || undefined} className="on-dark relative isolate overflow-hidden rounded-[22px] bg-[linear-gradient(115deg,#4a2f24_0%,#6e4635_60%,#94654f_100%)] text-white shadow-[0_18px_36px_-20px_rgb(48_33_28/0.6)]">
       <img
         src={asset('images/admin/revenda-hero-640.webp')}
         srcSet={`${asset('images/admin/revenda-hero-640.webp')} 640w, ${asset('images/admin/revenda-hero-1280.webp')} 1280w`}
@@ -186,7 +190,9 @@ function NetworkSummary({ list }: { list: ResellerSummary[] }) {
             <c.icon size={20} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-rose-light" />
             <p className="flex min-w-0 flex-col-reverse">
               <span className="text-xs text-white/75">{c.label}</span>
-              <span className="price text-[0.9375rem] leading-tight font-semibold sm:text-[1.125rem]">{c.value}</span>
+              <span className="price text-[0.9375rem] leading-tight font-semibold sm:text-[1.125rem]">
+                {loading ? <span className="block h-[1.25em] w-14 animate-pulse rounded bg-white/20 motion-reduce:animate-none" /> : c.value}
+              </span>
             </p>
           </li>
         ))}
@@ -946,7 +952,7 @@ export function ResellersPage() {
     )}
     <div hidden={!!openId} className="flex flex-col gap-5">
       {/* The summary and the actions stay put on every tab: tabs change the content, not the page. */}
-      {state.status === 'loading' ? <div aria-hidden="true" className="h-[124px] animate-pulse rounded-[22px] bg-champagne/70 sm:h-[72px]" /> : list.length > 0 && <NetworkSummary list={list} />}
+      {state.status !== 'error' && <NetworkSummary list={list} loading={state.status === 'loading'} />}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs
           label="Revendas"
