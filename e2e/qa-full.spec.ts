@@ -259,46 +259,33 @@ for (const width of ADMIN_WIDTHS) {
       await page.getByRole('heading', { level: 1 }).first().waitFor();
       await shot(page, `adm-${tab}-${width}`);
     }
-    // Order detail and new-order sheet.
-    await page.goto('/admin/pedidos');
-    await page.getByRole('button', { name: new RegExp(`nº ${seed.orderNumber}`) }).first().click();
-    await shotDialog(page, `adm-pedido-detalhe-${width}`, width);
-    await page.keyboard.press('Escape');
-    await page.setViewportSize(tall);
-    await page.getByRole('button', { name: 'Novo pedido' }).first().click();
+    // Detail pages (pages inside the panel since the redesign, not sheets): every order (an "enviado"
+    // one shows "Confirmar sem Pix"), the new-order sheet, a reseller, a piece, every site editor.
+    for (const n of [1001, 1002, 1003]) {
+      await page.goto(`/admin/pedidos/${n}`);
+      await page.getByRole('heading', { level: 1 }).first().waitFor();
+      await shot(page, `adm-pedido-${n}-${width}`);
+    }
+    await page.goto('/admin/pedidos?novo=1');
+    await page.locator('dialog[open]').last().waitFor();
     await shotDialog(page, `adm-pedido-novo-${width}`, width);
     await page.keyboard.press('Escape');
     await page.setViewportSize(tall);
-    // Reseller detail.
-    await page.goto('/admin/revendedoras');
-    await page.getByText('Bruna Revenda Silva').first().click();
-    await page.waitForTimeout(500);
-    if (await page.locator('dialog[open]').count()) {
-      await shotDialog(page, `adm-revendedora-detalhe-${width}`, width);
-      await page.keyboard.press('Escape');
-      await page.setViewportSize(tall);
-    } else await shot(page, `adm-revendedora-detalhe-${width}`);
-    // Product form: new and existing.
+    await page.goto(`/admin/revendedoras/${seed.resellerId}`);
+    await page.getByRole('heading', { level: 1 }).first().waitFor();
+    await shot(page, `adm-revendedora-detalhe-${width}`);
     await page.goto('/admin/produtos/nova');
-    await page.getByRole('heading', { level: 1 }).first().waitFor().catch(() => {});
-    if (await page.locator('dialog[open]').count()) await shotDialog(page, `adm-produto-novo-${width}`, width);
-    else await shot(page, `adm-produto-novo-${width}`);
-    await page.setViewportSize(tall);
-    await page.goto('/admin/produtos');
-    await page.getByRole('link', { name: /Editar|Brinco/ }).first().click().catch(() => {});
-    await page.waitForTimeout(600);
-    if (await page.locator('dialog[open]').count()) await shotDialog(page, `adm-produto-editar-${width}`, width);
-    else await shot(page, `adm-produto-editar-${width}`);
-    await page.setViewportSize(tall);
-    // "O que a loja oferece" lives in Configurações.
+    await page.getByRole('heading', { level: 1 }).first().waitFor();
+    await shot(page, `adm-produto-novo-${width}`);
+    await page.goto('/admin/produtos/prod-p01');
+    await page.getByRole('heading', { level: 1 }).first().waitFor();
+    await shot(page, `adm-produto-editar-${width}`);
     await page.goto('/admin/configuracoes');
     await shot(page, `adm-configuracoes-full-${width}`);
-    // Every site editor.
     for (const id of SECTIONS) {
-      await page.goto(`/admin/site?secao=${id}`);
-      await page.locator('dialog[open]').last().waitFor();
-      await shotDialog(page, `adm-site-${id}-${width}`, width);
-      await page.setViewportSize(tall);
+      await page.goto(`/admin/site/${id}`);
+      await page.getByRole('heading', { level: 1 }).first().waitFor();
+      await shot(page, `adm-site-${id}-${width}`);
     }
     await context.close();
   });
