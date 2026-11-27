@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createSeed } from '../../data/seed';
 import { migrateCatalog } from '../../data/integrity';
@@ -146,5 +146,26 @@ describe('backup page', { timeout: 20_000 }, () => {
     await user.click(screen.getByRole('button', { name: 'Substituir' }));
     expect(await screen.findByText(/Backup restaurado/)).toBeInTheDocument();
     expect(mockServer.catalog.content ?? {}).not.toHaveProperty('contato');
+  });
+});
+
+describe('stored photos', () => {
+  it('shows the photos nothing uses and erases them after a confirmation', async () => {
+    unlockSession();
+    mockServer.unusedMedia = { count: 3, bytes: 2_400_000, recent: 1 };
+    const user = userEvent.setup();
+    renderAdmin('/admin/backup');
+    const card = await screen.findByRole('region', { name: 'Fotos guardadas' });
+    expect(await within(card).findByText(/3 fotos sem uso há mais de um dia \(2,4 MB\)/)).toBeInTheDocument();
+    expect(within(card).getByText(/1 foto sem uso há menos de um dia fica guardada até completar um dia/)).toBeInTheDocument();
+    await user.click(within(card).getByRole('button', { name: 'Apagar agora' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Apagar fotos sem uso?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Apagar fotos' }));
+    expect(await screen.findByText('3 fotos sem uso apagadas (2,4 MB).')).toBeInTheDocument();
+    expect(mockServer.requests.some((r) => r.path === '/api/admin/media/sweep' && r.method === 'POST')).toBe(true);
+    await vi.waitFor(() => expect(within(card).queryByRole('button', { name: 'Apagar agora' })).toBeNull());
+    // The photo let go less than a day ago stays (time to undo).
+    expect(within(card).getByText(/1 foto sem uso há menos de um dia/)).toBeInTheDocument();
+    expect(within(card).queryByText(/Todas as fotos guardadas estão em uso/)).toBeNull();
   });
 });

@@ -8,6 +8,13 @@ import { polyfillDialog, renderAdmin, resetStores, unlockSession } from '../test
 import { buildProduct, draftFromProduct, duplicateDraft, emptyDraft } from './productDraft';
 import { restoreProduct } from './ProductForm';
 
+// The photo pipeline needs a real canvas: any picked file becomes this small WebP.
+const NEW_PHOTO = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
+vi.mock('../../lib/image', async (orig) => ({
+  ...(await orig<typeof import('../../lib/image')>()),
+  processImage: async () => ({ ok: true, src: NEW_PHOTO, thumb: NEW_PHOTO }),
+}));
+
 polyfillDialog();
 resetStores();
 afterEach(() => vi.restoreAllMocks());
@@ -100,6 +107,41 @@ describe('product form', { timeout: 20_000 }, () => {
     expect(photos().map((b) => b.getAttribute('aria-label'))).toEqual(before);
     // The photo is selected again, ready for "Tornar principal"/"Mover".
     expect(photos()[0]).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('swaps a photo in place, keeps its finishes and description, and can undo it', async () => {
+    unlockSession();
+    const user = userEvent.setup();
+    renderAdmin('/admin/produtos/prod-p05');
+    const dialog = await screen.findByRole('region', { name: 'Editar peça' });
+    const strip = () => within(dialog).getByRole('list', { name: 'Fotos da peça' });
+    const tiles = () => within(strip()).getAllByRole('button', { name: /^(Principal(, provisória)?, foto 1|(Provisória, foto|Foto) \d+):/ });
+    const before = useCatalog.getState().data.products.find((p) => p.id === 'prod-p05')!;
+    const first = before.images[0]!;
+    expect(within(dialog).getByText('Fotos removidas ou trocadas saem do site quando você salva e são apagadas do servidor um dia depois.')).toBeInTheDocument();
+    await user.click(tiles()[0]!);
+    const picker = within(dialog).getByText('Trocar foto').closest('label')!.querySelector('input[type=file]') as HTMLInputElement;
+    expect(picker.multiple).toBe(false);
+    await user.upload(picker, new File([new Uint8Array([1, 2, 3])], 'nova.jpg', { type: 'image/jpeg' }));
+    expect(await screen.findByText('Foto trocada. A antiga sai do site quando você salvar.')).toBeInTheDocument();
+    // Same place and description; no longer a stand-in.
+    expect(tiles()).toHaveLength(before.images.length);
+    expect(tiles()[0]).toHaveAttribute('aria-label', `Principal, foto 1: ${first.alt}`);
+    expect(within(dialog).getByText('Foto nova: vai ser enviada quando você salvar a peça.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Desfazer' }));
+    expect(tiles()[0]).toHaveAttribute('aria-label', `Principal${first.placeholder ? ', provisória' : ''}, foto 1: ${first.alt}`);
+
+    // Swapped again and saved: the new photo is uploaded and linked to the same finishes.
+    await user.upload(picker, new File([new Uint8Array([1, 2, 3])], 'nova.jpg', { type: 'image/jpeg' }));
+    await screen.findAllByText('Foto trocada. A antiga sai do site quando você salvar.');
+    await user.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+    await vi.waitFor(() => expect(mockServer.requests.some((r) => r.path === '/api/admin/changes')).toBe(true));
+    const sent = mockServer.requests.find((r) => r.path === '/api/admin/changes')!.body as { changes: { data: { images: { id: string; src: string; placeholder?: boolean }[]; variants: { imageIds: string[] }[] } }[] };
+    const saved = sent.changes[0]!.data;
+    expect(saved.images[0]!.id).toBe(first.id);
+    expect(saved.images[0]!.src).toMatch(/^media\//);
+    expect(saved.images[0]!.placeholder).toBeUndefined();
+    expect(saved.variants.map((v) => v.imageIds)).toEqual(before.variants.map((v) => v.imageIds));
   });
 
   it('shows an inline error when the promo price is not below the price', async () => {

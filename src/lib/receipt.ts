@@ -65,7 +65,6 @@ export async function prepareReceipt(file: File): Promise<PreparedReceipt> {
   if (!decoded) return fail('unreadable', 'Não conseguimos abrir este arquivo aqui. Envie um print (PNG ou JPG), o PDF do comprovante ou mande o arquivo pelo WhatsApp.');
   const canvas = document.createElement('canvas');
   try {
-    let last: Blob | null = null;
     for (const step of RECEIPT_STEPS) {
       const { width, height } = fitWithin(decoded.width, decoded.height, step.maxSide);
       canvas.width = width;
@@ -77,10 +76,8 @@ export async function prepareReceipt(file: File): Promise<PreparedReceipt> {
       ctx.drawImage(decoded.source, 0, 0, width, height);
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', step.quality));
       if (blob && blob.size <= RECEIPT_IMAGE_TARGET_BYTES) return { ok: true, blob, type: 'image/jpeg', name: jpgName(file.name) };
-      if (blob) last = blob;
     }
-    // Missed the target but within the limit: still a readable receipt.
-    if (last && last.size <= RECEIPT_MAX_BYTES) return { ok: true, blob: last, type: 'image/jpeg', name: jpgName(file.name) };
+    // Images stay under RECEIPT_IMAGE_TARGET_BYTES (the server's CPU per upload grows with the size).
     return fail('too_big', 'Esta imagem passou do limite para enviar por aqui.');
   } finally {
     decoded.release();

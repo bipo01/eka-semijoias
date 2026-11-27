@@ -135,7 +135,10 @@ export type ReceiptType = (typeof RECEIPT_TYPES)[number];
  * kept small (production: ~600 KB cost 16 ms to store, ~5 ms to read).
  */
 export const RECEIPT_MAX_BYTES = 700_000;
-/** Stored receipt files per order: one. A new file sent by the customer replaces it (the old file is erased). */
+/**
+ * Stored receipt files per charge (payment link): one. A new file sent for the same charge replaces it (the old
+ * file is erased); a receipt of an earlier charge (the amount changed) stays, as proof of that payment.
+ */
 export const MAX_RECEIPTS_PER_ORDER = 1;
 /** Records kept per order (stored files + records of erased ones); only past this are the oldest erased records dropped. */
 export const MAX_RECEIPT_RECORDS = 20;
@@ -221,14 +224,16 @@ export function receiptsEraseAt(since: string, keepMs = RECEIPT_KEEP_MS): Date {
 }
 
 /**
- * Receipt records after a new upload. One file is stored per order: every stored record becomes a
- * replaced one (erased at the new file's time; the caller deletes those files in the same batch) and
- * the new record goes last. Records stay for history up to MAX_RECEIPT_RECORDS, past which the oldest
- * erased record goes (a stored one never does).
+ * Receipt records after a new upload. One file is stored per charge: every stored record of the same
+ * charge (or without one, from before charges were recorded) becomes a replaced one (erased at the new
+ * file's time; the caller deletes those files in the same batch) and the new record goes last. Records
+ * stay for history up to MAX_RECEIPT_RECORDS, past which the oldest erased record goes (a stored one never does).
  */
 export function receiptsWithNew(receipts: ReceiptMeta[], added: ReceiptMeta): { receipts: ReceiptMeta[]; replaced: ReceiptMeta[] } {
-  const replaced = receipts.filter((r) => !r.erasedAt);
-  let kept = receipts.map((r) => (r.erasedAt ? r : { ...r, erasedAt: added.at, replaced: true as const }));
+  const sameCharge = (r: ReceiptMeta) => !r.chargeToken || !added.chargeToken || r.chargeToken === added.chargeToken;
+  const replaced = receipts.filter((r) => !r.erasedAt && sameCharge(r));
+  const ids = new Set(replaced.map((r) => r.id));
+  let kept = receipts.map((r) => (ids.has(r.id) ? { ...r, erasedAt: added.at, replaced: true as const } : r));
   while (kept.length >= MAX_RECEIPT_RECORDS) {
     const oldestErased = kept.findIndex((r) => r.erasedAt);
     if (oldestErased < 0) break;

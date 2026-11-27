@@ -32,7 +32,7 @@ export default defineConfig({
           'npm run build',
           'rm -rf .wrangler/e2e',
           'npx wrangler d1 migrations apply DB --local --persist-to .wrangler/e2e',
-          `npx wrangler dev --port ${PORT} --ip 127.0.0.1 --persist-to .wrangler/e2e --var PIN_PEPPER:${E2E_PEPPER} --var ADMIN_INITIAL_PIN:${E2E_PIN} --var DEV_INSECURE_COOKIES:1`,
+          `npx wrangler dev --port ${PORT} --ip 127.0.0.1 --persist-to .wrangler/e2e --var PIN_PEPPER:${E2E_PEPPER} --var ADMIN_INITIAL_PIN:${E2E_PIN} --var DEV_INSECURE_COOKIES:1 --var DEV_MEDIA_GRACE_MS:5000`,
         ].join(' && '),
         port: PORT,
         reuseExistingServer: false,

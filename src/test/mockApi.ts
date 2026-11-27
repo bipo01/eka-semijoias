@@ -19,6 +19,8 @@ interface MockState {
   pinLength: number;
   leads: ResellerLead[];
   media: Set<string>;
+  /** Photos nothing uses (Painel → Backup → Fotos guardadas): erased by POST /api/admin/media/sweep. */
+  unusedMedia: { count: number; bytes: number; recent: number };
   /** Forces the next change set to fail with this status/code. */
   failNext: { status: number; code: string; message: string } | null;
   /** Simulates another device writing right before the next change set (applied to the server catalog). */
@@ -33,6 +35,7 @@ export const mockServer: MockState = {
   pinLength: 6,
   leads: [],
   media: new Set(),
+  unusedMedia: { count: 0, bytes: 0, recent: 0 },
   failNext: null,
   interleaveNext: null,
   requests: [],
@@ -46,6 +49,7 @@ export function resetMockServer(): void {
     pinLength: 6,
     leads: [],
     media: new Set(),
+    unusedMedia: { count: 0, bytes: 0, recent: 0 },
     failNext: null,
     interleaveNext: null,
     requests: [],
@@ -116,6 +120,15 @@ async function handle(input: RequestInfo | URL, init?: RequestInit): Promise<Res
     const key = `media/${String(s.media.size + 1).padStart(64, '0')}.webp`;
     s.media.add(key);
     return json({ key }, 201);
+  }
+  if (path === '/api/admin/media/usage') {
+    const u = s.unusedMedia;
+    return json({ stored: s.media.size + u.count + u.recent, storedBytes: s.media.size * 100_000 + u.bytes, unused: u.count, unusedBytes: u.bytes, recent: u.recent });
+  }
+  if (path === '/api/admin/media/sweep' && method === 'POST') {
+    const { count, bytes } = s.unusedMedia;
+    s.unusedMedia = { ...s.unusedMedia, count: 0, bytes: 0 };
+    return json({ deleted: count, deletedBytes: bytes });
   }
   if (path === '/api/admin/leads' && method === 'GET') return json({ leads: s.leads });
   if (path.startsWith('/api/admin/leads/') && method === 'DELETE') {

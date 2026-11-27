@@ -157,6 +157,28 @@ test('admin: a new photo is uploaded on save and becomes the cover on the public
   await expect(cover).toHaveAttribute('src', /^\/media\/[a-f0-9]{64}\.(webp|jpg)$/);
   await cover.scrollIntoViewIfNeeded();
   await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+
+  // Swapped for another photo: the old one leaves the site when she saves, and its file is erased once
+  // nothing has used it for the grace period (a day; DEV_MEDIA_GRACE_MS = 5 s here).
+  const oldSrc = (await cover.getAttribute('src'))!;
+  expect((await page.request.get(oldSrc)).status()).toBe(200);
+  await page.goto(`/admin/produtos/${product.id}`);
+  await expect(photos.first()).toBeVisible();
+  await photos.first().click();
+  await expect(page.getByText('Fotos removidas ou trocadas saem do site quando você salva e são apagadas do servidor um dia depois.')).toBeVisible();
+  await page.locator('label:has-text("Trocar foto") input[type="file"]').setInputFiles('public/images/products/p05-colar-ponto-de-luz-960.webp');
+  await expect(page.getByText('Foto trocada. A antiga sai do site quando você salvar.')).toBeVisible();
+  await expect(photos).toHaveCount(before + 1);
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+  await expect(page.getByText('Alterações salvas.')).toBeVisible({ timeout: 15_000 });
+  expect((await page.request.get(oldSrc)).status()).toBe(200); // still there: time to undo
+  await page.waitForTimeout(5500);
+  // "Apagar agora" (the daily run does the same): from the page, so the request carries the site's Origin.
+  expect(await page.evaluate(() => fetch('/api/admin/media/sweep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((r) => r.status))).toBe(200);
+  await expect.poll(async () => (await page.request.get(oldSrc)).status(), { timeout: 10_000 }).toBe(404);
+  await page.goto('/catalogo');
+  await expect(cover).toHaveAttribute('src', /^\/media\/[a-f0-9]{64}\.(webp|jpg)$/);
+  expect(await cover.getAttribute('src')).not.toBe(oldSrc);
 });
 
 const STOCK_PRODUCT: Record<string, { id: string; slug: string; name: string }> = {
@@ -274,7 +296,15 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await expect(customer.getByText('R$ 20,00')).toBeVisible();
   await expect(customer.getByRole('button', { name: 'Copiar código Pix' })).toBeVisible();
   await expect(customer.getByRole('img', { name: /QR Code Pix/ })).toBeVisible();
+  // A PDF over 700 KB is never sent: the page says so and offers WhatsApp with the order number.
+  await customer.locator('input[type="file"]').setInputFiles({ name: 'extrato.pdf', mimeType: 'application/pdf', buffer: Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(900_000, 32)]) });
+  const tooBig = customer.getByRole('alert');
+  await expect(tooBig).toContainText('Este arquivo passou do limite para enviar por aqui.');
+  await expect(tooBig).toContainText('o limite é 700 KB');
+  const wa = decodeURIComponent((await tooBig.getByRole('link', { name: /Enviar pelo WhatsApp/ }).getAttribute('href'))!);
+  expect(wa).toContain(`pedido nº ${number}`);
   await customer.locator('input[type="file"]').setInputFiles('public/favicon-512.png');
+  await expect(customer.getByRole('alert')).toHaveCount(0);
   await customer.getByRole('button', { name: 'Enviar comprovante' }).click();
   await expect(customer.getByRole('heading', { name: 'Comprovante recebido!' })).toBeVisible({ timeout: 15_000 });
 
@@ -294,8 +324,19 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await customer.getByRole('button', { name: 'Enviar comprovante' }).click();
   await expect(customer.getByRole('heading', { name: 'Comprovante recebido!' })).toBeVisible({ timeout: 15_000 });
 
-  // 6. The owner sees the new one and accepts the payment.
   await expect(detail.getByRole('button', { name: /Ver Comprovante 2/ }).locator('img')).toBeVisible({ timeout: 10_000 });
+
+  // 5b. She swaps it for another file: it replaces the one she sent (one receipt per order).
+  await customer.getByRole('button', { name: 'Trocar o comprovante' }).click();
+  await expect(customer.getByText('O novo arquivo substitui o comprovante que você enviou.')).toBeVisible();
+  await customer.locator('input[type="file"]').setInputFiles('public/apple-touch-icon.png');
+  await customer.getByRole('button', { name: 'Enviar o novo comprovante' }).click();
+  await expect(customer.getByRole('heading', { name: 'Comprovante recebido!' })).toBeVisible({ timeout: 15_000 });
+
+  // 6. The owner sees only the new file (the replaced one is a record) and accepts the payment.
+  await expect(detail.getByRole('button', { name: /Ver Comprovante 3/ }).locator('img')).toBeVisible({ timeout: 10_000 });
+  await expect(detail.getByText(/Trocado pela cliente em/)).toBeVisible();
+  await expect(detail.getByRole('button', { name: /Ver Comprovante \d/ })).toHaveCount(1);
   await detail.getByRole('button', { name: 'Pagamento conferido' }).click();
   await expect(page.getByText('Pagamento registrado.')).toBeVisible();
 

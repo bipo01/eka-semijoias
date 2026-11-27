@@ -15,6 +15,7 @@ import { formatDateTime } from '../lib/contact';
 import { downloadText, fileDate } from '../lib/download';
 import { save } from '../lib/persist';
 import { signalSessionLost } from '../lib/session';
+import { StoredPhotos } from './StoredPhotos';
 
 /** Backups embed every uploaded photo (base64), so they can be large; anything far larger is not a backup. */
 const MAX_BACKUP_BYTES = 200 * 1024 * 1024;
@@ -237,9 +238,11 @@ export function BackupPage() {
         )}
       </section>
 
+      <StoredPhotos />
+
       <section className="flex flex-col gap-3 rounded-2xl border border-line bg-white shadow-[0_2px_8px_rgb(48_33_28/0.04)] p-4">
         <h2 className="font-display text-title">Restaurar catálogo inicial</h2>
-        <p className="text-sm text-ink-muted">Volta às peças, categorias e textos originais do site. O PIN e os cadastros de revendedoras continuam os mesmos.</p>
+        <p className="text-sm text-ink-muted">Volta às peças, categorias e textos originais do site. O PIN e os cadastros de revendedoras continuam os mesmos. As fotos que você enviou e que saírem do site são apagadas do servidor um dia depois (um backup baixado antes guarda as fotos).</p>
         <Button variant="danger" onClick={() => setConfirmReset(true)} className="self-start" disabled={!!progress}>
           <RotateCcw size={18} strokeWidth={1.5} /> Restaurar catálogo inicial
         </Button>

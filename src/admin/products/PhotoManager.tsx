@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react';
-import { ArrowLeft, ArrowRight, Camera, ImagePlus, Loader2, Sparkles, Star, Trash2, X } from 'lucide-react';
-import { Button } from '../../components/ui/Button';
+import { ArrowLeft, ArrowRight, Camera, ImagePlus, Loader2, RefreshCw, Sparkles, Star, Trash2, X } from 'lucide-react';
+import { Button, buttonClass } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/Field';
 import { Img } from '../../components/ui/Img';
 import { cx } from '../../components/ui/cx';
@@ -28,15 +28,30 @@ const tileClass = 'relative aspect-[4/5] w-[88px] shrink-0 overflow-hidden round
 /** Add/preparing tiles: as tall as a photo, at least as wide, and wider when the text needs it (keeps the padding). */
 const actionTileClass = 'relative h-[110px] min-w-[88px] shrink-0 rounded-[10px]';
 
-function PickerLabel({ capture, onFiles, children, className }: { capture?: boolean; onFiles: (files: File[]) => void; children: React.ReactNode; className: string }) {
+function PickerLabel({
+  capture,
+  single,
+  disabled,
+  onFiles,
+  children,
+  className,
+}: {
+  capture?: boolean;
+  /** One file only (swapping a photo). */
+  single?: boolean;
+  disabled?: boolean;
+  onFiles: (files: File[]) => void;
+  children: React.ReactNode;
+  className: string;
+}) {
   function onChange(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = ''; // allow picking the same file again
     if (files.length) onFiles(files);
   }
   return (
-    <label className={cx(className, 'cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-copper')}>
-      <input type="file" accept="image/*" className="sr-only" multiple={!capture} {...(capture ? { capture: 'environment' as const } : {})} onChange={onChange} />
+    <label className={cx(className, disabled ? 'pointer-events-none opacity-60' : 'cursor-pointer', 'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-copper')}>
+      <input type="file" accept="image/*" className="sr-only" disabled={disabled} multiple={!capture && !single} {...(capture ? { capture: 'environment' as const } : {})} onChange={onChange} />
       {children}
     </label>
   );
@@ -46,6 +61,7 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
   const [processing, setProcessing] = useState(0);
   const [standardize, setStandardize] = useState<{ id: string; source: Blob } | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  const [swapping, setSwapping] = useState<string | null>(null);
   /** Files picked in this session, by photo id: the standardizer starts from full resolution, even after a first pass. */
   const originals = useRef(new Map<string, File>());
   const selectedIndex = draft.images.findIndex((img) => img.id === selectedId);
@@ -116,6 +132,45 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
               }),
             };
           });
+          onSelect(id);
+        },
+      },
+      duration: 8000,
+    });
+  }
+
+  /**
+   * Puts another photo in this one's place: same position, finishes and description (an automatic one
+   * follows the piece as before). The old file leaves the site when she saves; the toast can undo it.
+   */
+  async function swap(id: string, file: File) {
+    const before = draft.images.find((img) => img.id === id);
+    if (!before || swapping) return;
+    setSwapping(id);
+    const result = await processImage(file);
+    setSwapping(null);
+    if (!result.ok) {
+      toast(`${file.name}: ${result.message}`, { tone: 'error' });
+      return;
+    }
+    const original = originals.current.get(id);
+    originals.current.set(id, file);
+    update((d) => ({
+      ...d,
+      images: d.images.map((img) => {
+        if (img.id !== id) return img;
+        const { placeholder: _standIn, ...rest } = img;
+        return { ...rest, src: result.src, thumb: result.thumb };
+      }),
+    }));
+    toast('Foto trocada. A antiga sai do site quando você salvar.', {
+      tone: 'success',
+      action: {
+        label: 'Desfazer',
+        onClick: () => {
+          if (original) originals.current.set(id, original);
+          else originals.current.delete(id);
+          update((d) => ({ ...d, images: d.images.map((img) => (img.id === id ? before : img)) }));
           onSelect(id);
         },
       },
@@ -239,8 +294,10 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
           <Camera size={18} strokeWidth={1.5} aria-hidden="true" /> Tirar foto agora
         </PickerLabel>
       </div>
-      {draft.images.length === 0 && !processing && (
+      {draft.images.length === 0 && !processing ? (
         <p className="text-sm text-ink-muted">Envie fotos em JPG ou PNG. A primeira foto é a principal. As fotos são otimizadas automaticamente e enviadas ao salvar.</p>
+      ) : (
+        <p className="text-sm text-ink-muted">Fotos removidas ou trocadas saem do site quando você salva e são apagadas do servidor um dia depois.</p>
       )}
 
       {selected && (
@@ -263,6 +320,19 @@ export function PhotoManager({ draft, update, selectedId, onSelect, errors }: Ph
               )}
               Padronizar
             </Button>
+            <PickerLabel
+              onFiles={(files) => void swap(selected.id, files[0]!)}
+              single
+              disabled={swapping != null}
+              className={buttonClass('ghost', 'sm')}
+            >
+              {swapping === selected.id ? (
+                <Loader2 size={16} strokeWidth={1.5} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+              ) : (
+                <RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" />
+              )}
+              Trocar foto
+            </PickerLabel>
             {selectedIndex > 0 && (
               <Button size="sm" variant="ghost" onClick={() => reorder(selectedIndex, 0)}>
                 <Star size={16} strokeWidth={1.5} /> Tornar principal

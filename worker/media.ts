@@ -46,18 +46,24 @@ export async function handleUpload(ctx: Context): Promise<Response> {
   const file = `${await sha256Hex(bytes)}.${EXTENSION[declared]}`;
   const db = ctx.env.DB;
   const existing = await withReadRetry(() => db.prepare('SELECT key FROM media WHERE key = ?1').bind(file).first());
-  if (!existing) {
-    const now = new Date().toISOString();
-    try {
-      if (ctx.env.MEDIA) {
-        await ctx.env.MEDIA.put(file, bytes, { httpMetadata: { contentType: declared, cacheControl: IMMUTABLE } });
-        await db.prepare('INSERT OR IGNORE INTO media (key, content_type, size, created_at) VALUES (?1, ?2, ?3, ?4)').bind(file, declared, bytes.length, now).run();
-      } else {
-        await db.prepare('INSERT OR IGNORE INTO media (key, content_type, size, created_at, bytes) VALUES (?1, ?2, ?3, ?4, ?5)').bind(file, declared, bytes.length, now, bytes).run();
-      }
-    } catch (error) {
-      throw toHttpError(error);
+  const now = new Date().toISOString();
+  // `created_at` is the last time the photo was uploaded (or let go by a save): a photo uploaded again
+  // is about to be saved, so the sweep of unused photos (worker/mediaSweep.ts) leaves it alone for a day.
+  let stored = false;
+  try {
+    // With R2 the object is written every time (idempotent): if a sweep deleted it a moment ago, the
+    // upload that answers "saved" has really put it back.
+    if (ctx.env.MEDIA) await ctx.env.MEDIA.put(file, bytes, { httpMetadata: { contentType: declared, cacheControl: IMMUTABLE } });
+    if (existing) {
+      const touched = await db.prepare('UPDATE media SET created_at = ?2 WHERE key = ?1').bind(file, now).run();
+      stored = (touched.meta?.changes ?? 0) > 0; // 0: a sweep deleted the row meanwhile; store it again below
     }
+    if (!stored) {
+      if (ctx.env.MEDIA) await db.prepare('INSERT OR IGNORE INTO media (key, content_type, size, created_at) VALUES (?1, ?2, ?3, ?4)').bind(file, declared, bytes.length, now).run();
+      else await db.prepare('INSERT OR IGNORE INTO media (key, content_type, size, created_at, bytes) VALUES (?1, ?2, ?3, ?4, ?5)').bind(file, declared, bytes.length, now, bytes).run();
+    }
+  } catch (error) {
+    throw toHttpError(error);
   }
   return json({ key: `media/${file}` }, { status: existing ? 200 : 201 });
 }

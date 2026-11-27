@@ -149,7 +149,7 @@ describe('receipt files after the payment', () => {
     expect(withReceiptErased(discarded, receipt.id, iso(t0 + 5000)).receipts).toEqual(discarded.receipts);
   });
 
-  it('keeps one stored file per order: a new receipt replaces the stored one', () => {
+  it('keeps one stored file per charge: a new receipt replaces the stored one', () => {
     const meta = (n: number, extra: object = {}) => ({ id: `rcp_${n}`, at: iso(t0 + n), contentType: 'image/png' as const, size: 10, ...extra });
     expect(MAX_RECEIPTS_PER_ORDER).toBe(1);
     // First receipt: nothing replaced.
@@ -174,6 +174,18 @@ describe('receipt files after the payment', () => {
     expect(trimmed.receipts[0]!.id).toBe('rcp_1');
     expect(trimmed.receipts.at(-1)!.id).toBe('rcp_99');
     expect(storedReceipts({ receipts: trimmed.receipts })).toHaveLength(1);
+  });
+
+  it('replaces only the receipt of the same charge: an earlier payment link keeps its proof', () => {
+    const r = (n: number, chargeToken?: string) => ({ id: `rcp_${n}`, at: iso(t0 + n), contentType: 'image/png' as const, size: 10, ...(chargeToken ? { chargeToken } : {}) });
+    // Paid R$ 100 (charge A), then the amount changed (charge B) and she pays the difference.
+    const forB = receiptsWithNew([r(1, 'A')], r(2, 'B'));
+    expect(forB.replaced).toEqual([]);
+    expect(storedReceipts({ receipts: forB.receipts }).map((x) => x.id)).toEqual(['rcp_1', 'rcp_2']);
+    // A new file for charge B replaces B's only; a record without a charge (older orders) counts as the same one.
+    const again = receiptsWithNew([...forB.receipts, r(3)], r(4, 'B'));
+    expect(again.replaced.map((x) => x.id)).toEqual(['rcp_2', 'rcp_3']);
+    expect(storedReceipts({ receipts: again.receipts }).map((x) => x.id)).toEqual(['rcp_1', 'rcp_4']);
   });
 
   it('tells the customer her receipt was discarded only when the newest one for this charge was', () => {

@@ -1,5 +1,9 @@
 # Implementation prompt — one replaceable receipt, 700 KB notice, no unused photos
 
+> As executed, Phase 2 was revised after the review (see the box at the top of `PLAN.md`): no deletion
+> inside the save and no `sweepMedia` flag; a save restarts the clock of the photos it lets go and only the
+> cron / "Apagar agora" delete, after a day; references come from a raw deep scan; one receipt per charge.
+
 You are a principal full-stack engineer and senior UI/UX designer on the ÉKA Semijoias site. Read `AGENTS.md` (project truth) and `docs/arquivos/PLAN.md` (the decisions; do not re-open them) before touching code. Work on `main`, commit per phase with English messages ending in the project's co-author line, keep UI copy in pt-BR in the brand voice, and never show an unconfirmed save as saved.
 
 ## Phase 1 — receipts (fronts A and B)

@@ -172,7 +172,8 @@ function FileProblemNotice({ problem, number, firstName, onPickAnother }: { prob
   return (
     <div ref={box} tabIndex={-1} role="alert" className="flex flex-col gap-3 rounded-[14px] border border-copper/40 bg-white p-4 outline-none focus-visible:ring-2 focus-visible:ring-copper">
       <p className="text-sm text-ink">{text}</p>
-      {problem.reason === 'too_big' && problem.size !== null && (
+      {/* Only when the file itself is over the limit (an image that could not be reduced enough may be smaller). */}
+      {problem.reason === 'too_big' && problem.size !== null && problem.size > RECEIPT_MAX_BYTES && (
         <p className="-mt-1 text-sm text-ink-muted">
           Arquivo de {kb(problem.size)} · o limite é {kb(RECEIPT_MAX_BYTES)}.
         </p>

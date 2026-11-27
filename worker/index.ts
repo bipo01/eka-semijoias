@@ -16,6 +16,7 @@ import { eraseExpiredReceipts, handleCharge, handleEraseReceipt, handleEraseRece
 import { handlePushDelete, handlePushStatus, handlePushSubscribe, handlePushTest } from './push';
 import { handleGetStock, handlePutStock, handleSetStockMotive, handleStockMove } from './stock';
 import { handleMedia, handleUpload } from './media';
+import { handleMediaSweep, handleMediaUsage, sweepUnusedMedia } from './mediaSweep';
 import { Router, type Context } from './router';
 
 export { LiveHub } from './live';
@@ -46,6 +47,8 @@ const router = new Router()
   .on('POST', '/api/admin/changes', handleChanges)
   .on('GET', '/api/admin/backup', handleBackup)
   .on('POST', '/api/admin/media', handleUpload)
+  .on('GET', '/api/admin/media/usage', handleMediaUsage)
+  .on('POST', '/api/admin/media/sweep', handleMediaSweep)
   .on('GET', '/api/admin/leads', handleListLeads)
   .on('DELETE', '/api/admin/leads/:id', handleDeleteLead)
   .on('PATCH', '/api/admin/leads/:id', handlePatchLead)
@@ -278,9 +281,12 @@ export default {
     return response;
   },
 
-  /** Daily cron (wrangler.jsonc): receipt files of orders settled for RECEIPT_KEEP_DAYS are erased. */
+  /** Daily cron (wrangler.jsonc): receipt files of orders settled for RECEIPT_KEEP_DAYS, and photos nothing has used for a day, are erased. */
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    // Awaited (not waitUntil): a failure shows as a failed run in the Cron Events.
-    await eraseExpiredReceipts(env);
+    // Awaited (not waitUntil): a failure shows as a failed run in the Cron Events. Each job runs even
+    // when the other fails; the run fails if either did.
+    const jobs = await Promise.allSettled([eraseExpiredReceipts(env), sweepUnusedMedia(env, 'cron')]);
+    const failed = jobs.find((j): j is PromiseRejectedResult => j.status === 'rejected');
+    if (failed) throw failed.reason;
   },
 } satisfies ExportedHandler<Env>;

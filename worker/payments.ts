@@ -137,7 +137,7 @@ export async function handlePayView(ctx: Context): Promise<Response> {
 
 /**
  * POST /api/pay/:token/receipt — raw file body (PNG, JPEG, WebP or PDF, ≤ RECEIPT_MAX_BYTES = 700 KB).
- * One file is stored per order: a new one replaces the stored file in the same guarded batch.
+ * One file is stored per charge: a new one replaces the stored file in the same guarded batch.
  */
 export async function handleUploadReceipt(ctx: Context): Promise<Response> {
   const db = ctx.env.DB;
@@ -177,14 +177,14 @@ export async function handleUploadReceipt(ctx: Context): Promise<Response> {
     if (receipts.some((r) => r.rejected && r.sha256 === sha)) throw new HttpError('conflict', 'Este é o mesmo comprovante que a loja descartou. Envie o comprovante do pagamento deste pedido.');
     const at = nextStamp(stamp);
     const id = `rcp_${randomToken().slice(0, 16)}`;
-    // One stored file per order: the customer's new file replaces the one she sent before.
+    // One stored file per charge: the customer's new file replaces the one she sent for this payment link.
     const { receipts: kept, replaced } = receiptsWithNew(receipts, { id, at, contentType: actual, size: bytes.length, chargeToken: order.charge!.token, sha256: sha });
     const next: Order = { ...order, updatedAt: at, receipts: kept };
     try {
       await db.batch([
         unchanged(db, order.id, stamp),
         // The replaced file goes in the same batch: never two files, never none.
-        ...(replaced.length ? [db.prepare('DELETE FROM receipts WHERE order_id = ?1').bind(order.id)] : []),
+        ...(replaced.length ? [db.prepare('DELETE FROM receipts WHERE order_id = ?1 AND id IN (SELECT value FROM json_each(?2))').bind(order.id, JSON.stringify(replaced.map((r) => r.id)))] : []),
         // Stored as base64 text (the column has BLOB affinity, so the text is kept as is): see bytesToBase64.
         db.prepare('INSERT INTO receipts (id, order_id, created_at, content_type, size, sha256, bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)').bind(id, order.id, at, actual, bytes.length, sha, encoded),
         db.prepare('UPDATE orders SET data = ?2, updated_at = ?3 WHERE id = ?1').bind(order.id, toData(next), at),

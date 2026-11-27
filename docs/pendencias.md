@@ -179,9 +179,9 @@ Registrado em 25/11/2026, depois de olhar o site como dona de loja, cliente e pr
 - Registrar `ekasemijoias.com.br` (ou parecido) no Registro.br (cerca de R$ 40 por ano; compra e titularidade da Érika, de preferência com o CNPJ), apontar para o Worker na Cloudflare e redirecionar o endereço antigo.
 - Depois: refazer os links já compartilhados (bio do Instagram, mostruários das revendedoras), o webhook do Mercado Pago, o Search Console, e conferir no código tudo que cite o endereço antigo (CSP, `AGENTS.md`, página de redirecionamento do GitHub Pages).
 
-## 8. Comprovante de pagamento: um por pedido, que pode ser trocado; arquivo grande vai pelo WhatsApp
+## 8. Comprovante de pagamento: um por pedido, que pode ser trocado; arquivo grande vai pelo WhatsApp — feito
 
-Registrado em 26/11/2026. **A resolver.**
+Registrado em 26/11/2026. **Feito em 26/11/2026** (plano: `docs/arquivos/PLAN.md`).
 
 **Hoje:** a página de pagamento aceita até 6 comprovantes por pedido (`MAX_RECEIPTS_PER_ORDER` em `src/data/orders.ts`), cada um com no máximo **700 KB** (`RECEIPT_MAX_BYTES`; o limite caiu de 1,9 MB por causa dos 10 ms de CPU por requisição do plano Free, commit 187f68f). Fotos grandes já são reduzidas no navegador (`src/lib/receipt.ts`); o que passa do limite na prática é PDF. Quando passa, a mensagem só pede "Envie um print do comprovante".
 
@@ -192,9 +192,9 @@ Registrado em 26/11/2026. **A resolver.**
 - Ajustar: schema (`receipts` com `.max(1)`), `appendReceipt` em `src/data/orders.ts`, a rota de envio, o painel (aviso "Comprovante trocado" no pedido e no aviso do celular), o apagamento automático do cron e os testes (`src/data/orders.test.ts`, `src/pages/Payment.test.tsx`, `worker/test/integration/api.test.ts`, `e2e/`).
 - Pedidos antigos com mais de um comprovante continuam abrindo (mostrar todos no painel; o próximo envio substitui todos).
 
-## 9. Fotos das peças: apagar a antiga ao trocar e limpar as que sobraram
+## 9. Fotos das peças: apagar a antiga ao trocar e limpar as que sobraram — feito
 
-Registrado em 26/11/2026. **A resolver.**
+Registrado em 26/11/2026. **Feito em 26/11/2026** (plano: `docs/arquivos/PLAN.md`): "Trocar foto" no editor da peça; a foto que sai do site é apagada do servidor um dia depois (dá tempo de desfazer), pela limpeza diária ou em Painel → Backup → "Fotos guardadas" → "Apagar agora".
 
 **Hoje:** as fotos enviadas ficam guardadas para sempre (`media/<sha256>.<ext>` com a miniatura de 480 px, no D1 enquanto o R2 não estiver ligado; `worker/media.ts`). Trocar ou tirar a foto de uma peça só muda o catálogo; o arquivo antigo continua ocupando espaço.
 

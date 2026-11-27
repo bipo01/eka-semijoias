@@ -1,5 +1,22 @@
 # Plan: one replaceable receipt, a 700 KB notice, no unused photos
 
+> **Revised after the independent review (26/11/2026), before release.** The sections below keep the first
+> design for the record; these decisions replace it where they differ:
+> - **A save never deletes a photo.** Deleting inside the save broke "Desfazer" after deleting a piece (the
+>   photos were gone) and a stale tab keeping its version. A save now only restarts the clock of the photos
+>   it lets go (`releasedMedia` → `UPDATE media SET created_at = now`); the daily cron and "Apagar agora"
+>   delete what nothing used, uploaded or let go for **a day** (`MEDIA_GRACE_MS`). The `sweepMedia` flag
+>   and the chunk rule are gone (no longer needed).
+> - **References are found by a raw deep scan** (`mediaFilesIn`) of the snapshot's pieces/collections and
+>   the raw `site:*` rows: an older section shape (the pre-slider `hero.image`) can neither crash the sweep
+>   nor hide a photo in use.
+> - **One receipt per charge**, not per order: a receipt of an earlier payment link (the amount changed) is
+>   proof of that payment and stays.
+> - Images still go only up to the 380 KB target (the CPU measurement behind it stands); bigger ones get the
+>   WhatsApp notice.
+> - Uploads refresh `created_at` and store the photo again when a sweep removed the row meanwhile; with R2
+>   the object is always `put`.
+
 Written 26/11/2026 from `docs/arquivos/PLANNING_PROMPT.md`. Owner's request: `docs/pendencias.md` items 8 and 9.
 
 ## What the code does today (verified)

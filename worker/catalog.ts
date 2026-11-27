@@ -19,6 +19,7 @@ import {
   type Settings,
 } from '../src/data/schema';
 import { requireSession } from './auth';
+import { releasedMedia } from '../src/data/mediaSweep';
 import { sha256Hex } from './crypto';
 import { guard, isGuardMiss, toHttpError, withReadRetry } from './db';
 import { HttpError, json, rawJson, readBody, zodDetails } from './http';
@@ -207,6 +208,17 @@ interface ReadState {
   tracked: string[];
 }
 
+/** Site sections from their app_config rows ("site:<id>", data {version, content|null}): the truth the snapshot's `content` is rebuilt from. */
+function siteRowsOf(rows: Record<string, unknown>[]): { sid: SectionId; version: number; content: unknown }[] {
+  return rows.flatMap((r) => {
+    const sid = String(r.key).slice('site:'.length);
+    const data = JSON.parse(String(r.data)) as { version?: unknown; content?: unknown };
+    return isSectionId(sid) && typeof data.version === 'number' ? [{ sid, version: data.version, content: data.content ?? null }] : [];
+  });
+}
+
+const contentOf = (siteRows: { sid: SectionId; content: unknown }[]) => Object.fromEntries(siteRows.filter((r) => r.content !== null).map((r) => [r.sid, r.content])) as Catalog['content'];
+
 async function readState(db: D1Database, changes: Change[], mediaKeys: string[], idempotencyKey: string | null): Promise<ReadState> {
   const ids = (kind: EntityKind) => JSON.stringify(changes.filter((c) => c.kind === kind).map((c) => (c as { id: string }).id));
   const results = await withReadRetry(() =>
@@ -234,14 +246,10 @@ async function readState(db: D1Database, changes: Change[], mediaKeys: string[],
   const snapshot = results[0]?.results[0] as Snapshot | undefined;
   if (!snapshot) throw new HttpError('internal');
   const parsed = JSON.parse(snapshot.body) as Catalog;
-  const siteRows = (results[8]?.results ?? []).flatMap((r) => {
-    const sid = String(r.key).slice('site:'.length);
-    const data = JSON.parse(String(r.data)) as { version?: unknown; content?: unknown };
-    return isSectionId(sid) && typeof data.version === 'number' ? [{ sid, version: data.version, content: data.content ?? null }] : [];
-  });
+  const siteRows = siteRowsOf(results[8]?.results ?? []);
   // The rows are the source of the site content: a snapshot written without it (e.g. by a Worker
   // rolled back to before the content existed) gets it back on the next catalog save.
-  const content = Object.fromEntries(siteRows.filter((r) => r.content !== null).map((r) => [r.sid, r.content])) as Catalog['content'];
+  const content = contentOf(siteRows);
   return {
     catalog: { ...parsed, content, version: snapshot.version },
     versions: new Map((results[1]?.results ?? []).map((r) => [entityKey(r.kind as EntityKind, r.id as string), r.version as number])),
@@ -370,9 +378,15 @@ export async function handleChanges(ctx: Context): Promise<Response> {
     const settingsChange = effective.find((c) => c.kind === 'settings') as { data: Settings } | undefined;
     const contentChanges = effective.filter((c): c is Extract<Change, { kind: 'content' }> => c.kind === 'content');
     const at = new Date(now).toISOString();
+    // Photos this save takes out of the catalog: their clock restarts, so they are erased (worker/mediaSweep.ts)
+    // only once nothing has used them for a day ("Desfazer", a stale tab, a save in several requests).
+    const released = releasedMedia([state.catalog.products, state.catalog.collections, state.catalog.content], [next.products, next.collections, next.content]);
 
     const statements: D1PreparedStatement[] = [
       guard(db, '(SELECT version FROM catalog_snapshot WHERE id = 1) = ?1', state.catalog.version),
+      // The photos must still exist when the batch commits (a sweep may delete one between the read and
+      // the write without changing the version): a miss re-reads and stops with the missing-photo error.
+      ...(mediaKeys.length ? [guard(db, '(SELECT COUNT(*) FROM media WHERE key IN (SELECT value FROM json_each(?1))) = ?2', JSON.stringify(mediaKeys), mediaKeys.length)] : []),
       // Parents before children on upsert, children before parents on delete (foreign keys are enforced per statement).
       ...upsertStatements(db, 'category', upserts('category'), version),
       ...upsertStatements(db, 'collection', upserts('collection'), version),
@@ -406,6 +420,7 @@ export async function handleChanges(ctx: Context): Promise<Response> {
       db.prepare('UPDATE catalog_snapshot SET version = ?1, body = ?2 WHERE id = 1').bind(version, body),
       db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(new Date(now).toISOString(), 'catalog.changes', auditSummary(effective)),
     ];
+    if (released.length) statements.push(db.prepare('UPDATE media SET created_at = ?2 WHERE key IN (SELECT value FROM json_each(?1))').bind(JSON.stringify(released), at));
     if (idempotencyKey) {
       statements.push(
         db.prepare('INSERT INTO idempotency (key, request_hash, created_at, response) VALUES (?1, ?2, ?3, ?4)').bind(idempotencyKey, requestHash, now, JSON.stringify(response)),

@@ -31,6 +31,8 @@ export async function setup(): Promise<void> {
     `DEV_PUSH_ORIGIN:http://127.0.0.1:${mockPort}`,
     // The daily receipt erasure runs on demand (/__scheduled) and counts every settled order as expired.
     'DEV_RECEIPT_KEEP_MS:0',
+    // Unused photos may be erased 1.5 s after their upload (production: 1 h), so the suite can wait for it.
+    'DEV_MEDIA_GRACE_MS:1500',
   ].flatMap((v) => ['--var', v]);
   process.env.MOCK_PORT = String(mockPort);
   child = spawn('npx', ['wrangler', 'dev', '--test-scheduled', '--port', String(port), '--ip', '127.0.0.1', '--persist-to', dir, '--log-level', 'warn', ...vars], {

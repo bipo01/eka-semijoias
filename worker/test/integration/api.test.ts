@@ -403,6 +403,104 @@ describe('media', () => {
   });
 });
 
+describe('unused photos (DEV_MEDIA_GRACE_MS = 1.5 s in this suite; production: a day)', () => {
+  const GRACE_WAIT = 1700;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const upload = async (a: Client, seed: string) => (await a.req('/api/admin/media', { raw: webpBytes(`${seed}-${randomUUID()}`), type: 'image/webp' })).json.key as string;
+  const served = async (key: string) => (await fetch(`${BASE()}/${key}`)).status;
+  const sweep = async (a: Client) => {
+    const res = await a.req('/api/admin/media/sweep', { body: {} });
+    expect(res.status).toBe(200);
+    return res.json as { deleted: number; deletedBytes: number };
+  };
+  /** Saves pieces (by index) with these extra uploaded photos. */
+  async function savePhotos(a: Client, photos: Record<number, string[]>) {
+    const before = await catalog();
+    const changes = Object.entries(photos).map(([i, keys]) => {
+      const p = before.products[Number(i)];
+      const own = p.images.filter((img: any) => !String(img.id).startsWith('img-sweep'));
+      return { kind: 'product', op: 'upsert', id: p.id, data: { ...p, images: [...own, ...keys.map((src, n) => ({ id: `img-sweep-${n}`, src, alt: 'Foto enviada' }))] } };
+    });
+    const res = await a.req('/api/admin/changes', { body: { baseVersion: before.version, changes } });
+    expect(res.status).toBe(200);
+    return res;
+  }
+
+  it('a save never erases: a photo it lets go waits the grace period from that save, then goes; used photos stay', async () => {
+    const a = await admin();
+    const old = await upload(a, 'old');
+    const shared = await upload(a, 'shared');
+    await savePhotos(a, { 6: [old, shared], 7: [shared] });
+    await sleep(GRACE_WAIT);
+    // Swapped for a new photo: the old file stays for now (its clock restarts at this save).
+    const fresh = await upload(a, 'fresh');
+    await savePhotos(a, { 6: [fresh] });
+    expect(await served(old)).toBe(200);
+    await sweep(a);
+    expect(await served(old)).toBe(200);
+    const usage = (await a.req('/api/admin/media/usage')).json;
+    expect(usage.recent).toBeGreaterThanOrEqual(1);
+    expect(usage.stored).toBeGreaterThanOrEqual(3);
+    expect((await new Client().req('/api/admin/media/usage')).status).toBe(401);
+    expect((await new Client().req('/api/admin/media/sweep', { body: {} })).status).toBe(401);
+    // A day later (1.5 s here) "Apagar agora" erases it; the shared photo (piece 7) and the new one stay.
+    await sleep(GRACE_WAIT);
+    expect((await sweep(a)).deleted).toBeGreaterThanOrEqual(1);
+    expect(await served(old)).toBe(404);
+    expect(await served(shared)).toBe(200);
+    expect(await served(fresh)).toBe(200);
+    expect((await a.req('/api/admin/media/usage')).json.unused).toBe(0);
+    await savePhotos(a, { 6: [], 7: [] });
+  });
+
+  it('"Desfazer" after deleting a piece brings it back with its photos', async () => {
+    const a = await admin();
+    const photo = await upload(a, 'undo');
+    await savePhotos(a, { 8: [photo] });
+    await sleep(GRACE_WAIT);
+    const before = await catalog();
+    const piece = before.products[8];
+    const deleted = await a.req('/api/admin/changes', { body: { baseVersion: before.version, changes: [{ kind: 'product', op: 'delete', id: piece.id }] } });
+    expect(deleted.status).toBe(200);
+    await sweep(a); // even a sweep right after the delete keeps the photo
+    expect(await served(photo)).toBe(200);
+    const restored = await a.req('/api/admin/changes', { body: { baseVersion: deleted.json.version, changes: [{ kind: 'product', op: 'upsert', id: piece.id, data: piece }] } });
+    expect(restored.status).toBe(200);
+    expect((await catalog()).products.some((p: any) => p.id === piece.id && p.images.some((img: any) => img.src === photo))).toBe(true);
+    await savePhotos(a, { 8: [] });
+  });
+
+  it('a photo uploaded again is protected, even if it had been unused for long', async () => {
+    const a = await admin();
+    const key = await upload(a, 'again');
+    const bytes = new Uint8Array(await (await fetch(`${BASE()}/${key}`)).arrayBuffer());
+    await sleep(GRACE_WAIT);
+    expect((await a.req('/api/admin/media', { raw: bytes, type: 'image/webp' })).json.key).toBe(key);
+    await sweep(a);
+    expect(await served(key)).toBe(200);
+    // Once erased, uploading it again stores it again (never answers "saved" for a missing file).
+    await sleep(GRACE_WAIT);
+    await sweep(a);
+    expect(await served(key)).toBe(404);
+    const back = await a.req('/api/admin/media', { raw: bytes, type: 'image/webp' });
+    expect(back.status).toBe(201);
+    expect(await served(key)).toBe(200);
+  });
+
+  it('the daily run erases photos nothing uses', async () => {
+    const a = await admin();
+    const orphan = await upload(a, 'orphan'); // a save that failed after the upload
+    await sleep(GRACE_WAIT);
+    expect((await fetch(`${BASE()}/__scheduled?cron=${encodeURIComponent('0 7 * * *')}`)).status).toBe(200);
+    let status = 200;
+    for (let i = 0; i < 60 && status === 200; i++) {
+      status = await served(orphan);
+      if (status === 200) await sleep(100);
+    }
+    expect(status).toBe(404);
+  });
+});
+
 describe('leads', () => {
   const lead = { name: 'Maria da Silva', whatsapp: '(65) 99999-1234', city: 'Cuiabá', uf: 'MT', instagram: '@maria', alreadySells: true, source: 'Instagram', consent: true };
 
@@ -989,6 +1087,11 @@ describe('Pix charges and receipts', () => {
     const view = await new Client().req(`/api/pay/${t2}`);
     expect(view.json).toMatchObject({ state: 'aguardando', receipts: [] });
     expect((await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id).receipts).toHaveLength(1); // the admin still sees it
+    // A receipt for the new amount does not replace the proof of the first payment (one file per charge).
+    expect((await new Client().req(`/api/pay/${t2}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
+    const both = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id).receipts;
+    expect(both.filter((r: any) => !r.erasedAt)).toHaveLength(2);
+    expect((await a.req(`/api/admin/receipts/${both[0].id}`)).status).toBe(200);
 
     // Undo to "em negociação": the link dies and takes nothing.
     expect((await status('confirmado', 'enviado')).json.order.charge).toBeUndefined();
