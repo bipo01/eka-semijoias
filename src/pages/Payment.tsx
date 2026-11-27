@@ -492,6 +492,11 @@ export function PaymentPage() {
 
             <Summary view={view} />
 
+            {view.state === 'aguardando' && view.discarded && t.discarded && (
+              <p role="status" className="-mb-2 rounded-[12px] border border-copper/40 bg-white px-4 py-3 text-sm text-ink">
+                {t.discarded}
+              </p>
+            )}
             {view.state === 'aguardando' && <PixSection view={view} />}
             {(view.state === 'pago' || view.state === 'cancelado' || (view.state === 'analise' && !sendAgain)) && (
               <StatusCard view={view} {...(view.state === 'analise' && view.receipts.length < 6 ? { onAgain: () => setSendAgain(true) } : {})} />

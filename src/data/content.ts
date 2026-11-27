@@ -298,6 +298,11 @@ export const sectionSchemas = {
       title: req(60),
       againTitle: req(60),
     }),
+    /**
+     * Shown above the Pix when the store discarded the receipt sent for this order (a wrong file).
+     * Optional top-level field: a section saved before it gets the built-in text (withBuiltIn).
+     */
+    discarded: text(300).optional(),
     status: z.object({
       paidTitle: req(60),
       /** {primeiro_nome}, {pedido} */

@@ -136,6 +136,8 @@ export type ReceiptType = (typeof RECEIPT_TYPES)[number];
  */
 export const RECEIPT_MAX_BYTES = 700_000;
 export const MAX_RECEIPTS_PER_ORDER = 6;
+/** Records kept per order (stored files + records of erased ones); only past this are the oldest erased records dropped. */
+export const MAX_RECEIPT_RECORDS = 20;
 
 /** The current Pix charge of an order: what the payment link asks for. */
 export const chargeSchema = z.object({
@@ -154,8 +156,12 @@ export const receiptMetaSchema = z.object({
   size: z.number().int().min(1).max(RECEIPT_MAX_BYTES),
   /** The charge (payment link) the receipt answered; a new amount starts a new charge. */
   chargeToken: z.string().max(64).optional(),
-  /** When the file itself was erased (by the owner after checking the payment, or automatically); the record stays. */
+  /** When the file itself was erased (by the owner, or automatically after the payment); the record stays. */
   erasedAt: isoDate.optional(),
+  /** Discarded by the owner before the payment was accepted (a wrong file): the customer is asked for the right one. */
+  rejected: z.literal(true).optional(),
+  /** SHA-256 of the file (kept after erasure, so the same wrong file sent again is recognised). */
+  sha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
 });
 export type ReceiptMeta = z.infer<typeof receiptMetaSchema>;
 
@@ -211,6 +217,35 @@ export function receiptsEraseAt(since: string, keepMs = RECEIPT_KEEP_MS): Date {
   return run;
 }
 
+/**
+ * Receipt records after a new upload: at most MAX_RECEIPTS_PER_ORDER stored files (a discarded wrong
+ * file does not use up a slot for the right one); every record stays, up to MAX_RECEIPT_RECORDS, past
+ * which the oldest erased record goes. Null when the stored files already fill every slot.
+ */
+export function receiptsWithNew(receipts: ReceiptMeta[], added: ReceiptMeta): ReceiptMeta[] | null {
+  if (receipts.filter((r) => !r.erasedAt).length >= MAX_RECEIPTS_PER_ORDER) return null;
+  let kept = receipts;
+  while (kept.length >= MAX_RECEIPT_RECORDS) {
+    const oldestErased = kept.findIndex((r) => r.erasedAt);
+    if (oldestErased < 0) return null;
+    kept = kept.filter((_, i) => i !== oldestErased);
+  }
+  return [...kept, added];
+}
+
+/** True when the newest receipt sent for the current charge was discarded and the payment is still awaited. */
+export function lastReceiptDiscarded(order: Pick<Order, 'status' | 'receipts' | 'charge'>): boolean {
+  if (!order.charge || payState(order) !== 'aguardando') return false;
+  const mine = (order.receipts ?? []).filter((r) => r.chargeToken === order.charge!.token);
+  return mine.at(-1)?.rejected === true;
+}
+
+/** The order with one stored receipt marked as erased at `at` (rejected when the payment is still open). */
+export function withReceiptErased<T extends Pick<Order, 'receipts' | 'status'>>(order: T, receiptId: string, at: string): T {
+  const open = !RECEIPTS_ERASABLE.has(order.status);
+  return { ...order, receipts: (order.receipts ?? []).map((r) => (r.id !== receiptId || r.erasedAt ? r : { ...r, erasedAt: at, ...(open ? { rejected: true as const } : {}) })) };
+}
+
 /** The order with every stored receipt marked as erased at `at`. */
 export function withReceiptsErased<T extends Pick<Order, 'receipts'>>(order: T, at: string): T {
   if (!order.receipts?.length) return order;
@@ -247,7 +282,7 @@ export const orderSchema = z.object({
   stockMoves: z.array(stockMoveSchema).max(MAX_ORDER_ITEMS).optional(),
   anonymized: z.boolean().optional(),
   charge: chargeSchema.optional(),
-  receipts: z.array(receiptMetaSchema).max(MAX_RECEIPTS_PER_ORDER).optional(),
+  receipts: z.array(receiptMetaSchema).max(MAX_RECEIPT_RECORDS).optional(),
 });
 export type Order = z.infer<typeof orderSchema>;
 
@@ -270,6 +305,8 @@ export interface PayView {
   state: PayState;
   receipts: { at: string }[];
   pix: { key: string; name: string; city: string } | null;
+  /** The store discarded a receipt sent for this charge while the payment is still awaited (ask for the right one). */
+  discarded: boolean;
 }
 
 /** Receipts sent for the current charge (older charges' receipts stay for the admin only). */

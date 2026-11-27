@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   chargeAmount,
-  MAX_RECEIPTS_PER_ORDER,
   payState,
   RECEIPT_MAX_BYTES,
   type Order,
@@ -10,9 +9,12 @@ import {
   RECEIPT_ERASE_WINDOW_MS,
   RECEIPT_KEEP_MS,
   RECEIPTS_ERASABLE,
+  lastReceiptDiscarded,
   receiptsExpired,
+  receiptsWithNew,
   storedReceipts,
   type ReceiptType,
+  withReceiptErased,
   withReceiptsErased,
 } from '../src/data/orders';
 import type { Env } from './env';
@@ -128,6 +130,7 @@ export async function handlePayView(ctx: Context): Promise<Response> {
     state: payState(order),
     receipts: currentReceipts(order).map((r) => ({ at: r.at })),
     pix: pix ? { key: pix.key, name: pix.name, city: pix.city } : null,
+    discarded: lastReceiptDiscarded(order),
   };
   return json(view, { headers: { 'Referrer-Policy': 'no-referrer' } });
 }
@@ -167,10 +170,14 @@ export async function handleUploadReceipt(ctx: Context): Promise<Response> {
     const same = await db.prepare('SELECT id, created_at FROM receipts WHERE order_id = ?1 AND sha256 = ?2').bind(order.id, sha).all<{ id: string; created_at: string }>();
     const already = same.results.find((row) => receipts.some((r) => r.id === row.id && r.chargeToken === order.charge!.token));
     if (already) return json({ receipt: { at: already.created_at } }, { status: 201 });
-    if (receipts.length >= MAX_RECEIPTS_PER_ORDER) throw new HttpError('conflict', 'Já recebemos vários comprovantes deste pedido. Se precisar, mande pelo WhatsApp.');
+    // The very file the store discarded, sent again: say so instead of storing it once more.
+    if (receipts.some((r) => r.rejected && r.sha256 === sha)) throw new HttpError('conflict', 'Este é o mesmo comprovante que a loja descartou. Envie o comprovante do pagamento deste pedido.');
     const at = nextStamp(stamp);
     const id = `rcp_${randomToken().slice(0, 16)}`;
-    const next: Order = { ...order, updatedAt: at, receipts: [...receipts, { id, at, contentType: actual, size: bytes.length, chargeToken: order.charge!.token }] };
+    // At most MAX_RECEIPTS_PER_ORDER stored files; records of discarded files make room for new ones.
+    const kept = receiptsWithNew(receipts, { id, at, contentType: actual, size: bytes.length, chargeToken: order.charge!.token, sha256: sha });
+    if (!kept) throw new HttpError('conflict', 'Já recebemos vários comprovantes deste pedido. Se precisar, mande pelo WhatsApp.');
+    const next: Order = { ...order, updatedAt: at, receipts: kept };
     try {
       await db.batch([
         unchanged(db, order.id, stamp),
@@ -243,6 +250,50 @@ function eraseStatements(db: D1Database, order: Order, stamp: string, at: string
       db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'order.receipts_erase', summary),
     ],
   };
+}
+
+/**
+ * POST /api/admin/orders/:id/receipts/:receiptId/erase — one receipt, in any status. While the payment is
+ * still open it is a discarded wrong file (`rejected`): it stops counting as under review, so the payment
+ * link shows the Pix again and asks for the right receipt. Only that receipt's file is deleted; the
+ * guarded batch re-reads the order if anything changed meanwhile (a new upload, a status change). Idempotent.
+ */
+const eraseIntent = z.object({ action: z.enum(['discard', 'erase']) });
+
+export async function handleEraseReceipt(ctx: Context): Promise<Response> {
+  await requireSession(ctx);
+  const db = ctx.env.DB;
+  const receiptId = ctx.params.receiptId ?? '';
+  // What the owner confirmed: "Descartar" (payment open) or "Apagar" (payment checked). If the order
+  // changed status meanwhile (another device), nothing is done and she sees the order as it is now.
+  const intent = eraseIntent.safeParse(await readJson(ctx.request, 256));
+  if (!intent.success) throw new HttpError('bad_request', 'Pedido inválido.');
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
+    const { order, stamp } = await readOrder(db, ctx.params.id ?? '');
+    const receipt = (order.receipts ?? []).find((r) => r.id === receiptId);
+    if (!receipt) throw new HttpError('not_found', 'Comprovante não encontrado neste pedido.');
+    if (receipt.erasedAt) return json({ order });
+    const discarded = !RECEIPTS_ERASABLE.has(order.status);
+    if ((intent.data.action === 'discard') !== discarded) {
+      throw new HttpError('conflict', discarded ? 'O pedido voltou para conferência do pagamento. Confira e tente de novo.' : 'O pagamento deste pedido já foi conferido. Confira e tente de novo.', { order });
+    }
+    const at = nextStamp(stamp);
+    const next: Order = { ...withReceiptErased(order, receiptId, at), updatedAt: at };
+    try {
+      await db.batch([
+        unchanged(db, order.id, stamp), // anything changed meanwhile: re-read so neither write is lost
+        db.prepare('UPDATE orders SET data = ?2, updated_at = ?3 WHERE id = ?1').bind(order.id, toData(next), at),
+        db.prepare('DELETE FROM receipts WHERE id = ?1 AND order_id = ?2').bind(receiptId, order.id),
+        db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, discarded ? 'order.receipt_discard' : 'order.receipt_erase', `Comprovante do pedido ${order.number} ${discarded ? 'descartado' : 'apagado'} pela loja`),
+      ]);
+    } catch (error) {
+      if (isGuardMiss(error)) continue;
+      throw toHttpError(error);
+    }
+    ctx.waitUntil(notifyOrders(ctx.env));
+    return json({ order: next });
+  }
+  throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
 }
 
 /** POST /api/admin/orders/:id/receipts/erase — after the payment is checked (paid, delivered or cancelled). Idempotent. */

@@ -12,7 +12,7 @@ import { handleContractCheck, handleCreateKit, handleCreateReseller, handleEditK
 import { handleAcceptContract, handleAcceptInvite, handleCancelResellerSale, handleGetInvite, handleReportRepasse, handleResellerLogin, handleResellerLogout, handleResellerMe, handleResellerSale, handleShowcase } from './revenda';
 import { handleLive } from './live';
 import { handleAnonymizeOrder, handleCreateManualOrder, handleCreateOrder, handleDeleteOrder, handleEditOrderItems, handleListOrders, handleOrderStatus } from './orders';
-import { eraseExpiredReceipts, handleCharge, handleEraseReceipts, handleGetReceipt, handlePayView, handleUploadReceipt } from './payments';
+import { eraseExpiredReceipts, handleCharge, handleEraseReceipt, handleEraseReceipts, handleGetReceipt, handlePayView, handleUploadReceipt } from './payments';
 import { handlePushDelete, handlePushStatus, handlePushSubscribe, handlePushTest } from './push';
 import { handleGetStock, handlePutStock, handleSetStockMotive, handleStockMove } from './stock';
 import { handleMedia, handleUpload } from './media';
@@ -79,6 +79,7 @@ const router = new Router()
   .on('POST', '/api/admin/orders/:id/status', handleOrderStatus)
   .on('POST', '/api/admin/orders/:id/anonymize', handleAnonymizeOrder)
   .on('POST', '/api/admin/orders/:id/receipts/erase', handleEraseReceipts)
+  .on('POST', '/api/admin/orders/:id/receipts/:receiptId/erase', handleEraseReceipt)
   .on('DELETE', '/api/admin/orders/:id', handleDeleteOrder)
   .on('POST', '/api/admin/orders/:id/customer', handleLinkOrderCustomer)
   .on('GET', '/api/admin/customers', handleListCustomers)

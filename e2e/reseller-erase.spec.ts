@@ -24,7 +24,6 @@ async function unlock(page: Page) {
 }
 
 test('admin: ends a partnership and erases the reseller data for good', async ({ page }, testInfo) => {
-  await page.goto('/admin');
   await unlock(page);
   // A reseller of her own per browser project (they run in parallel on one server).
   const tag = testInfo.project.name.replace(/\W/g, '').slice(0, 10);
@@ -72,7 +71,6 @@ test('admin: ends a partnership and erases the reseller data for good', async ({
 });
 
 test('admin: the settlements spreadsheet downloads before erasing', async ({ page }, testInfo) => {
-  await page.goto('/admin');
   await unlock(page);
   const origin = new URL(page.url()).origin;
   const name = `Teca Acertos ${randomUUID().slice(0, 4)}`;

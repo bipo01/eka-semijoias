@@ -278,17 +278,32 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await customer.getByRole('button', { name: 'Enviar comprovante' }).click();
   await expect(customer.getByRole('heading', { name: 'Comprovante recebido!' })).toBeVisible({ timeout: 15_000 });
 
-  // 4. The owner sees it live, checks it and accepts the payment.
+  // 4. The owner sees it live: it is the wrong file, so she discards it.
   await expect(detail.getByText(/Comprovante recebido: confira/)).toBeVisible({ timeout: 10_000 });
   await expect(detail.getByRole('button', { name: /Ver Comprovante 1/ }).locator('img')).toBeVisible();
+  await detail.getByRole('button', { name: 'Descartar' }).click();
+  await detail.getByRole('group', { name: 'Confirmar: descartar o comprovante' }).getByRole('button', { name: 'Descartar' }).click();
+  await expect(page.getByText(/Comprovante descartado/)).toBeVisible();
+  await expect(detail.getByText(/Descartado em/)).toBeVisible();
+
+  // 5. The customer's link asks for the right receipt again; she sends it.
+  await customer.reload();
+  await expect(customer.getByText(/O comprovante enviado foi descartado pela loja/)).toBeVisible();
+  await expect(customer.getByRole('button', { name: 'Copiar código Pix' })).toBeVisible();
+  await customer.locator('input[type="file"]').setInputFiles('public/favicon-192.png');
+  await customer.getByRole('button', { name: 'Enviar comprovante' }).click();
+  await expect(customer.getByRole('heading', { name: 'Comprovante recebido!' })).toBeVisible({ timeout: 15_000 });
+
+  // 6. The owner sees the new one and accepts the payment.
+  await expect(detail.getByRole('button', { name: /Ver Comprovante 2/ }).locator('img')).toBeVisible({ timeout: 10_000 });
   await detail.getByRole('button', { name: 'Pagamento conferido' }).click();
   await expect(page.getByText('Pagamento registrado.')).toBeVisible();
 
-  // 5. The link now says it is paid.
+  // 7. The link now says it is paid.
   await customer.reload();
   await expect(customer.getByRole('heading', { name: 'Pagamento confirmado' })).toBeVisible();
 
-  // 6. A ready "pagamento confirmado" message for the customer (default template).
+  // 8. A ready "pagamento confirmado" message for the customer (default template).
   await detail.getByRole('button', { name: 'Enviar mensagem' }).click();
   const composer = page.getByRole('dialog', { name: `Mensagem · pedido nº ${number}` });
   await expect(composer.getByRole('textbox', { name: 'Mensagem para a cliente' })).toHaveValue(new RegExp(`Recebemos o pagamento do pedido nº ${number}`));
@@ -296,13 +311,13 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await expect(composer.getByRole('textbox', { name: 'Mensagem para a cliente' })).toHaveValue(/Pagamento recebido!/);
   await page.keyboard.press('Escape');
 
-  // 7. Payment checked: the owner erases the receipt file; only its record stays.
+  // 9. Payment checked: the owner erases the receipt file; only its record stays.
   await expect(detail.getByText(/apagado sozinho em \d{2}\/\d{2}\/\d{4}/)).toBeVisible();
-  await detail.getByRole('button', { name: 'Apagar comprovante' }).click();
-  await detail.getByRole('group', { name: 'Confirmar a exclusão' }).getByRole('button', { name: 'Apagar' }).click();
+  await detail.getByRole('button', { name: 'Apagar', exact: true }).click();
+  await detail.getByRole('group', { name: 'Confirmar: apagar o comprovante' }).getByRole('button', { name: 'Apagar' }).click();
   await expect(page.getByText('Comprovante apagado.')).toBeVisible();
   await expect(detail.getByText(/Arquivo apagado em/)).toBeVisible();
-  await expect(detail.getByRole('button', { name: /Ver Comprovante 1/ })).toHaveCount(0);
+  await expect(detail.getByRole('button', { name: /Ver Comprovante \d/ })).toHaveCount(0);
   await customerContext.close();
 });
 

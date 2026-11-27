@@ -1087,6 +1087,66 @@ describe('Pix charges and receipts', () => {
     await withPix(a, false);
   });
 
+  it('discards a wrong receipt in any status: the link asks for the right one, and only that file goes', async () => {
+    const a = await admin();
+    await withPix(a, true);
+    const { order, receiptId } = await paidWithReceipt(a, 'Bela Errou', 'confirmado');
+    const token = order.charge.token;
+    const url = (id: string) => `/api/admin/orders/${order.id}/receipts/${id}/erase`;
+    const discard = { body: { action: 'discard' } };
+    expect((await new Client().req(url(receiptId), discard)).status).toBe(401);
+    expect((await a.req(url('rcp_naoexiste'), discard)).status).toBe(404);
+    expect((await a.req(url(receiptId), { body: {} })).status).toBe(400);
+    // What she confirmed must match the order: "Apagar" on an open order is refused, with the order as it is.
+    const mismatch = await a.req(url(receiptId), { body: { action: 'erase' } });
+    expect(mismatch.status).toBe(409);
+    expect(mismatch.json.error.details.order.id).toBe(order.id);
+    expect((await new Client().req(`/api/pay/${token}`)).json).toMatchObject({ state: 'analise', discarded: false });
+
+    const discarded = await a.req(url(receiptId), discard);
+    expect(discarded.status).toBe(200);
+    expect(discarded.json.order.status).toBe('confirmado');
+    expect(discarded.json.order.receipts[0]).toMatchObject({ id: receiptId, erasedAt: expect.any(String), rejected: true });
+    expect((await a.req(`/api/admin/receipts/${receiptId}`)).status).toBe(404);
+    // The customer's link shows the Pix again with the notice.
+    expect((await new Client().req(`/api/pay/${token}`)).json).toMatchObject({ state: 'aguardando', discarded: true });
+    // The very same wrong file again is recognised; a different file is taken.
+    const wrong = pngBytes();
+    expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: wrong, type: 'image/png' })).status).toBe(201);
+    const wrongId = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id).receipts.at(-1).id;
+    await a.req(url(wrongId), discard);
+    const again = await new Client().req(`/api/pay/${token}/receipt`, { raw: wrong, type: 'image/png' });
+    expect(again.status).toBe(409);
+    expect(again.json.error.message).toMatch(/mesmo comprovante que a loja descartou/);
+    const right = await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' });
+    expect(right.status).toBe(201);
+    expect((await new Client().req(`/api/pay/${token}`)).json).toMatchObject({ state: 'analise', discarded: false });
+    // Idempotent: discarding the same receipt again changes nothing.
+    const before = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id);
+    expect((await a.req(url(receiptId), discard)).json.order.updatedAt).toBe(before.updatedAt);
+    const rightId = before.receipts.at(-1).id;
+    expect((await a.req(`/api/admin/receipts/${rightId}`)).status).toBe(200);
+
+    // Six files stored is the cap; a discarded one makes room again, and every record stays.
+    for (let i = 0; i < 5; i++) expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
+    expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(409);
+    await a.req(url(rightId), discard);
+    expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
+    const capped = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id);
+    expect(capped.receipts.filter((r: any) => !r.erasedAt)).toHaveLength(6);
+    expect(capped.receipts.filter((r: any) => r.erasedAt)).toHaveLength(3);
+
+    // After the payment, the action is "erase" (not discarded) and the link stays paid; "discard" is refused.
+    await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'confirmado', to: 'pago' } });
+    const lastId = capped.receipts.at(-1).id;
+    expect((await a.req(url(lastId), discard)).status).toBe(409);
+    const erased = await a.req(url(lastId), { body: { action: 'erase' } });
+    expect(erased.json.order.receipts.find((r: any) => r.id === lastId)).toMatchObject({ erasedAt: expect.any(String) });
+    expect(erased.json.order.receipts.find((r: any) => r.id === lastId).rejected).toBeUndefined();
+    expect((await new Client().req(`/api/pay/${token}`)).json).toMatchObject({ state: 'pago', discarded: false });
+    await withPix(a, false);
+  });
+
   it('the daily run erases the files of settled orders only (wrangler --test-scheduled, keep time 0 in tests)', async () => {
     const a = await admin();
     await withPix(a, true);

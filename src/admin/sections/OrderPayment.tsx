@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Download, FileText, Link2, ReceiptText, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -11,7 +11,7 @@ import { useCatalog } from '../../store/catalog';
 import { toast } from '../../store/ui';
 import { formatDateTime } from '../lib/contact';
 import { ADMIN_BASE } from '../lib/paths';
-import { changeOrderStatus, chargeOrder, eraseReceipts, receiptObjectUrl, receiptUrl } from '../lib/orders';
+import { changeOrderStatus, chargeOrder, eraseReceipt, eraseReceipts, receiptObjectUrl, receiptUrl } from '../lib/orders';
 import { copyText, MessageActions, OrderMessageComposer, useOrderMessage } from './OrderMessages';
 
 /*
@@ -155,7 +155,7 @@ function ErasedReceipt({ receipt, index }: { receipt: ReceiptMeta; index: number
       <div className="min-w-0 text-sm">
         <p>Comprovante {index + 1}</p>
         <p className="text-ink-muted">Enviado em {formatDateTime(receipt.at)}</p>
-        <p className="text-ink-muted">Arquivo apagado em {formatDateTime(receipt.erasedAt!)}</p>
+        <p className="text-ink-muted">{receipt.rejected ? 'Descartado' : 'Arquivo apagado'} em {formatDateTime(receipt.erasedAt!)}</p>
       </div>
     </li>
   );
@@ -167,6 +167,7 @@ function EraseReceipts({ order }: { order: Order }) {
   const [busy, setBusy] = useState(false);
   const stored = storedReceipts(order).length;
   if (!RECEIPTS_ERASABLE.has(order.status) || !stored) return null;
+  const bulk = stored > 1;
   const since = settledSince(order);
   const autoAt = since ? receiptsEraseAt(since) : null;
 
@@ -176,7 +177,7 @@ function EraseReceipts({ order }: { order: Order }) {
     const problem = await eraseReceipts(order);
     setBusy(false);
     setAsking(false);
-    toast(problem ?? (stored === 1 ? 'Comprovante apagado.' : 'Comprovantes apagados.'), { tone: problem ? 'error' : 'success' });
+    toast(problem ?? 'Comprovantes apagados.', { tone: problem ? 'error' : 'success' });
   }
 
   return (
@@ -185,9 +186,9 @@ function EraseReceipts({ order }: { order: Order }) {
         Pagamento conferido? O comprovante já pode ser apagado: o extrato do banco é a prova do recebimento.
         {autoAt && ` Se ficar aqui, ele é apagado sozinho em ${DAY.format(autoAt)}.`}
       </p>
-      {asking ? (
+      {!bulk ? null : asking ? (
         <div role="group" aria-label="Confirmar a exclusão" className="flex flex-col gap-2 rounded-[10px] bg-ivory p-3">
-          <p className="text-sm">{stored === 1 ? 'Apagar o comprovante deste pedido?' : `Apagar os ${stored} comprovantes deste pedido?`} O arquivo não poderá ser recuperado; fica só o registro de que ele foi recebido.</p>
+          <p className="text-sm">Apagar os {stored} comprovantes deste pedido? Os arquivos não poderão ser recuperados; fica só o registro de que foram recebidos.</p>
           <div className="flex flex-wrap gap-2">
             <Button variant="danger" size="sm" disabled={busy} aria-busy={busy} onClick={() => void erase()}>
               {busy ? 'Apagando…' : 'Apagar'}
@@ -199,14 +200,80 @@ function EraseReceipts({ order }: { order: Order }) {
         </div>
       ) : (
         <button type="button" onClick={() => setAsking(true)} className="inline-flex min-h-11 items-center gap-1.5 self-start text-sm text-copper underline underline-offset-4">
-          <Trash2 size={15} strokeWidth={1.5} aria-hidden="true" /> {stored === 1 ? 'Apagar comprovante' : 'Apagar comprovantes'}
+          <Trash2 size={15} strokeWidth={1.5} aria-hidden="true" /> Apagar todos os comprovantes
         </button>
       )}
     </div>
   );
 }
 
-function ReceiptThumb({ receipt, number, index }: { receipt: ReceiptMeta; number: number; index: number }) {
+/**
+ * One receipt's own action, in any status. Payment still open: "Descartar" (a wrong file; the link shows the
+ * Pix again and asks for the right one). Payment checked: "Apagar". Asks before acting; nothing else changes.
+ */
+function ReceiptAction({ order, receipt, labelId }: { order: Order; receipt: ReceiptMeta; labelId: string }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const group = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const backToTrigger = useRef(false);
+  const settled = RECEIPTS_ERASABLE.has(order.status);
+  const verb = settled ? 'Apagar' : 'Descartar';
+
+  // Focus follows the step: into the confirmation when it opens, back to the trigger on "Cancelar".
+  useEffect(() => {
+    if (asking) group.current?.focus();
+    else if (backToTrigger.current) {
+      backToTrigger.current = false;
+      trigger.current?.focus();
+    }
+  }, [asking]);
+
+  async function act() {
+    if (busy) return;
+    setBusy(true);
+    // The server checks the order is still in the state she saw (another device may have changed it).
+    const problem = await eraseReceipt(order, receipt.id, settled ? 'erase' : 'discard');
+    setBusy(false);
+    setAsking(false);
+    toast(problem ?? (settled ? 'Comprovante apagado.' : 'Comprovante descartado. A cliente pode enviar o certo pelo mesmo link.'), { tone: problem ? 'error' : 'success' });
+  }
+
+  if (!asking) {
+    return (
+      <button ref={trigger} type="button" aria-describedby={labelId} onClick={() => setAsking(true)} className="inline-flex min-h-9 items-center gap-1 text-sm text-copper underline underline-offset-4">
+        <Trash2 size={14} strokeWidth={1.5} aria-hidden="true" /> {verb}
+      </button>
+    );
+  }
+  return (
+    <div ref={group} tabIndex={-1} role="group" aria-label={`Confirmar: ${verb.toLowerCase()} o comprovante`} aria-describedby={labelId} className="mt-1 flex flex-col gap-2 rounded-[10px] bg-ivory p-3 outline-none focus-visible:ring-2 focus-visible:ring-copper">
+      <p className="text-sm text-ink">
+        {settled
+          ? 'Apagar este comprovante? O arquivo não poderá ser recuperado; fica só o registro de que ele foi recebido.'
+          : 'Descartar este comprovante? Use quando ele estiver errado. A cliente volta a ver o Pix no link e pode enviar o certo. O arquivo não poderá ser recuperado.'}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="danger" size="sm" disabled={busy} aria-busy={busy} onClick={() => void act()}>
+          {busy ? (settled ? 'Apagando…' : 'Descartando…') : verb}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => {
+            backToTrigger.current = true;
+            setAsking(false);
+          }}
+        >
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ReceiptThumb({ receipt, number, index, order }: { receipt: ReceiptMeta; number: number; index: number; order: Order }) {
   const [url, setUrl] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -244,9 +311,10 @@ function ReceiptThumb({ receipt, number, index }: { receipt: ReceiptMeta; number
         </button>
       )}
       <div className="min-w-0 text-sm">
-        <p>Comprovante {index + 1}</p>
+        <p id={`rcp-label-${receipt.id}`}>Comprovante {index + 1}</p>
         <p className="text-ink-muted">{formatDateTime(receipt.at)}</p>
         {failed && <p className="text-danger">Não foi possível carregar.</p>}
+        <ReceiptAction order={order} receipt={receipt} labelId={`rcp-label-${receipt.id}`} />
         {pdf && (
           <a href={receiptUrl(receipt.id)} download className="inline-flex min-h-9 items-center gap-1 text-copper underline underline-offset-4">
             Baixar PDF <Download size={14} strokeWidth={1.5} aria-hidden="true" />
@@ -297,7 +365,7 @@ export function PaymentSection({ order, onCharge, phone }: { order: Order; onCha
             {open && storedReceipts(order).length > 0 ? 'Comprovante recebido: confira o valor e o recebedor' : 'Comprovantes enviados pela cliente'}
           </p>
           <ul className="flex flex-col gap-3">
-            {receipts.map((r, i) => (r.erasedAt ? <ErasedReceipt key={r.id} receipt={r} index={i} /> : <ReceiptThumb key={r.id} receipt={r} number={order.number} index={i} />))}
+            {receipts.map((r, i) => (r.erasedAt ? <ErasedReceipt key={r.id} receipt={r} index={i} /> : <ReceiptThumb key={r.id} receipt={r} number={order.number} index={i} order={order} />))}
           </ul>
           <EraseReceipts order={order} />
         </div>

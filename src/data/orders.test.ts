@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createCatalogSeed } from './seed';
 import { effectivePrice } from './catalog';
-import { awaitingReview, receiptsEraseAt, receiptsExpired, RECEIPT_KEEP_MS, settledSince, storedReceipts, withReceiptsErased, canTransition, chargeAmount, HOLDS_STOCK, payState, saleCents, NEXT_STEP, ORDER_STATUSES, orderRequestSchema, priceOrder, pricingMessage, TRANSITIONS, UNDO_STEP } from './orders';
+import { awaitingReview, lastReceiptDiscarded, MAX_RECEIPT_RECORDS, MAX_RECEIPTS_PER_ORDER, receiptsWithNew, withReceiptErased, receiptsEraseAt, receiptsExpired, RECEIPT_KEEP_MS, settledSince, storedReceipts, withReceiptsErased, canTransition, chargeAmount, HOLDS_STOCK, payState, saleCents, NEXT_STEP, ORDER_STATUSES, orderRequestSchema, priceOrder, pricingMessage, TRANSITIONS, UNDO_STEP } from './orders';
 import { materializeStock } from './stock';
 
 const catalog = createCatalogSeed();
@@ -134,5 +134,47 @@ describe('receipt files after the payment', () => {
     expect(receiptsEraseAt('2026-12-01T12:00:00.000Z').toISOString()).toBe('2026-12-08T07:00:00.000Z');
     expect(receiptsEraseAt('2026-12-01T06:30:00.000Z').toISOString()).toBe('2026-12-07T07:00:00.000Z');
     expect(receiptsEraseAt('2026-12-01T07:00:00.000Z').toISOString()).toBe('2026-12-07T07:00:00.000Z');
+  });
+
+  it('a discarded wrong file (open payment) is marked rejected and the link asks for the payment again', () => {
+    const open = { status: 'confirmado' as const, history: [{ at: iso(t0), status: 'confirmado' as const }], receipts: [receipt] };
+    const discarded = withReceiptErased(open, receipt.id, iso(t0 + 1000));
+    expect(discarded.receipts[0]).toEqual({ ...receipt, erasedAt: iso(t0 + 1000), rejected: true });
+    expect(payState({ ...discarded, charge: undefined })).toBe('aguardando');
+    expect(awaitingReview(discarded)).toBe(false);
+    // After the payment, the same action is a plain erasure (not "rejected").
+    const paid = withReceiptErased({ ...open, status: 'pago' as const }, receipt.id, iso(t0 + 1000));
+    expect(paid.receipts[0]).not.toHaveProperty('rejected');
+    // Unknown id or already erased: nothing changes.
+    expect(withReceiptErased(discarded, receipt.id, iso(t0 + 5000)).receipts).toEqual(discarded.receipts);
+  });
+
+  it('caps stored files, not records: discarded records make room for the right receipt', () => {
+    const meta = (n: number, erased = false) => ({ id: `rcp_${n}`, at: iso(t0 + n), contentType: 'image/png' as const, size: 10, ...(erased ? { erasedAt: iso(t0 + n) } : {}) });
+    const full = Array.from({ length: MAX_RECEIPTS_PER_ORDER }, (_, i) => meta(i));
+    expect(receiptsWithNew(full, meta(99))).toBeNull();
+    const oneDiscarded = full.map((r, i) => (i === 2 ? { ...r, erasedAt: iso(t0) } : r));
+    const next = receiptsWithNew(oneDiscarded, meta(99))!;
+    // Every record stays (numbering is stable); only the stored files are capped.
+    expect(next).toHaveLength(MAX_RECEIPTS_PER_ORDER + 1);
+    expect(next.map((r) => r.id)).toContain('rcp_2');
+    expect(next.at(-1)!.id).toBe('rcp_99');
+    // Past MAX_RECEIPT_RECORDS, the oldest erased record goes.
+    const many = Array.from({ length: MAX_RECEIPT_RECORDS }, (_, i) => meta(i, i < MAX_RECEIPT_RECORDS - 1));
+    const trimmed = receiptsWithNew(many, meta(99))!;
+    expect(trimmed).toHaveLength(MAX_RECEIPT_RECORDS);
+    expect(trimmed[0]!.id).toBe('rcp_1');
+  });
+
+  it('tells the customer her receipt was discarded only when the newest one for this charge was', () => {
+    const charge = { token: 'tok_aaaaaaaaaaaaaaaaaaaa', shippingCents: 0, discountCents: 0, amountCents: 100, createdAt: iso(t0) };
+    const r = (id: string, extra: object = {}) => ({ id, at: iso(t0), contentType: 'image/png' as const, size: 10, chargeToken: charge.token, ...extra });
+    const base = { status: 'confirmado' as const, charge };
+    expect(lastReceiptDiscarded({ ...base, receipts: [r('a', { erasedAt: iso(t0), rejected: true })] })).toBe(true);
+    // A wrong file discarded, then the right one accepted and later erased, then the order reopened: no notice.
+    expect(lastReceiptDiscarded({ ...base, receipts: [r('a', { erasedAt: iso(t0), rejected: true }), r('b', { erasedAt: iso(t0) })] })).toBe(false);
+    // A new charge (new token) starts clean; a paid order never shows it.
+    expect(lastReceiptDiscarded({ ...base, charge: { ...charge, token: 'tok_bbbbbbbbbbbbbbbbbbbb' }, receipts: [r('a', { erasedAt: iso(t0), rejected: true })] })).toBe(false);
+    expect(lastReceiptDiscarded({ ...base, status: 'pago', receipts: [r('a', { erasedAt: iso(t0), rejected: true })] })).toBe(false);
   });
 });

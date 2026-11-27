@@ -347,6 +347,7 @@ function PagamentoForm() {
       <Group title="Comprovante">
         <TextInput path={['receipt', 'title']} label="Título para enviar o comprovante" />
         <TextInput path={['receipt', 'againTitle']} label="Título para enviar mais um comprovante" />
+        <TextInput path={['discarded']} label="Aviso quando a loja descarta um comprovante" long rows={3} hint="Aparece no link de pagamento acima do Pix, quando você descarta um comprovante errado." />
       </Group>
       <Group title="Situação do pedido">
         <TextInput path={['status', 'reviewTitle']} label="Comprovante recebido: título" />
