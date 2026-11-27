@@ -346,8 +346,11 @@ function PagamentoForm() {
       </Group>
       <Group title="Comprovante">
         <TextInput path={['receipt', 'title']} label="Título para enviar o comprovante" />
-        <TextInput path={['receipt', 'againTitle']} label="Título para enviar mais um comprovante" />
+        <TextInput path={['receipt', 'againTitle']} label="Título para trocar o comprovante" hint="Quando a cliente envia outro arquivo, ele substitui o que ela tinha enviado." />
+        <TextInput path={['replaceNote']} label="Aviso ao trocar o comprovante" long rows={2} />
         <TextInput path={['discarded']} label="Aviso quando a loja descarta um comprovante" long rows={3} hint="Aparece no link de pagamento acima do Pix, quando você descarta um comprovante errado." />
+        <TextInput path={['tooBig']} label="Aviso quando o arquivo passa do limite" long rows={3} hint="O limite é de 700 KB. Logo abaixo aparecem o tamanho do arquivo e o botão “Enviar pelo WhatsApp”." />
+        <TextInput path={['tooBigMessage']} label="Mensagem do botão “Enviar pelo WhatsApp”" long rows={2} hint="{pedido} é o número do pedido; {primeiro_nome}, o nome da cliente." />
       </Group>
       <Group title="Situação do pedido">
         <TextInput path={['status', 'reviewTitle']} label="Comprovante recebido: título" />

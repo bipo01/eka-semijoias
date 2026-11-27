@@ -934,12 +934,22 @@ describe('Pix charges and receipts', () => {
     const again = await visitor.req(`/api/pay/${token}/receipt`, { raw: shot, type: 'image/png' });
     expect(again.status).toBe(201);
     expect(again.json.receipt.at).toBe(sent.json.receipt.at);
+    const firstId = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id).receipts[0].id;
+    expect((await a.req(`/api/admin/receipts/${firstId}`)).status).toBe(200);
+    // Another file replaces it: one file per order, the old one erased in the same write.
     const pdf = await visitor.req(`/api/pay/${token}/receipt`, { raw: new TextEncoder().encode('%PDF-1.7\n%comprovante'), type: 'application/pdf' });
     expect(pdf.status).toBe(201);
-    expect((await new Client().req(`/api/pay/${token}`)).json).toMatchObject({ state: 'analise', receipts: [{}, {}] });
+    expect((await new Client().req(`/api/pay/${token}`)).json).toMatchObject({ state: 'analise', receipts: [{}] });
 
     const stored = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id);
     expect(stored.receipts.map((r: any) => r.contentType)).toEqual(['image/png', 'application/pdf']);
+    expect(stored.receipts[0]).toMatchObject({ id: firstId, erasedAt: pdf.json.receipt.at, replaced: true });
+    expect(stored.receipts[0].rejected).toBeUndefined();
+    expect(stored.receipts[1].erasedAt).toBeUndefined();
+    expect((await a.req(`/api/admin/receipts/${firstId}`)).status).toBe(404);
+    // A retry of the new file is answered as received (no second record).
+    expect((await visitor.req(`/api/pay/${token}/receipt`, { raw: new TextEncoder().encode('%PDF-1.7\n%comprovante'), type: 'application/pdf' })).json.receipt.at).toBe(pdf.json.receipt.at);
+    expect((await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id).receipts).toHaveLength(2);
     const file = await a.req(`/api/admin/receipts/${stored.receipts[1].id}`);
     expect(file.status).toBe(200);
     expect(file.headers.get('Content-Type')).toBe('application/pdf');
@@ -1027,7 +1037,7 @@ describe('Pix charges and receipts', () => {
     expect((await a.req(`/api/admin/orders/${order.id}/items`, { method: 'PUT', body: { items: [line], stamp: paid.updatedAt } })).status).toBe(409);
   });
 
-  it('refuses a charge without a Pix key, caps receipts per order and drops them with the order', async () => {
+  it('refuses a charge without a Pix key, keeps one receipt per order and drops it with the order', async () => {
     const a = await admin();
     await withPix(a, false);
     const { order } = await newOrder(a, 'Bia');
@@ -1037,9 +1047,12 @@ describe('Pix charges and receipts', () => {
     expect(noPix.json.error.code).toBe('not_configured');
     await withPix(a, true);
     const token = (await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 0, discountCents: 0 } })).json.order.charge.token;
-    for (let i = 0; i < 6; i++) expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
-    expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(409);
-    const ids = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id).receipts.map((r: any) => r.id);
+    // Every new file replaces the stored one: never refused for being one too many.
+    for (let i = 0; i < 3; i++) expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
+    const records = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id).receipts;
+    expect(records.map((r: any) => !!r.replaced)).toEqual([true, true, false]);
+    const ids = records.map((r: any) => r.id).slice(-1);
+    expect((await a.req(`/api/admin/receipts/${ids[0]}`)).status).toBe(200);
     await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'confirmado', to: 'cancelado' } });
     expect((await new Client().req(`/api/pay/${token}`)).json.state).toBe('cancelado');
     expect((await a.req(`/api/admin/orders/${order.id}`, { method: 'DELETE' })).json.deleted).toBe(true);
@@ -1118,7 +1131,8 @@ describe('Pix charges and receipts', () => {
     const again = await new Client().req(`/api/pay/${token}/receipt`, { raw: wrong, type: 'image/png' });
     expect(again.status).toBe(409);
     expect(again.json.error.message).toMatch(/mesmo comprovante que a loja descartou/);
-    const right = await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' });
+    const rightFile = pngBytes();
+    const right = await new Client().req(`/api/pay/${token}/receipt`, { raw: rightFile, type: 'image/png' });
     expect(right.status).toBe(201);
     expect((await new Client().req(`/api/pay/${token}`)).json).toMatchObject({ state: 'analise', discarded: false });
     // Idempotent: discarding the same receipt again changes nothing.
@@ -1127,14 +1141,20 @@ describe('Pix charges and receipts', () => {
     const rightId = before.receipts.at(-1).id;
     expect((await a.req(`/api/admin/receipts/${rightId}`)).status).toBe(200);
 
-    // Six files stored is the cap; a discarded one makes room again, and every record stays.
-    for (let i = 0; i < 5; i++) expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
-    expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(409);
-    await a.req(url(rightId), discard);
-    expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
+    // A new file replaces the stored one: the old file goes and its record says it was replaced (not wrong).
+    const newer = await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' });
+    expect(newer.status).toBe(201);
+    const replacedOrder = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id);
+    expect(replacedOrder.receipts.filter((r: any) => !r.erasedAt)).toHaveLength(1);
+    expect(replacedOrder.receipts.find((r: any) => r.id === rightId)).toMatchObject({ erasedAt: newer.json.receipt.at, replaced: true });
+    expect(replacedOrder.receipts.find((r: any) => r.id === rightId).rejected).toBeUndefined();
+    expect((await a.req(`/api/admin/receipts/${rightId}`)).status).toBe(404);
+    expect((await new Client().req(`/api/pay/${token}`)).json).toMatchObject({ state: 'analise', receipts: [{ at: newer.json.receipt.at }], discarded: false });
+    // A replaced file was not wrong: sending it back is taken (and replaces the newer one).
+    expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: rightFile, type: 'image/png' })).status).toBe(201);
     const capped = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id);
-    expect(capped.receipts.filter((r: any) => !r.erasedAt)).toHaveLength(6);
-    expect(capped.receipts.filter((r: any) => r.erasedAt)).toHaveLength(3);
+    expect(capped.receipts.filter((r: any) => !r.erasedAt)).toHaveLength(1);
+    expect(capped.receipts.filter((r: any) => r.erasedAt)).toHaveLength(4);
 
     // After the payment, the action is "erase" (not discarded) and the link stays paid; "discard" is refused.
     await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'confirmado', to: 'pago' } });

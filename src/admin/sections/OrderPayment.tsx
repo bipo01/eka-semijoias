@@ -145,17 +145,21 @@ function ChargeBody({ order, onClose, onDone }: { order: Order; onClose: () => v
 /** Day only, in the store's time zone (the automatic erasure date). */
 const DAY = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Cuiaba' });
 
-/** A receipt whose file was erased after the payment: only the record stays. */
+/** A receipt whose file is gone (discarded, replaced by the customer, or erased after the payment): only the record stays. */
 function ErasedReceipt({ receipt, index }: { receipt: ReceiptMeta; index: number }) {
+  const what = receipt.rejected ? 'Descartado' : receipt.replaced ? 'Trocado pela cliente' : 'Arquivo apagado';
   return (
     <li className="flex items-center gap-3">
-      <span aria-hidden="true" className="inline-flex h-20 w-16 shrink-0 items-center justify-center rounded-[8px] bg-ivory text-ink-muted ring-1 ring-line">
-        <ReceiptText size={22} strokeWidth={1.4} />
+      <span aria-hidden="true" className="inline-flex h-11 w-9 shrink-0 items-center justify-center rounded-[6px] bg-ivory text-ink-muted ring-1 ring-line">
+        <ReceiptText size={17} strokeWidth={1.4} />
       </span>
       <div className="min-w-0 text-sm">
-        <p>Comprovante {index + 1}</p>
-        <p className="text-ink-muted">Enviado em {formatDateTime(receipt.at)}</p>
-        <p className="text-ink-muted">{receipt.rejected ? 'Descartado' : 'Arquivo apagado'} em {formatDateTime(receipt.erasedAt!)}</p>
+        <p>
+          Comprovante {index + 1} <span className="text-ink-muted">· enviado em {formatDateTime(receipt.at)}</span>
+        </p>
+        <p className="text-ink-muted">
+          {what} em {formatDateTime(receipt.erasedAt!)}
+        </p>
       </div>
     </li>
   );
@@ -365,7 +369,9 @@ export function PaymentSection({ order, onCharge, phone }: { order: Order; onCha
             {open && storedReceipts(order).length > 0 ? 'Comprovante recebido: confira o valor e o recebedor' : 'Comprovantes enviados pela cliente'}
           </p>
           <ul className="flex flex-col gap-3">
-            {receipts.map((r, i) => (r.erasedAt ? <ErasedReceipt key={r.id} receipt={r} index={i} /> : <ReceiptThumb key={r.id} receipt={r} number={order.number} index={i} order={order} />))}
+            {/* The file to check first; the records of earlier files (replaced, discarded, erased) after it, newest first. */}
+            {receipts.map((r, i) => (r.erasedAt ? null : <ReceiptThumb key={r.id} receipt={r} number={order.number} index={i} order={order} />))}
+            {receipts.map((r, i) => (r.erasedAt ? <ErasedReceipt key={r.id} receipt={r} index={i} /> : null)).reverse()}
           </ul>
           <EraseReceipts order={order} />
         </div>

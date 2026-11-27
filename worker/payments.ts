@@ -135,7 +135,10 @@ export async function handlePayView(ctx: Context): Promise<Response> {
   return json(view, { headers: { 'Referrer-Policy': 'no-referrer' } });
 }
 
-/** POST /api/pay/:token/receipt — raw file body (PNG, JPEG, WebP or PDF, ≤ 1.9 MB). */
+/**
+ * POST /api/pay/:token/receipt — raw file body (PNG, JPEG, WebP or PDF, ≤ RECEIPT_MAX_BYTES = 700 KB).
+ * One file is stored per order: a new one replaces the stored file in the same guarded batch.
+ */
 export async function handleUploadReceipt(ctx: Context): Promise<Response> {
   const db = ctx.env.DB;
   const token = ctx.params.token ?? '';
@@ -174,17 +177,20 @@ export async function handleUploadReceipt(ctx: Context): Promise<Response> {
     if (receipts.some((r) => r.rejected && r.sha256 === sha)) throw new HttpError('conflict', 'Este é o mesmo comprovante que a loja descartou. Envie o comprovante do pagamento deste pedido.');
     const at = nextStamp(stamp);
     const id = `rcp_${randomToken().slice(0, 16)}`;
-    // At most MAX_RECEIPTS_PER_ORDER stored files; records of discarded files make room for new ones.
-    const kept = receiptsWithNew(receipts, { id, at, contentType: actual, size: bytes.length, chargeToken: order.charge!.token, sha256: sha });
-    if (!kept) throw new HttpError('conflict', 'Já recebemos vários comprovantes deste pedido. Se precisar, mande pelo WhatsApp.');
+    // One stored file per order: the customer's new file replaces the one she sent before.
+    const { receipts: kept, replaced } = receiptsWithNew(receipts, { id, at, contentType: actual, size: bytes.length, chargeToken: order.charge!.token, sha256: sha });
     const next: Order = { ...order, updatedAt: at, receipts: kept };
     try {
       await db.batch([
         unchanged(db, order.id, stamp),
+        // The replaced file goes in the same batch: never two files, never none.
+        ...(replaced.length ? [db.prepare('DELETE FROM receipts WHERE order_id = ?1').bind(order.id)] : []),
         // Stored as base64 text (the column has BLOB affinity, so the text is kept as is): see bytesToBase64.
         db.prepare('INSERT INTO receipts (id, order_id, created_at, content_type, size, sha256, bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)').bind(id, order.id, at, actual, bytes.length, sha, encoded),
         db.prepare('UPDATE orders SET data = ?2, updated_at = ?3 WHERE id = ?1').bind(order.id, toData(next), at),
-        db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'order.receipt', `Comprovante recebido no pedido ${order.number}`),
+        db
+          .prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)')
+          .bind(at, replaced.length ? 'order.receipt_replace' : 'order.receipt', replaced.length ? `Comprovante trocado pela cliente no pedido ${order.number}` : `Comprovante recebido no pedido ${order.number}`),
         pruneThrottle(db, now),
       ]);
     } catch (error) {
@@ -192,7 +198,7 @@ export async function handleUploadReceipt(ctx: Context): Promise<Response> {
       throw toHttpError(error);
     }
     ctx.waitUntil(notifyOrders(ctx.env));
-    ctx.waitUntil(notifyOwner(ctx.env, ctx.url.origin, receiptNotice(order.number, order.charge!.amountCents)));
+    ctx.waitUntil(notifyOwner(ctx.env, ctx.url.origin, receiptNotice(order.number, order.charge!.amountCents, replaced.length > 0)));
     return json({ receipt: { at } }, { status: 201 });
   }
   throw new HttpError('unavailable', 'Muitos envios ao mesmo tempo. Tente de novo.');

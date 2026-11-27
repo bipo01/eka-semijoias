@@ -114,8 +114,9 @@ export const orderNotice = (number: number, totalCents: number, units: number): 
   tag: `pedido-${number}`,
 });
 
-export const receiptNotice = (number: number, amountCents: number): PushNotice => ({
-  title: `Comprovante do pedido nº ${number}`,
+/** `replaced`: the customer sent a new file in place of the one she had sent (same tag: replaces the earlier notice). */
+export const receiptNotice = (number: number, amountCents: number, replaced = false): PushNotice => ({
+  title: replaced ? `Comprovante trocado no pedido nº ${number}` : `Comprovante do pedido nº ${number}`,
   body: `Pix de ${formatBRL(amountCents)}. Confira o valor e marque como pago.`,
   url: `/admin/pedidos?pedido=${number}`,
   tag: `pedido-${number}`,

@@ -15,7 +15,12 @@ export const RECEIPT_IMAGE_TARGET_BYTES = 380_000;
 /** Files bigger than this are refused before decoding (protects memory on phones). */
 const MAX_INPUT_BYTES = 40 * 1024 * 1024;
 
-export type PreparedReceipt = { ok: true; blob: Blob; type: ReceiptType; name: string } | { ok: false; message: string };
+/**
+ * Why a file cannot go through the page: `too_big` (over RECEIPT_MAX_BYTES even after reducing it) and
+ * `unreadable` are sent over WhatsApp instead; `size` is the picked file's size.
+ */
+export type ReceiptProblem = 'too_big' | 'unreadable' | 'empty';
+export type PreparedReceipt = { ok: true; blob: Blob; type: ReceiptType; name: string } | { ok: false; reason: ReceiptProblem; message: string; size: number };
 
 /** JPEG attempts, sharpest first. */
 export const RECEIPT_STEPS = [
@@ -44,19 +49,23 @@ export async function snapshotFile(file: File): Promise<File | null> {
 
 export const isPdf = (file: Pick<File, 'type' | 'name'>) => file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
 
+const jpgName = (name: string) => name.replace(/\.[^.]+$/, '') + '.jpg';
+
 export async function prepareReceipt(file: File): Promise<PreparedReceipt> {
-  if (!file.size) return { ok: false, message: 'O arquivo está vazio.' };
+  const fail = (reason: ReceiptProblem, message: string): PreparedReceipt => ({ ok: false, reason, message, size: file.size });
+  if (!file.size) return fail('empty', 'O arquivo está vazio. Escolha o comprovante de novo.');
   if (isPdf(file)) {
-    if (file.size > RECEIPT_MAX_BYTES) return { ok: false, message: 'Este PDF passou de 700 KB. Envie um print do comprovante.' };
+    if (file.size > RECEIPT_MAX_BYTES) return fail('too_big', 'Este PDF passou do limite para enviar por aqui.');
     return { ok: true, blob: file, type: 'application/pdf', name: file.name };
   }
   const asIs = IMAGE_TYPES[file.type.toLowerCase()];
   if (asIs && file.size <= KEEP_AS_IS_BYTES) return { ok: true, blob: file, type: asIs, name: file.name };
-  if (file.size > MAX_INPUT_BYTES) return { ok: false, message: 'Este arquivo é grande demais. Envie um print do comprovante.' };
+  if (file.size > MAX_INPUT_BYTES) return fail('too_big', 'Este arquivo passou do limite para enviar por aqui.');
   const decoded = await decode(file);
-  if (!decoded) return { ok: false, message: 'Não conseguimos abrir este arquivo. Envie um print (PNG ou JPG) ou o PDF do comprovante.' };
+  if (!decoded) return fail('unreadable', 'Não conseguimos abrir este arquivo aqui. Envie um print (PNG ou JPG), o PDF do comprovante ou mande o arquivo pelo WhatsApp.');
   const canvas = document.createElement('canvas');
   try {
+    let last: Blob | null = null;
     for (const step of RECEIPT_STEPS) {
       const { width, height } = fitWithin(decoded.width, decoded.height, step.maxSide);
       canvas.width = width;
@@ -67,9 +76,12 @@ export async function prepareReceipt(file: File): Promise<PreparedReceipt> {
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(decoded.source, 0, 0, width, height);
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', step.quality));
-      if (blob && blob.size <= RECEIPT_IMAGE_TARGET_BYTES) return { ok: true, blob, type: 'image/jpeg', name: file.name.replace(/\.[^.]+$/, '') + '.jpg' };
+      if (blob && blob.size <= RECEIPT_IMAGE_TARGET_BYTES) return { ok: true, blob, type: 'image/jpeg', name: jpgName(file.name) };
+      if (blob) last = blob;
     }
-    return { ok: false, message: 'Não conseguimos reduzir esta imagem. Envie um print menor ou o PDF do comprovante.' };
+    // Missed the target but within the limit: still a readable receipt.
+    if (last && last.size <= RECEIPT_MAX_BYTES) return { ok: true, blob: last, type: 'image/jpeg', name: jpgName(file.name) };
+    return fail('too_big', 'Esta imagem passou do limite para enviar por aqui.');
   } finally {
     decoded.release();
     canvas.width = 0;

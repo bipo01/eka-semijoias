@@ -179,6 +179,35 @@ Registrado em 25/11/2026, depois de olhar o site como dona de loja, cliente e pr
 - Registrar `ekasemijoias.com.br` (ou parecido) no Registro.br (cerca de R$ 40 por ano; compra e titularidade da Érika, de preferência com o CNPJ), apontar para o Worker na Cloudflare e redirecionar o endereço antigo.
 - Depois: refazer os links já compartilhados (bio do Instagram, mostruários das revendedoras), o webhook do Mercado Pago, o Search Console, e conferir no código tudo que cite o endereço antigo (CSP, `AGENTS.md`, página de redirecionamento do GitHub Pages).
 
+## 8. Comprovante de pagamento: um por pedido, que pode ser trocado; arquivo grande vai pelo WhatsApp
+
+Registrado em 26/11/2026. **A resolver.**
+
+**Hoje:** a página de pagamento aceita até 6 comprovantes por pedido (`MAX_RECEIPTS_PER_ORDER` em `src/data/orders.ts`), cada um com no máximo **700 KB** (`RECEIPT_MAX_BYTES`; o limite caiu de 1,9 MB por causa dos 10 ms de CPU por requisição do plano Free, commit 187f68f). Fotos grandes já são reduzidas no navegador (`src/lib/receipt.ts`); o que passa do limite na prática é PDF. Quando passa, a mensagem só pede "Envie um print do comprovante".
+
+**Como deve ficar**
+- **Um comprovante por pedido.** Se a cliente enviar outro, ele **substitui** o anterior (o arquivo antigo é apagado, o registro guarda que houve troca). Na página de pagamento, o comprovante enviado aparece com "Trocar comprovante".
+- **Limite de tamanho: 700 KB, como hoje** (decisão de 26/11/2026: nada de R2, de 1,9 MB nem de 10 MB). 1,9 MB não cabe sem mudar o armazenamento (em base64 vira ~2,5 MB, acima da linha de 2 MB do D1) e volta a estourar a CPU do plano Free.
+- **Quando passar do limite**, a página diz o tamanho do arquivo e o limite ("Este arquivo tem 2,3 MB; o limite é 700 KB") e oferece o botão "Enviar pelo WhatsApp", com a mensagem pronta do tipo `comprovante` (número do pedido e nome; `src/data/messages.ts`), para a cliente anexar o arquivo na conversa. O texto fica editável em Painel → Site → "Pagamento e revenda". Vale para PDF grande, imagem que não reduz e arquivo que não abre.
+- Ajustar: schema (`receipts` com `.max(1)`), `appendReceipt` em `src/data/orders.ts`, a rota de envio, o painel (aviso "Comprovante trocado" no pedido e no aviso do celular), o apagamento automático do cron e os testes (`src/data/orders.test.ts`, `src/pages/Payment.test.tsx`, `worker/test/integration/api.test.ts`, `e2e/`).
+- Pedidos antigos com mais de um comprovante continuam abrindo (mostrar todos no painel; o próximo envio substitui todos).
+
+## 9. Fotos das peças: apagar a antiga ao trocar e limpar as que sobraram
+
+Registrado em 26/11/2026. **A resolver.**
+
+**Hoje:** as fotos enviadas ficam guardadas para sempre (`media/<sha256>.<ext>` com a miniatura de 480 px, no D1 enquanto o R2 não estiver ligado; `worker/media.ts`). Trocar ou tirar a foto de uma peça só muda o catálogo; o arquivo antigo continua ocupando espaço.
+
+**Como deve ficar**
+- **Ao trocar ou remover uma foto** (de peça, variação ou das seções do site, como as fotos do topo), o arquivo antigo é apagado quando a alteração for salva, desde que nenhum outro lugar o use (o mesmo arquivo pode estar em duas peças, porque o nome vem do conteúdo).
+- **Limpar o que já acumulou:** uma limpeza que acha as fotos que nada mais usa e as apaga. No painel (Configurações ou Backup), com "X fotos sem uso, Y MB" e um botão para apagar; ou automática, num cron.
+- **Cuidados:**
+  - só apagar depois de o salvamento ser confirmado no servidor, e nunca uma foto que outra aba ou aparelho acabou de enviar e ainda vai salvar (prazo de carência, por exemplo 24 h depois do envio);
+  - conferir as referências no catálogo inteiro (peças, variações, seções `site:*`), não só na peça alterada;
+  - um backup antigo restaurado pode citar fotos já apagadas: avisar quais faltam em vez de quebrar;
+  - os links `/media/` são servidos como imutáveis, então uma foto apagada pode continuar no cache do navegador por um tempo, o que não é problema.
+- Testes: unidade (quais arquivos ficam sem uso) e integração (trocar a foto apaga a antiga; foto usada em duas peças não some; foto recém-enviada fica dentro da carência).
+
 ## Ordem sugerida
 
 1. ~~Backend (pré-requisito de tudo).~~ Feito em 23/11/2026.

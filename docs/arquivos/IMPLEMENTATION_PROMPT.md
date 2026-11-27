@@ -1,0 +1,49 @@
+# Implementation prompt — one replaceable receipt, 700 KB notice, no unused photos
+
+You are a principal full-stack engineer and senior UI/UX designer on the ÉKA Semijoias site. Read `AGENTS.md` (project truth) and `docs/arquivos/PLAN.md` (the decisions; do not re-open them) before touching code. Work on `main`, commit per phase with English messages ending in the project's co-author line, keep UI copy in pt-BR in the brand voice, and never show an unconfirmed save as saved.
+
+## Phase 1 — receipts (fronts A and B)
+
+1. **Data (`src/data/orders.ts`).**
+   - `MAX_RECEIPTS_PER_ORDER = 1`. Add `replaced: z.literal(true).optional()` to `receiptMetaSchema` (an erased record replaced by the customer's newer file).
+   - Rewrite `receiptsWithNew(receipts, added)` to return `{ receipts, replaced }`: every stored record becomes `{ erasedAt: added.at, replaced: true }`, the new record is appended, and while there are `MAX_RECEIPT_RECORDS` or more records the oldest erased one is dropped (never a stored one). It no longer returns null.
+   - Unit tests in `src/data/orders.test.ts`: first upload, replacement marks the old record, legacy orders with several stored files all get replaced, the 20-record cap drops the oldest erased record, `payState`/`currentReceipts`/`awaitingReview` follow the single stored file.
+2. **Server (`worker/payments.ts`, `worker/push.ts`).**
+   - In `handleUploadReceipt`, use the new helper; the batch becomes: guard, `DELETE FROM receipts WHERE order_id = ?1` (only when something is replaced), insert the new file, update the order, audit (`order.receipt_replace` / `Comprovante trocado no pedido N`, or the current `order.receipt`), prune throttle. Keep the same-file retry answer and the discarded-file refusal before it.
+   - `receiptNotice(number, amountCents, replaced)` → title `Comprovante trocado no pedido nº N` when replaced; same tag and URL.
+   - Fix the stale doc comment (`≤ 1.9 MB` → `≤ 700 KB`).
+   - Integration tests (`worker/test/integration/api.test.ts`): upload A then B → one stored row, A's admin download 404, B downloads, records `[A replaced, B]`, the pay view shows one receipt; the same B again answers 201 without a new record; a body over 700 KB answers 413 `too_large`; uploading after the order is paid is refused.
+3. **Client receipt preparation (`src/lib/receipt.ts`).** `PreparedReceipt` failure gets `reason: 'too_big' | 'unreadable' | 'empty'` and `size`. PDF over `RECEIPT_MAX_BYTES` and files over 40 MB → `too_big`. In the JPEG loop, accept the last attempt when it fits `RECEIPT_MAX_BYTES` even if it misses the 380 KB target; otherwise `too_big`. Decoding failure → `unreadable`. Update/extend `src/lib/receipt.test.ts` if present (create it otherwise) for the reasons.
+4. **Texts (`src/data/content.ts`, `src/content/defaults.ts`, `src/admin/sections/site/SectionForms.tsx`).** In `pagamento`, add top-level optional fields (built-in text through `withBuiltIn`): `replaceNote` (≤ 200, "O novo arquivo substitui o comprovante que você enviou."), `tooBig` (≤ 300, "Este arquivo passou do limite para enviar por aqui. Mande o comprovante pelo WhatsApp: é só anexar o arquivo na conversa."), `tooBigMessage` (≤ 300, WhatsApp text, `{pedido}`/`{primeiro_nome}`: "Olá! Segue o comprovante do pagamento do pedido nº {pedido}."). Change the default `receipt.againTitle` to "Trocar o comprovante" and its editor label to "Título para trocar o comprovante". Add the three fields to the "Comprovante" group of the editor with hints. Update the privacy default: sending another receipt replaces the previous one, which is erased.
+5. **Payment page (`src/pages/Payment.tsx`).**
+   - `StatusCard`: the link becomes "Trocar o comprovante" whenever the state is `analise` (drop the `< 6` count).
+   - `ReceiptUpload` when `again`: show `t.replaceNote` under the title and a quiet "Manter o comprovante enviado" button that returns to the status card (new `onCancel` prop).
+   - Over-limit notice: on `reason: 'too_big'` or `unreadable`, or an `ApiError` with code `too_large`, render a notice instead of the plain alert: `role="alert"`, focus moved to it (`tabIndex={-1}`), text `t.tooBig` (or the unreadable message), the line `Arquivo de <kb(size)> · o limite é 700 KB` (from `RECEIPT_MAX_BYTES`, only when the size is known), primary `ButtonAnchor` "Enviar pelo WhatsApp" with `whatsappUrl(biz.whatsapp, fillString(t.tooBigMessage, vars))`, and secondary "Escolher outro arquivo" (clears and opens the picker). Copper actions, 44 px targets, wraps cleanly at 360 px.
+   - Tests in `src/pages/Payment.test.tsx`: "Trocar o comprovante" shows with one receipt under review; choosing it shows the replace note and "Manter o comprovante enviado" goes back; a 900 KB PDF shows the notice with the size, the limit and a `wa.me` link containing the order number; a server 413 shows the same notice.
+6. **Panel (`src/admin/sections/OrderPayment.tsx`).** `ErasedReceipt` reads "Trocado pela cliente em …" for `replaced` records. Keep everything else from commit 8c5a661.
+7. Run `npm run typecheck && npm run lint && npm test -- --run && npm run test:worker && npm run test:integration`; fix, then commit `feat(pay): one receipt per order, replaceable; over-limit notice offers WhatsApp`.
+
+## Phase 2 — photos (front C)
+
+1. **Pure sweep (`src/data/mediaSweep.ts`, shared).** `MEDIA_GRACE_MS = 3_600_000`; `unusedMediaKeys(catalog, rows: {key, created_at}[], cutoffIso, limit = 500)`: keys (file part, without `media/`) not referenced by `imageSourcesOf({ ...catalog })` (products, collections, content) whose `created_at < cutoff`, oldest first, at most `limit`. Unit tests: referenced kept (product, thumb, variant via images, collection, hero slide frame, content image), shared key kept, young upload kept, limit honoured.
+2. **Server.**
+   - `worker/media.ts` `handleUpload`: when the photo already exists, `UPDATE media SET created_at = ?` (now) so a sweep never takes a photo a save is about to use; document that `created_at` is the last upload time.
+   - `src/data/changes.ts` `changeSetSchema`: optional `sweepMedia: z.boolean()`.
+   - `worker/catalog.ts` `handleChanges`: when `sweepMedia` is true, read `SELECT key, created_at FROM media` with the state (only then), compute `unusedMediaKeys(next, rows, cutoff)` and append `DELETE FROM media WHERE key IN (SELECT value FROM json_each(?1)) AND created_at < ?2 RETURNING key` to the guarded batch; after success delete the returned keys from R2 when `MEDIA` is bound (catch and log). Also run the sweep when the change set has no effective change but `sweepMedia` is set? No: only with a real commit (the cron catches the rest). Factor the site-row → content code of `readState` into a helper reused by the sweep.
+   - `worker/mediaSweep.ts`: `sweepUnusedMedia(env, now)` for the cron and the admin button: one read batch (snapshot, site rows, media key rows), the pure function, one guarded batch (`guard` on the catalog version + the same DELETE … RETURNING), R2 cleanup, a JSON log line (`media_sweep`, counts only). A guard miss returns `{ deleted: 0, busy: true }`.
+   - Routes in `worker/index.ts`: `GET /api/admin/media/usage` → `{ stored, storedBytes, unused, unusedBytes, recent }` (recent = unused but inside the grace period) and `POST /api/admin/media/sweep` → `{ deleted, deletedBytes }`, both behind `requireSession`. `scheduled` calls `sweepUnusedMedia` after the receipts (each in its own try so one failure never stops the other).
+   - `DEV_MEDIA_GRACE_MS` (tests only, like `DEV_RECEIPT_KEEP_MS`) in `worker/env.ts` and `worker/test/global-setup.ts`.
+3. **Client.**
+   - `src/store/catalog.ts` `sendChanges`: send `sweepMedia: true` on the last chunk only.
+   - `src/admin/products/PhotoManager.tsx`: "Trocar foto" in the selected photo's actions (single-file picker, `processImage`); replaces `src`/`thumb`, drops `placeholder`, keeps id, variant links and the description (an automatic description stays automatic); toast "Foto trocada. A antiga sai do site quando você salvar." with "Desfazer". Under the strip: "Fotos removidas ou trocadas são apagadas do site quando você salva." Test in `ProductForm.test.tsx` (or a new PhotoManager test).
+   - `src/admin/sections/BackupPage.tsx`: "Fotos guardadas" card from `/api/admin/media/usage` (count, MB, unused) with "Apagar agora" (disabled with nothing to erase, busy state, toast with the result, refresh after). Errors surfaced.
+4. Integration tests: product with photo A saved; swap to B and save → A row gone and `/media/A` 404, B served; photo used by two products survives removing it from one; a young upload (grace) survives; a chunk without the flag never deletes; the cron (`/__scheduled`) and `POST /api/admin/media/sweep` delete an orphan upload; usage numbers.
+5. Run all checks, commit `feat(media): erase photos nothing uses any more`.
+
+## Phase 3 — validation and release
+1. `npm run typecheck && npm run lint && npm test -- --run && npm run test:worker && npm run test:integration && npm run build`.
+2. E2E: add specs (receipt replace and over-limit notice in the payment spec; photo swap erasing the old file in the admin spec), then `npm run e2e` on all four projects; fix flakes at the root.
+3. Local stack in the browser (`npx wrangler dev` after build + local migrations): walk every new flow at 390 px and 1280 px, check focus, copy, toasts, no sideways scroll.
+4. Docs: `AGENTS.md` (receipt rules, media sweep, endpoints, env), `docs/pendencias.md` items 8 and 9 → done.
+5. Independent adversarial review of the full diff; fix confirmed findings; re-run affected checks.
+6. Commit, `git push origin main`, `npm run deploy`, then smoke: `/`, `/catalogo`, a product page, every new `/assets/*` file answers 200, `/api/catalog` 200, admin usage endpoint answers 401 without a session (route exists). No test orders in production.

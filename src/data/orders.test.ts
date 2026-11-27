@@ -149,21 +149,31 @@ describe('receipt files after the payment', () => {
     expect(withReceiptErased(discarded, receipt.id, iso(t0 + 5000)).receipts).toEqual(discarded.receipts);
   });
 
-  it('caps stored files, not records: discarded records make room for the right receipt', () => {
-    const meta = (n: number, erased = false) => ({ id: `rcp_${n}`, at: iso(t0 + n), contentType: 'image/png' as const, size: 10, ...(erased ? { erasedAt: iso(t0 + n) } : {}) });
-    const full = Array.from({ length: MAX_RECEIPTS_PER_ORDER }, (_, i) => meta(i));
-    expect(receiptsWithNew(full, meta(99))).toBeNull();
-    const oneDiscarded = full.map((r, i) => (i === 2 ? { ...r, erasedAt: iso(t0) } : r));
-    const next = receiptsWithNew(oneDiscarded, meta(99))!;
-    // Every record stays (numbering is stable); only the stored files are capped.
-    expect(next).toHaveLength(MAX_RECEIPTS_PER_ORDER + 1);
-    expect(next.map((r) => r.id)).toContain('rcp_2');
-    expect(next.at(-1)!.id).toBe('rcp_99');
-    // Past MAX_RECEIPT_RECORDS, the oldest erased record goes.
-    const many = Array.from({ length: MAX_RECEIPT_RECORDS }, (_, i) => meta(i, i < MAX_RECEIPT_RECORDS - 1));
-    const trimmed = receiptsWithNew(many, meta(99))!;
-    expect(trimmed).toHaveLength(MAX_RECEIPT_RECORDS);
-    expect(trimmed[0]!.id).toBe('rcp_1');
+  it('keeps one stored file per order: a new receipt replaces the stored one', () => {
+    const meta = (n: number, extra: object = {}) => ({ id: `rcp_${n}`, at: iso(t0 + n), contentType: 'image/png' as const, size: 10, ...extra });
+    expect(MAX_RECEIPTS_PER_ORDER).toBe(1);
+    // First receipt: nothing replaced.
+    const first = receiptsWithNew([], meta(1));
+    expect(first).toEqual({ receipts: [meta(1)], replaced: [] });
+    // A new one replaces it: the old record stays, erased at the new file's time and marked as replaced.
+    const second = receiptsWithNew(first.receipts, meta(2));
+    expect(second.replaced.map((r) => r.id)).toEqual(['rcp_1']);
+    expect(second.receipts).toEqual([{ ...meta(1), erasedAt: iso(t0 + 2), replaced: true }, meta(2)]);
+    expect(storedReceipts({ receipts: second.receipts }).map((r) => r.id)).toEqual(['rcp_2']);
+    // Discarded or erased records stay as they are (not "replaced").
+    const discarded = meta(3, { erasedAt: iso(t0 + 3), rejected: true });
+    expect(receiptsWithNew([discarded], meta(4))).toEqual({ receipts: [discarded, meta(4)], replaced: [] });
+    // An order from before the limit, holding several files: the next one replaces all of them.
+    const legacy = receiptsWithNew([meta(5), meta(6), meta(7)], meta(8));
+    expect(legacy.replaced.map((r) => r.id)).toEqual(['rcp_5', 'rcp_6', 'rcp_7']);
+    expect(storedReceipts({ receipts: legacy.receipts }).map((r) => r.id)).toEqual(['rcp_8']);
+    // Past MAX_RECEIPT_RECORDS, the oldest erased record goes; the new one is always kept.
+    const many = Array.from({ length: MAX_RECEIPT_RECORDS }, (_, i) => meta(i, i < MAX_RECEIPT_RECORDS - 1 ? { erasedAt: iso(t0 + i) } : {}));
+    const trimmed = receiptsWithNew(many, meta(99));
+    expect(trimmed.receipts).toHaveLength(MAX_RECEIPT_RECORDS);
+    expect(trimmed.receipts[0]!.id).toBe('rcp_1');
+    expect(trimmed.receipts.at(-1)!.id).toBe('rcp_99');
+    expect(storedReceipts({ receipts: trimmed.receipts })).toHaveLength(1);
   });
 
   it('tells the customer her receipt was discarded only when the newest one for this charge was', () => {

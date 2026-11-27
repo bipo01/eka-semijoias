@@ -135,7 +135,8 @@ export type ReceiptType = (typeof RECEIPT_TYPES)[number];
  * kept small (production: ~600 KB cost 16 ms to store, ~5 ms to read).
  */
 export const RECEIPT_MAX_BYTES = 700_000;
-export const MAX_RECEIPTS_PER_ORDER = 6;
+/** Stored receipt files per order: one. A new file sent by the customer replaces it (the old file is erased). */
+export const MAX_RECEIPTS_PER_ORDER = 1;
 /** Records kept per order (stored files + records of erased ones); only past this are the oldest erased records dropped. */
 export const MAX_RECEIPT_RECORDS = 20;
 
@@ -160,6 +161,8 @@ export const receiptMetaSchema = z.object({
   erasedAt: isoDate.optional(),
   /** Discarded by the owner before the payment was accepted (a wrong file): the customer is asked for the right one. */
   rejected: z.literal(true).optional(),
+  /** Replaced by a newer file the customer sent (the old file was erased at `erasedAt`). */
+  replaced: z.literal(true).optional(),
   /** SHA-256 of the file (kept after erasure, so the same wrong file sent again is recognised). */
   sha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
 });
@@ -218,19 +221,20 @@ export function receiptsEraseAt(since: string, keepMs = RECEIPT_KEEP_MS): Date {
 }
 
 /**
- * Receipt records after a new upload: at most MAX_RECEIPTS_PER_ORDER stored files (a discarded wrong
- * file does not use up a slot for the right one); every record stays, up to MAX_RECEIPT_RECORDS, past
- * which the oldest erased record goes. Null when the stored files already fill every slot.
+ * Receipt records after a new upload. One file is stored per order: every stored record becomes a
+ * replaced one (erased at the new file's time; the caller deletes those files in the same batch) and
+ * the new record goes last. Records stay for history up to MAX_RECEIPT_RECORDS, past which the oldest
+ * erased record goes (a stored one never does).
  */
-export function receiptsWithNew(receipts: ReceiptMeta[], added: ReceiptMeta): ReceiptMeta[] | null {
-  if (receipts.filter((r) => !r.erasedAt).length >= MAX_RECEIPTS_PER_ORDER) return null;
-  let kept = receipts;
+export function receiptsWithNew(receipts: ReceiptMeta[], added: ReceiptMeta): { receipts: ReceiptMeta[]; replaced: ReceiptMeta[] } {
+  const replaced = receipts.filter((r) => !r.erasedAt);
+  let kept = receipts.map((r) => (r.erasedAt ? r : { ...r, erasedAt: added.at, replaced: true as const }));
   while (kept.length >= MAX_RECEIPT_RECORDS) {
     const oldestErased = kept.findIndex((r) => r.erasedAt);
-    if (oldestErased < 0) return null;
+    if (oldestErased < 0) break;
     kept = kept.filter((_, i) => i !== oldestErased);
   }
-  return [...kept, added];
+  return { receipts: [...kept, added], replaced };
 }
 
 /** True when the newest receipt sent for the current charge was discarded and the payment is still awaited. */

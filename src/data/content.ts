@@ -303,6 +303,12 @@ export const sectionSchemas = {
      * Optional top-level field: a section saved before it gets the built-in text (withBuiltIn).
      */
     discarded: text(300).optional(),
+    /** Under the title when the customer replaces her receipt (optional top-level: built-in text for older saves). */
+    replaceNote: text(200).optional(),
+    /** Shown when the file is over the limit (or cannot be opened), next to "Enviar pelo WhatsApp". */
+    tooBig: text(300).optional(),
+    /** The WhatsApp message of that button ({pedido}, {primeiro_nome}). */
+    tooBigMessage: text(300).optional(),
     status: z.object({
       paidTitle: req(60),
       /** {primeiro_nome}, {pedido} */

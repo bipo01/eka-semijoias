@@ -9,7 +9,7 @@ import { Sheet } from '../components/ui/Sheet';
 import { Toaster } from '../components/ui/Toaster';
 import { cx } from '../components/ui/cx';
 import { sizeLabel } from '../data/catalog';
-import type { PayView } from '../data/orders';
+import { RECEIPT_MAX_BYTES, type PayView } from '../data/orders';
 import { FINISH_LABEL } from '../data/schema';
 import { useBusiness } from '../hooks/useBusiness';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -152,7 +152,44 @@ function PixSection({ view }: { view: PayView }) {
 
 const kb = (bytes: number) => (bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`);
 
-function ReceiptUpload({ token, number, onSent, again }: { token: string; number: number; onSent: () => void; again?: boolean }) {
+/** A file the page cannot take (over the limit, or one it cannot open): sent over WhatsApp instead. */
+interface FileProblem {
+  reason: 'too_big' | 'unreadable';
+  message: string;
+  size: number | null;
+}
+
+function FileProblemNotice({ problem, number, firstName, onPickAnother }: { problem: FileProblem; number: number; firstName: string; onPickAnother: () => void }) {
+  const t = useSection('pagamento');
+  const biz = useBusiness();
+  const box = useRef<HTMLDivElement>(null);
+  // Said by screen readers (role="alert") and brought into view: the button below the file is what she tapped.
+  useEffect(() => {
+    box.current?.focus({ preventScroll: true });
+    box.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [problem]);
+  const text = problem.reason === 'too_big' ? (t.tooBig || problem.message) : problem.message;
+  return (
+    <div ref={box} tabIndex={-1} role="alert" className="flex flex-col gap-3 rounded-[14px] border border-copper/40 bg-white p-4 outline-none focus-visible:ring-2 focus-visible:ring-copper">
+      <p className="text-sm text-ink">{text}</p>
+      {problem.reason === 'too_big' && problem.size !== null && (
+        <p className="-mt-1 text-sm text-ink-muted">
+          Arquivo de {kb(problem.size)} · o limite é {kb(RECEIPT_MAX_BYTES)}.
+        </p>
+      )}
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <ButtonAnchor href={whatsappUrl(biz.whatsapp, fillString(t.tooBigMessage ?? '', { pedido: String(number), primeiro_nome: firstName }))} block>
+          <WhatsAppIcon size={20} /> Enviar pelo WhatsApp
+        </ButtonAnchor>
+        <Button variant="secondary" block onClick={onPickAnother}>
+          Escolher outro arquivo
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ReceiptUpload({ token, number, firstName, onSent, again, onCancel }: { token: string; number: number; firstName: string; onSent: () => void; again?: boolean; onCancel?: () => void }) {
   const t = useSection('pagamento');
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -164,6 +201,7 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [problem, setProblem] = useState<FileProblem | null>(null);
   const busy = progress !== null;
 
   useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
@@ -172,6 +210,7 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
   const pick = async (f: File | undefined) => {
     if (!f) return;
     setError(null);
+    setProblem(null);
     if (!(f.type.startsWith('image/') || isPdf(f))) {
       setError('Envie uma imagem (PNG ou JPG) ou o PDF do comprovante.');
       return;
@@ -182,6 +221,11 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
     const copy = await snapshotFile(f);
     if (!copy) {
       setError('Não conseguimos abrir este arquivo. Escolha o comprovante de novo.');
+      return;
+    }
+    // Over the limit even before reducing: say so at once (no need to tap "Enviar" first).
+    if (isPdf(copy) && copy.size > RECEIPT_MAX_BYTES) {
+      setProblem({ reason: 'too_big', message: 'Este PDF passou do limite para enviar por aqui.', size: copy.size });
       return;
     }
     setFile(copy);
@@ -202,21 +246,37 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
     if (!busy) void pick(e.dataTransfer.files[0]);
   };
 
+  const pickAnother = () => {
+    clear();
+    setProblem(null);
+    setError(null);
+    input.current?.click();
+  };
+
   async function send() {
     if (!file || busy) return;
     setError(null);
+    setProblem(null);
     setProgress(0);
     try {
       const prepared = await prepareReceipt(file);
       if (!prepared.ok) {
-        setError(prepared.message);
+        if (prepared.reason === 'empty') setError(prepared.message);
+        else {
+          setProblem({ reason: prepared.reason, message: prepared.message, size: prepared.size });
+          clear();
+        }
         return;
       }
       await uploadReceipt(token, prepared.blob, prepared.type, (f) => setProgress(f));
       clear();
       onSent();
     } catch (err) {
-      setError(errorMessage(err));
+      // The server refused the size (413): the same way out as a file refused here.
+      if (err instanceof ApiError && err.code === 'too_large') {
+        setProblem({ reason: 'too_big', message: 'Este arquivo passou do limite para enviar por aqui.', size: file.size });
+        clear();
+      } else setError(errorMessage(err));
     } finally {
       setProgress(null);
     }
@@ -225,6 +285,8 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
   return (
     <section aria-labelledby="receipt-title" className="flex flex-col gap-5">
       <RuledTitle id="receipt-title">{again ? t.receipt.againTitle : t.receipt.title}</RuledTitle>
+      {again && t.replaceNote && <p className="-mt-2 text-center text-sm text-ink-muted">{t.replaceNote}</p>}
+      {problem && <FileProblemNotice problem={problem} number={number} firstName={firstName} onPickAnother={pickAnother} />}
       {!file ? (
         <label
           htmlFor={inputId}
@@ -342,8 +404,13 @@ function ReceiptUpload({ token, number, onSent, again }: { token: string; number
         </p>
       )}
       <Button size="lg" block disabled={!file || busy} aria-busy={busy} onClick={() => void send()}>
-        {busy ? 'Enviando…' : 'Enviar comprovante'}
+        {busy ? 'Enviando…' : again ? 'Enviar o novo comprovante' : 'Enviar comprovante'}
       </Button>
+      {again && onCancel && !busy && (
+        <button type="button" onClick={onCancel} className="-mt-2 min-h-11 text-sm text-ink-muted underline underline-offset-4 hover:text-copper">
+          Manter o comprovante enviado
+        </button>
+      )}
       <p className="flex items-center justify-center gap-1.5 text-center text-xs text-ink-muted">
         <LockKeyhole size={13} strokeWidth={1.5} aria-hidden="true" /> Só a ÉKA vê o seu comprovante. Pedido nº {number}.
       </p>
@@ -403,7 +470,7 @@ function StatusCard({ view, onAgain }: { view: PayView; onAgain?: () => void }) 
         </ButtonAnchor>
         {onAgain && (
           <button type="button" onClick={onAgain} className="min-h-11 text-sm text-copper underline underline-offset-4">
-            Enviar outro comprovante
+            {t.receipt.againTitle}
           </button>
         )}
       </div>
@@ -499,13 +566,15 @@ export function PaymentPage() {
             )}
             {view.state === 'aguardando' && <PixSection view={view} />}
             {(view.state === 'pago' || view.state === 'cancelado' || (view.state === 'analise' && !sendAgain)) && (
-              <StatusCard view={view} {...(view.state === 'analise' && view.receipts.length < 6 ? { onAgain: () => setSendAgain(true) } : {})} />
+              <StatusCard view={view} {...(view.state === 'analise' ? { onAgain: () => setSendAgain(true) } : {})} />
             )}
             {showUpload && (
               <ReceiptUpload
                 token={token}
                 number={view.number}
+                firstName={view.firstName}
                 again={view.state === 'analise'}
+                {...(view.state === 'analise' ? { onCancel: () => setSendAgain(false) } : {})}
                 onSent={() => {
                   setSendAgain(false);
                   void refresh();

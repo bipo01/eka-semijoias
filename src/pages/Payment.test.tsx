@@ -8,10 +8,15 @@ import type { Sections, SiteContent } from '../data/content';
 import type { PayView } from '../data/orders';
 import { createCatalogSeed } from '../data/seed';
 import { useCatalog, type CatalogStatus } from '../store/catalog';
+import { ApiError } from '../lib/api';
 import { PaymentPage } from './Payment';
 
-const pay = vi.hoisted(() => ({ view: null as unknown as PayView }));
-vi.mock('../lib/payments', async (orig) => ({ ...(await orig<typeof import('../lib/payments')>()), fetchPayView: async () => pay.view }));
+const pay = vi.hoisted(() => ({ view: null as unknown as PayView, upload: (async () => undefined) as (...args: unknown[]) => Promise<void> }));
+vi.mock('../lib/payments', async (orig) => ({
+  ...(await orig<typeof import('../lib/payments')>()),
+  fetchPayView: async () => pay.view,
+  uploadReceipt: (...args: unknown[]) => pay.upload(...args),
+}));
 
 const catalog = createCatalogSeed();
 const builtIn = defaultSections(factsOf(catalog.settings, undefined)).pagamento;
@@ -132,5 +137,59 @@ describe('PaymentPage receipt', () => {
     await user.click(within(viewer).getByRole('button', { name: 'Está certo' }));
     expect(screen.queryByRole('dialog', { name: 'Seu comprovante' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Enviar comprovante' })).toBeEnabled();
+  });
+
+  const fileInput = () => document.querySelector<HTMLInputElement>('input[type=file]')!;
+  const waText = (link: HTMLElement) => decodeURIComponent(link.getAttribute('href') ?? '');
+
+  it('offers to replace the receipt under review, and to keep the one sent', async () => {
+    const user = userEvent.setup();
+    show({ view: view({ state: 'analise', receipts: [{ at: '2026-11-26T12:00:00.000Z' }] }) });
+    await user.click(await screen.findByRole('button', { name: 'Trocar o comprovante' }));
+    expect(screen.getByText('O novo arquivo substitui o comprovante que você enviou.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enviar o novo comprovante' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Manter o comprovante enviado' }));
+    expect(screen.getByRole('heading', { name: 'Comprovante recebido!' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Enviar o novo comprovante' })).toBeNull();
+  });
+
+  it('says a PDF is over the limit at once and offers WhatsApp with the order number', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('heading', { level: 1 });
+    const pdf = new File([new Uint8Array(900_000)], 'extrato.pdf', { type: 'application/pdf' });
+    await user.upload(fileInput(), pdf);
+    const notice = await screen.findByRole('alert');
+    expect(notice).toHaveTextContent('Este arquivo passou do limite para enviar por aqui.');
+    expect(notice).toHaveTextContent('Arquivo de 900 KB · o limite é 700 KB.');
+    expect(notice).toHaveFocus();
+    const wa = within(notice).getByRole('link', { name: /Enviar pelo WhatsApp/ });
+    expect(wa.getAttribute('href')).toMatch(/^https:\/\/wa\.me\//);
+    expect(waText(wa)).toContain('Olá! Segue o comprovante do pagamento do pedido nº 1024.');
+    // Nothing to send; picking another file clears the notice.
+    expect(screen.getByRole('button', { name: 'Enviar comprovante' })).toBeDisabled();
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])], 'print.png', { type: 'image/png' });
+    await user.upload(fileInput(), png);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Enviar comprovante' })).toBeEnabled();
+  });
+
+  it('shows the same way out when the server refuses the size', async () => {
+    const user = userEvent.setup();
+    pay.upload = async () => {
+      throw new ApiError(413, 'too_large', 'O arquivo é grande demais.');
+    };
+    try {
+      show({ content: { pagamento: { ...builtIn, tooBig: 'Arquivo grande: mande pelo WhatsApp.', tooBigMessage: 'Comprovante do pedido {pedido}' } } });
+      await screen.findByRole('heading', { level: 1 });
+      const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])], 'print.png', { type: 'image/png' });
+      await user.upload(fileInput(), png);
+      await user.click(screen.getByRole('button', { name: 'Enviar comprovante' }));
+      const notice = await screen.findByRole('alert');
+      expect(notice).toHaveTextContent('Arquivo grande: mande pelo WhatsApp.');
+      expect(waText(within(notice).getByRole('link', { name: /Enviar pelo WhatsApp/ }))).toContain('Comprovante do pedido 1024');
+    } finally {
+      pay.upload = async () => undefined;
+    }
   });
 });
