@@ -294,6 +294,15 @@ test('payment: charge by Pix, customer pays through the link and sends the recei
   await expect(composer.getByRole('textbox', { name: 'Mensagem para a cliente' })).toHaveValue(new RegExp(`Recebemos o pagamento do pedido nº ${number}`));
   await composer.getByRole('button', { name: 'Carinhosa' }).click();
   await expect(composer.getByRole('textbox', { name: 'Mensagem para a cliente' })).toHaveValue(/Pagamento recebido!/);
+  await page.keyboard.press('Escape');
+
+  // 7. Payment checked: the owner erases the receipt file; only its record stays.
+  await expect(detail.getByText(/apagado sozinho em \d{2}\/\d{2}\/\d{4}/)).toBeVisible();
+  await detail.getByRole('button', { name: 'Apagar comprovante' }).click();
+  await detail.getByRole('group', { name: 'Confirmar a exclusão' }).getByRole('button', { name: 'Apagar' }).click();
+  await expect(page.getByText('Comprovante apagado.')).toBeVisible();
+  await expect(detail.getByText(/Arquivo apagado em/)).toBeVisible();
+  await expect(detail.getByRole('button', { name: /Ver Comprovante 1/ })).toHaveCount(0);
   await customerContext.close();
 });
 

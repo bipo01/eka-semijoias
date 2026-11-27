@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createCatalogSeed } from './seed';
 import { effectivePrice } from './catalog';
-import { awaitingReview, canTransition, chargeAmount, HOLDS_STOCK, payState, saleCents, NEXT_STEP, ORDER_STATUSES, orderRequestSchema, priceOrder, pricingMessage, TRANSITIONS, UNDO_STEP } from './orders';
+import { awaitingReview, receiptsEraseAt, receiptsExpired, RECEIPT_KEEP_MS, settledSince, storedReceipts, withReceiptsErased, canTransition, chargeAmount, HOLDS_STOCK, payState, saleCents, NEXT_STEP, ORDER_STATUSES, orderRequestSchema, priceOrder, pricingMessage, TRANSITIONS, UNDO_STEP } from './orders';
 import { materializeStock } from './stock';
 
 const catalog = createCatalogSeed();
@@ -85,5 +85,54 @@ describe('charges and receipts', () => {
     expect(awaitingReview({ status: 'confirmado', receipts: r })).toBe(true);
     expect(awaitingReview({ status: 'pago', receipts: r })).toBe(false);
     expect(awaitingReview({ status: 'confirmado' })).toBe(false);
+  });
+});
+
+describe('receipt files after the payment', () => {
+  const day = 24 * 3600_000;
+  const t0 = Date.parse('2026-12-01T12:00:00.000Z');
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const receipt = { id: 'rcp_1', at: iso(t0 - day), contentType: 'image/png' as const, size: 1000 };
+  const order = (status: 'confirmado' | 'pago' | 'entregue' | 'cancelado', history: { at: string; status: 'enviado' | 'confirmado' | 'pago' | 'entregue' | 'cancelado'; event?: 'itens' }[]) => ({ status, history, receipts: [receipt] });
+
+  it('counts from the first settled step of the current run (paid then delivered keeps counting from paid)', () => {
+    const o = order('entregue', [
+      { at: iso(t0 - 3 * day), status: 'confirmado' },
+      { at: iso(t0), status: 'pago' },
+      { at: iso(t0 + day), status: 'pago', event: 'itens' },
+      { at: iso(t0 + 2 * day), status: 'entregue' },
+    ]);
+    expect(settledSince(o)).toBe(iso(t0));
+    expect(receiptsExpired(o, t0 + RECEIPT_KEEP_MS - 1)).toBe(false);
+    expect(receiptsExpired(o, t0 + RECEIPT_KEEP_MS)).toBe(true);
+  });
+
+  it('never erases while the payment is open, and a reopened order starts over', () => {
+    expect(settledSince(order('confirmado', [{ at: iso(t0), status: 'confirmado' }]))).toBeNull();
+    const reopened = order('pago', [
+      { at: iso(t0), status: 'pago' },
+      { at: iso(t0 + day), status: 'confirmado' },
+      { at: iso(t0 + 2 * day), status: 'pago' },
+    ]);
+    expect(settledSince(reopened)).toBe(iso(t0 + 2 * day));
+    expect(receiptsExpired(reopened, t0 + RECEIPT_KEEP_MS + day)).toBe(false);
+  });
+
+  it('keeps the record of an erased file and stops counting it as waiting for review', () => {
+    const paid = order('pago', [{ at: iso(t0), status: 'pago' }]);
+    const erased = withReceiptsErased(paid, iso(t0 + day));
+    expect(erased.receipts).toEqual([{ ...receipt, erasedAt: iso(t0 + day) }]);
+    expect(storedReceipts(erased)).toEqual([]);
+    expect(receiptsExpired(erased, t0 + 30 * day)).toBe(false);
+    // Reopened after the erasure: nothing left to check, and the payment page asks for the payment again.
+    expect(awaitingReview({ ...erased, status: 'confirmado' })).toBe(false);
+    expect(payState({ ...erased, status: 'confirmado', charge: undefined })).toBe('aguardando');
+    expect(awaitingReview({ ...paid, status: 'confirmado' })).toBe(true);
+  });
+
+  it('tells the day of the daily run that erases the files (03:00 in Cuiabá, never later than 7 days)', () => {
+    expect(receiptsEraseAt('2026-12-01T12:00:00.000Z').toISOString()).toBe('2026-12-08T07:00:00.000Z');
+    expect(receiptsEraseAt('2026-12-01T06:30:00.000Z').toISOString()).toBe('2026-12-07T07:00:00.000Z');
+    expect(receiptsEraseAt('2026-12-01T07:00:00.000Z').toISOString()).toBe('2026-12-07T07:00:00.000Z');
   });
 });

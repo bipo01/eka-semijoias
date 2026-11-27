@@ -29,9 +29,11 @@ export async function setup(): Promise<void> {
     'DEV_INSECURE_COOKIES:1',
     `VAPID_PRIVATE_KEY:${JSON.stringify({ kty, crv, d, x, y })}`,
     `DEV_PUSH_ORIGIN:http://127.0.0.1:${mockPort}`,
+    // The daily receipt erasure runs on demand (/__scheduled) and counts every settled order as expired.
+    'DEV_RECEIPT_KEEP_MS:0',
   ].flatMap((v) => ['--var', v]);
   process.env.MOCK_PORT = String(mockPort);
-  child = spawn('npx', ['wrangler', 'dev', '--port', String(port), '--ip', '127.0.0.1', '--persist-to', dir, '--log-level', 'warn', ...vars], {
+  child = spawn('npx', ['wrangler', 'dev', '--test-scheduled', '--port', String(port), '--ip', '127.0.0.1', '--persist-to', dir, '--log-level', 'warn', ...vars], {
     env: { ...process.env, CI: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

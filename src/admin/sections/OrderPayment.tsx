@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Download, FileText, Link2, ReceiptText } from 'lucide-react';
+import { Check, Download, FileText, Link2, ReceiptText, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { TextField } from '../../components/ui/Field';
 import { Sheet } from '../../components/ui/Sheet';
 import { cx } from '../../components/ui/cx';
-import { chargeAmount, type Order, type ReceiptMeta } from '../../data/orders';
+import { chargeAmount, receiptsEraseAt, RECEIPTS_ERASABLE, settledSince, storedReceipts, type Order, type ReceiptMeta } from '../../data/orders';
 import { centsToInput, formatBRL, parseBRL } from '../../lib/format';
 import { useCatalog } from '../../store/catalog';
+import { toast } from '../../store/ui';
 import { formatDateTime } from '../lib/contact';
 import { ADMIN_BASE } from '../lib/paths';
-import { changeOrderStatus, chargeOrder, receiptObjectUrl, receiptUrl } from '../lib/orders';
+import { changeOrderStatus, chargeOrder, eraseReceipts, receiptObjectUrl, receiptUrl } from '../lib/orders';
 import { copyText, MessageActions, OrderMessageComposer, useOrderMessage } from './OrderMessages';
 
 /*
@@ -141,6 +142,70 @@ function ChargeBody({ order, onClose, onDone }: { order: Order; onClose: () => v
   );
 }
 
+/** Day only, in the store's time zone (the automatic erasure date). */
+const DAY = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Cuiaba' });
+
+/** A receipt whose file was erased after the payment: only the record stays. */
+function ErasedReceipt({ receipt, index }: { receipt: ReceiptMeta; index: number }) {
+  return (
+    <li className="flex items-center gap-3">
+      <span aria-hidden="true" className="inline-flex h-20 w-16 shrink-0 items-center justify-center rounded-[8px] bg-ivory text-ink-muted ring-1 ring-line">
+        <ReceiptText size={22} strokeWidth={1.4} />
+      </span>
+      <div className="min-w-0 text-sm">
+        <p>Comprovante {index + 1}</p>
+        <p className="text-ink-muted">Enviado em {formatDateTime(receipt.at)}</p>
+        <p className="text-ink-muted">Arquivo apagado em {formatDateTime(receipt.erasedAt!)}</p>
+      </div>
+    </li>
+  );
+}
+
+/** "Apagar comprovantes": once the payment is checked (paid, delivered or cancelled); asks before erasing. */
+function EraseReceipts({ order }: { order: Order }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const stored = storedReceipts(order).length;
+  if (!RECEIPTS_ERASABLE.has(order.status) || !stored) return null;
+  const since = settledSince(order);
+  const autoAt = since ? receiptsEraseAt(since) : null;
+
+  async function erase() {
+    if (busy) return;
+    setBusy(true);
+    const problem = await eraseReceipts(order);
+    setBusy(false);
+    setAsking(false);
+    toast(problem ?? (stored === 1 ? 'Comprovante apagado.' : 'Comprovantes apagados.'), { tone: problem ? 'error' : 'success' });
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-line pt-3">
+      <p className="text-sm text-ink-muted">
+        Pagamento conferido? O comprovante já pode ser apagado: o extrato do banco é a prova do recebimento.
+        {autoAt && ` Se ficar aqui, ele é apagado sozinho em ${DAY.format(autoAt)}.`}
+      </p>
+      {asking ? (
+        <div role="group" aria-label="Confirmar a exclusão" className="flex flex-col gap-2 rounded-[10px] bg-ivory p-3">
+          <p className="text-sm">{stored === 1 ? 'Apagar o comprovante deste pedido?' : `Apagar os ${stored} comprovantes deste pedido?`} O arquivo não poderá ser recuperado; fica só o registro de que ele foi recebido.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="danger" size="sm" disabled={busy} aria-busy={busy} onClick={() => void erase()}>
+              {busy ? 'Apagando…' : 'Apagar'}
+            </Button>
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => setAsking(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setAsking(true)} className="inline-flex min-h-11 items-center gap-1.5 self-start text-sm text-copper underline underline-offset-4">
+          <Trash2 size={15} strokeWidth={1.5} aria-hidden="true" /> {stored === 1 ? 'Apagar comprovante' : 'Apagar comprovantes'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ReceiptThumb({ receipt, number, index }: { receipt: ReceiptMeta; number: number; index: number }) {
   const [url, setUrl] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -229,13 +294,12 @@ export function PaymentSection({ order, onCharge, phone }: { order: Order; onCha
         <div className="flex flex-col gap-3">
           <p className={cx('flex items-center gap-2 text-sm font-medium', open ? 'text-copper' : 'text-ink-muted')}>
             <ReceiptText size={17} strokeWidth={1.5} aria-hidden="true" />
-            {open ? 'Comprovante recebido: confira o valor e o recebedor' : 'Comprovantes enviados pela cliente'}
+            {open && storedReceipts(order).length > 0 ? 'Comprovante recebido: confira o valor e o recebedor' : 'Comprovantes enviados pela cliente'}
           </p>
           <ul className="flex flex-col gap-3">
-            {receipts.map((r, i) => (
-              <ReceiptThumb key={r.id} receipt={r} number={order.number} index={i} />
-            ))}
+            {receipts.map((r, i) => (r.erasedAt ? <ErasedReceipt key={r.id} receipt={r} index={i} /> : <ReceiptThumb key={r.id} receipt={r} number={order.number} index={i} />))}
           </ul>
+          <EraseReceipts order={order} />
         </div>
       ) : (
         open && <p className="text-sm text-ink-muted">Aguardando a cliente pagar e enviar o comprovante pelo link.</p>

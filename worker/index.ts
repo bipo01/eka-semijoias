@@ -12,7 +12,7 @@ import { handleContractCheck, handleCreateKit, handleCreateReseller, handleEditK
 import { handleAcceptContract, handleAcceptInvite, handleCancelResellerSale, handleGetInvite, handleReportRepasse, handleResellerLogin, handleResellerLogout, handleResellerMe, handleResellerSale, handleShowcase } from './revenda';
 import { handleLive } from './live';
 import { handleAnonymizeOrder, handleCreateManualOrder, handleCreateOrder, handleDeleteOrder, handleEditOrderItems, handleListOrders, handleOrderStatus } from './orders';
-import { handleCharge, handleGetReceipt, handlePayView, handleUploadReceipt } from './payments';
+import { eraseExpiredReceipts, handleCharge, handleEraseReceipts, handleGetReceipt, handlePayView, handleUploadReceipt } from './payments';
 import { handlePushDelete, handlePushStatus, handlePushSubscribe, handlePushTest } from './push';
 import { handleGetStock, handlePutStock, handleSetStockMotive, handleStockMove } from './stock';
 import { handleMedia, handleUpload } from './media';
@@ -78,6 +78,7 @@ const router = new Router()
   .on('PUT', '/api/admin/orders/:id/items', handleEditOrderItems)
   .on('POST', '/api/admin/orders/:id/status', handleOrderStatus)
   .on('POST', '/api/admin/orders/:id/anonymize', handleAnonymizeOrder)
+  .on('POST', '/api/admin/orders/:id/receipts/erase', handleEraseReceipts)
   .on('DELETE', '/api/admin/orders/:id', handleDeleteOrder)
   .on('POST', '/api/admin/orders/:id/customer', handleLinkOrderCustomer)
   .on('GET', '/api/admin/customers', handleListCustomers)
@@ -254,8 +255,7 @@ export default {
         if (!match) throw new HttpError('not_found');
         if ('allowed' in match) throw new HttpError('method_not_allowed', undefined, undefined, { Allow: match.allowed.join(', ') });
         route = match.name;
-        // Webhooks come from the provider's servers (no Origin); they authenticate by signature instead.
-        if (request.method !== 'GET' && request.method !== 'HEAD' && !url.pathname.startsWith('/api/webhooks/')) assertSameOrigin(request);
+        if (request.method !== 'GET' && request.method !== 'HEAD') assertSameOrigin(request);
         const ctx: Context = { request, env, url, requestId, params: match.params, waitUntil: (p) => executionCtx.waitUntil(p) };
         response = await match.handler(ctx);
       }
@@ -275,5 +275,11 @@ export default {
     }
     if (route !== 'asset' || response.status !== 200) log({ event: 'request', requestId, method: request.method, route, status: response.status, ms: Date.now() - started });
     return response;
+  },
+
+  /** Daily cron (wrangler.jsonc): receipt files of orders settled for RECEIPT_KEEP_DAYS are erased. */
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    // Awaited (not waitUntil): a failure shows as a failed run in the Cron Events.
+    await eraseExpiredReceipts(env);
   },
 } satisfies ExportedHandler<Env>;

@@ -7,8 +7,15 @@ import {
   type Order,
   type PayView,
   currentReceipts,
+  RECEIPT_ERASE_WINDOW_MS,
+  RECEIPT_KEEP_MS,
+  RECEIPTS_ERASABLE,
+  receiptsExpired,
+  storedReceipts,
   type ReceiptType,
+  withReceiptsErased,
 } from '../src/data/orders';
+import type { Env } from './env';
 import type { Catalog } from '../src/data/schema';
 import { hitStatement, ipKey, pruneThrottle, requireSession, retryAfter } from './auth';
 import { parseSnapshotBody, WRITE_ATTEMPTS } from './catalog';
@@ -218,4 +225,90 @@ export async function handleGetReceipt(ctx: Context): Promise<Response> {
       'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'; sandbox",
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Receipt files are kept only while the payment is being checked
+// ---------------------------------------------------------------------------
+
+/** One guarded batch: the order keeps the receipts' record (date, type, size) and the files go. */
+function eraseStatements(db: D1Database, order: Order, stamp: string, at: string, summary: string) {
+  const next = { ...withReceiptsErased(order, at), updatedAt: at };
+  return {
+    next,
+    statements: [
+      unchanged(db, order.id, stamp), // a status change landed meanwhile: re-read so neither write is lost
+      db.prepare('UPDATE orders SET data = ?2, updated_at = ?3 WHERE id = ?1').bind(order.id, toData(next), at),
+      db.prepare('DELETE FROM receipts WHERE order_id = ?1').bind(order.id),
+      db.prepare('INSERT INTO audit_log (at, action, summary) VALUES (?1, ?2, ?3)').bind(at, 'order.receipts_erase', summary),
+    ],
+  };
+}
+
+/** POST /api/admin/orders/:id/receipts/erase — after the payment is checked (paid, delivered or cancelled). Idempotent. */
+export async function handleEraseReceipts(ctx: Context): Promise<Response> {
+  await requireSession(ctx);
+  const db = ctx.env.DB;
+  for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
+    const { order, stamp } = await readOrder(db, ctx.params.id ?? '');
+    if (!RECEIPTS_ERASABLE.has(order.status)) throw new HttpError('conflict', 'Os comprovantes podem ser apagados depois que o pagamento for conferido.', { order });
+    const stored = storedReceipts(order).length;
+    if (!stored) return json({ order });
+    const at = nextStamp(stamp);
+    const { next, statements } = eraseStatements(db, order, stamp, at, `Comprovantes do pedido ${order.number} apagados pela loja (${stored})`);
+    try {
+      await db.batch(statements);
+    } catch (error) {
+      if (isGuardMiss(error)) continue;
+      throw toHttpError(error);
+    }
+    ctx.waitUntil(notifyOrders(ctx.env));
+    return json({ order: next });
+  }
+  throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
+}
+
+/**
+ * Daily (cron trigger): erases the receipt files of orders settled for RECEIPT_KEEP_DAYS or longer.
+ * Reads only orders that still have stored files (index on receipts.order_id). A guard miss (the order
+ * changed meanwhile) is skipped: the next run picks it up.
+ */
+/** Orders handled per run: keeps a run inside the Free plan's per-invocation limits; the rest go the next day. */
+const ERASE_BATCH = 40;
+
+export async function eraseExpiredReceipts(env: Env, now = Date.now()): Promise<{ erased: number; orders: number }> {
+  const db = env.DB;
+  // Tests only: a finite, non-negative override; anything else (unset, empty, garbage) keeps the 7 days.
+  const override = env.DEV_RECEIPT_KEEP_MS?.trim() ? Number(env.DEV_RECEIPT_KEEP_MS) : NaN;
+  const keepMs = Number.isFinite(override) && override >= 0 ? override : RECEIPT_KEEP_MS;
+  const { results } = await withReadRetry(() =>
+    db
+      .prepare(
+        `SELECT id, number, status, updated_at, data, customer_id FROM orders o
+         WHERE status IN ('pago', 'entregue', 'cancelado') AND EXISTS (SELECT 1 FROM receipts r WHERE r.order_id = o.id)
+         ORDER BY updated_at LIMIT ?1`,
+      )
+      .bind(ERASE_BATCH)
+      .all<OrderRow>(),
+  );
+  let erased = 0;
+  let orders = 0;
+  for (const row of results) {
+    // One bad row (unreadable JSON, a failed write) never stops the run for the others.
+    try {
+      const order = toOrder(row);
+      if (!receiptsExpired(order, now + RECEIPT_ERASE_WINDOW_MS, keepMs)) continue;
+      const count = storedReceipts(order).length;
+      const at = nextStamp(row.updated_at);
+      const { statements } = eraseStatements(db, order, row.updated_at, at, `Comprovantes do pedido ${order.number} apagados automaticamente (${count})`);
+      await db.batch(statements);
+      erased += count;
+      orders += 1;
+    } catch (error) {
+      if (!isGuardMiss(error)) console.log(JSON.stringify({ event: 'receipts_erase_failed', order: row.number, message: error instanceof Error ? error.message : String(error) }));
+    }
+  }
+  if (orders) await notifyOrders(env);
+  console.log(JSON.stringify({ event: 'receipts_erase', orders, erased }));
+  return { erased, orders };
 }

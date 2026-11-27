@@ -98,7 +98,7 @@ function privacyBlocks(f: ContentFacts): Sections['privacidade']['blocks'] {
       text: [
         'Pedidos: seu nome, sua cidade, as peças escolhidas e a observação que você escrever. Servem para registrar o pedido, combinar o pagamento e a entrega pelo WhatsApp e cumprir a garantia.',
         'Pré-cadastro de revendedora: nome, WhatsApp, cidade, estado, Instagram, se já revende, como conheceu a ÉKA e a sua autorização de contato. Servem para avaliar o cadastro e conversar com você sobre a revenda.',
-        'Comprovante de pagamento: o arquivo que você envia na página de pagamento, usado só para conferir o pagamento do pedido.',
+        'Comprovante de pagamento: o arquivo que você envia na página de pagamento, usado só para conferir o pagamento do pedido. Depois que o pagamento é conferido, o arquivo é apagado: pela loja, na hora, ou automaticamente em até 7 dias. Fica só o registro de que ele foi recebido.',
         'Clientes atendidas: a loja pode cadastrar nome, WhatsApp, cidade, Instagram e aniversário de quem compra, para registrar compras, enviar o resumo da compra com a garantia e atender melhor.',
         'Revendedoras: dados do cadastro, peças da maleta, vendas registradas, acertos e o aceite do contrato (nome digitado, data, versão do contrato e um código que identifica a rede sem guardar o endereço dela).',
       ].join('\n\n'),

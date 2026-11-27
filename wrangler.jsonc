@@ -53,6 +53,8 @@
       "migrations_dir": "worker/migrations"
     }
   ],
+  // Daily at 07:00 UTC (03:00 in Cuiabá): erases receipt files 7 days after the payment (worker/payments.ts).
+  "triggers": { "crons": ["0 7 * * *"] },
   "durable_objects": {
     "bindings": [{ "name": "LIVE", "class_name": "LiveHub" }]
   },

@@ -154,8 +154,68 @@ export const receiptMetaSchema = z.object({
   size: z.number().int().min(1).max(RECEIPT_MAX_BYTES),
   /** The charge (payment link) the receipt answered; a new amount starts a new charge. */
   chargeToken: z.string().max(64).optional(),
+  /** When the file itself was erased (by the owner after checking the payment, or automatically); the record stays. */
+  erasedAt: isoDate.optional(),
 });
 export type ReceiptMeta = z.infer<typeof receiptMetaSchema>;
+
+/**
+ * Receipt files are kept only while the payment is being checked: the owner's bank statement is the real proof.
+ * Once an order is paid (or cancelled) she can erase them at once, and they go by themselves after this many days.
+ */
+export const RECEIPT_KEEP_DAYS = 7;
+export const RECEIPT_KEEP_MS = RECEIPT_KEEP_DAYS * 24 * 3600_000;
+/** Statuses in which the payment is settled (or no longer expected): receipt files may be erased. */
+export const RECEIPTS_ERASABLE: ReadonlySet<OrderStatus> = new Set(['pago', 'entregue', 'cancelado']);
+
+/**
+ * Since when the order has been settled without interruption: the first entry of the trailing run of
+ * history entries in an erasable status (pago → entregue keeps counting from pago; a reopened order
+ * starts over). Null while the order is open or has no such entry.
+ */
+export function settledSince(order: Pick<Order, 'status' | 'history'>): string | null {
+  if (!RECEIPTS_ERASABLE.has(order.status)) return null;
+  let since: string | null = null;
+  for (let i = order.history.length - 1; i >= 0; i--) {
+    const entry = order.history[i]!;
+    if (entry.event) continue; // item edits are not status changes
+    if (!RECEIPTS_ERASABLE.has(entry.status)) break;
+    since = entry.at;
+  }
+  return since;
+}
+
+/** Receipts whose file is still stored. */
+export const storedReceipts = (order: Pick<Order, 'receipts'>) => (order.receipts ?? []).filter((r) => !r.erasedAt);
+
+/** True when the files are due for automatic erasure (settled for RECEIPT_KEEP_MS or longer). */
+export function receiptsExpired(order: Pick<Order, 'status' | 'history' | 'receipts'>, now: number, keepMs = RECEIPT_KEEP_MS): boolean {
+  const since = settledSince(order);
+  return !!since && storedReceipts(order).length > 0 && Date.parse(since) + keepMs <= now;
+}
+
+/** Hour (UTC) of the daily cron that erases expired receipt files (wrangler.jsonc: 03:00 in Cuiabá). */
+export const RECEIPT_ERASE_HOUR_UTC = 7;
+/**
+ * The daily run erases files that would come due before the next run, so no file outlives
+ * RECEIPT_KEEP_DAYS (they go between 6 and 7 days after the order settled).
+ */
+export const RECEIPT_ERASE_WINDOW_MS = 24 * 3600_000;
+
+/** When the daily run will erase the files of an order settled at `since`: the first run inside the window. */
+export function receiptsEraseAt(since: string, keepMs = RECEIPT_KEEP_MS): Date {
+  const due = Date.parse(since) + keepMs - RECEIPT_ERASE_WINDOW_MS;
+  const run = new Date(due);
+  run.setUTCHours(RECEIPT_ERASE_HOUR_UTC, 0, 0, 0);
+  if (run.getTime() < due) run.setUTCDate(run.getUTCDate() + 1);
+  return run;
+}
+
+/** The order with every stored receipt marked as erased at `at`. */
+export function withReceiptsErased<T extends Pick<Order, 'receipts'>>(order: T, at: string): T {
+  if (!order.receipts?.length) return order;
+  return { ...order, receipts: order.receipts.map((r) => (r.erasedAt ? r : { ...r, erasedAt: at })) };
+}
 
 /** Amount of a charge: items + shipping − discount (never below one centavo). */
 export function chargeAmount(totalCents: number, shippingCents: number, discountCents: number): number {
@@ -195,7 +255,7 @@ export type Order = z.infer<typeof orderSchema>;
 export const saleCents = (order: Pick<Order, 'totalCents' | 'charge'>) => Math.max(0, order.totalCents - (order.charge?.discountCents ?? 0));
 
 /** True when a receipt arrived and the payment is still to be checked. */
-export const awaitingReview = (order: Pick<Order, 'status' | 'receipts'>) => !!order.receipts?.length && (order.status === 'enviado' || order.status === 'confirmado');
+export const awaitingReview = (order: Pick<Order, 'status' | 'receipts'>) => storedReceipts(order).length > 0 && (order.status === 'enviado' || order.status === 'confirmado');
 
 /** The public payment page (GET /api/pay/:token): no personal data beyond the first name. */
 export type PayState = 'aguardando' | 'analise' | 'pago' | 'cancelado';
@@ -213,7 +273,8 @@ export interface PayView {
 }
 
 /** Receipts sent for the current charge (older charges' receipts stay for the admin only). */
-export const currentReceipts = (order: Pick<Order, 'receipts' | 'charge'>) => (order.receipts ?? []).filter((r) => !order.charge || !r.chargeToken || r.chargeToken === order.charge.token);
+/** An erased file is no longer under review: a reopened order asks for the payment again. */
+export const currentReceipts = (order: Pick<Order, 'receipts' | 'charge'>) => (order.receipts ?? []).filter((r) => !r.erasedAt && (!order.charge || !r.chargeToken || r.chargeToken === order.charge.token));
 
 export function payState(order: Pick<Order, 'status' | 'receipts' | 'charge'>): PayState {
   if (order.status === 'cancelado') return 'cancelado';

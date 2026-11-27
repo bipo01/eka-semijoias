@@ -1047,6 +1047,65 @@ describe('Pix charges and receipts', () => {
     expect((await new Client().req(`/api/pay/${token}`)).status).toBe(404);
     await withPix(a, false);
   });
+
+  /** A confirmed order with a charge and one receipt sent through the payment link. */
+  async function paidWithReceipt(a: Client, name: string, to: 'confirmado' | 'pago') {
+    const { order } = await newOrder(a, name);
+    await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'enviado', to: 'confirmado' } });
+    const token = (await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 0, discountCents: 0 } })).json.order.charge.token;
+    expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
+    if (to === 'pago') expect((await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'confirmado', to: 'pago' } })).status).toBe(200);
+    const fresh = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id);
+    return { order: fresh, receiptId: fresh.receipts[0].id as string };
+  }
+
+  it('erases the receipt files once the payment is checked, keeping the record of each one', async () => {
+    const a = await admin();
+    await withPix(a, true);
+    const { order, receiptId } = await paidWithReceipt(a, 'Clara Apaga', 'confirmado');
+    // Still checking the payment: the file stays.
+    const early = await a.req(`/api/admin/orders/${order.id}/receipts/erase`, { body: {} });
+    expect(early.status).toBe(409);
+    expect((await a.req(`/api/admin/receipts/${receiptId}`)).status).toBe(200);
+    expect((await new Client().req(`/api/admin/orders/${order.id}/receipts/erase`, { body: {} })).status).toBe(401);
+
+    await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'confirmado', to: 'pago' } });
+    const erased = await a.req(`/api/admin/orders/${order.id}/receipts/erase`, { body: {} });
+    expect(erased.status).toBe(200);
+    expect(erased.json.order.receipts).toEqual([expect.objectContaining({ id: receiptId, erasedAt: expect.any(String) })]);
+    expect((await a.req(`/api/admin/receipts/${receiptId}`)).status).toBe(404);
+    // Idempotent: a second tap changes nothing.
+    const again = await a.req(`/api/admin/orders/${order.id}/receipts/erase`, { body: {} });
+    expect(again.json.order.updatedAt).toBe(erased.json.order.updatedAt);
+    // Reopened after the erasure: the link asks for the payment again (Pix shown) and takes a new receipt,
+    // and the order is back in the owner's review queue once it arrives.
+    await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'pago', to: 'confirmado' } });
+    const token = order.charge.token;
+    expect((await new Client().req(`/api/pay/${token}`)).json.state).toBe('aguardando');
+    expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
+    expect((await new Client().req(`/api/pay/${token}`)).json.state).toBe('analise');
+    await withPix(a, false);
+  });
+
+  it('the daily run erases the files of settled orders only (wrangler --test-scheduled, keep time 0 in tests)', async () => {
+    const a = await admin();
+    await withPix(a, true);
+    const settled = await paidWithReceipt(a, 'Rita Paga', 'pago');
+    const open = await paidWithReceipt(a, 'Lia Confere', 'confirmado');
+    const run = await fetch(`${BASE()}/__scheduled?cron=${encodeURIComponent('0 7 * * *')}`);
+    expect(run.status).toBe(200);
+    let after: any;
+    for (let i = 0; i < 60; i++) {
+      after = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === settled.order.id);
+      if (after.receipts[0].erasedAt) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(after.receipts[0].erasedAt).toBeTruthy();
+    expect((await a.req(`/api/admin/receipts/${settled.receiptId}`)).status).toBe(404);
+    // An order still waiting for the payment check keeps its file.
+    expect((await a.req(`/api/admin/receipts/${open.receiptId}`)).status).toBe(200);
+    await withPix(a, false);
+  });
 });
 
 

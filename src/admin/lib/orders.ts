@@ -97,6 +97,14 @@ export function anonymizeOrder(order: Order): Promise<string | null> {
   );
 }
 
+/** Erases the receipt files of a paid, delivered or cancelled order (the record of each one stays). */
+export function eraseReceipts(order: Order): Promise<string | null> {
+  return run(
+    () => api<{ order: Order }>(`/api/admin/orders/${encodeURIComponent(order.id)}/receipts/erase`, { json: {}, retries: 1 }),
+    (r) => r.order && useOrders.getState().replace(orderSchema.parse(r.order)),
+  );
+}
+
 export function deleteOrder(order: Order): Promise<string | null> {
   return run(
     () => api<{ deleted: boolean }>(`/api/admin/orders/${encodeURIComponent(order.id)}`, { method: 'DELETE', retries: 1 }),
