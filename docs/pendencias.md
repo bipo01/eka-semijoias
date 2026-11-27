@@ -184,7 +184,7 @@ Registrado em 25/11/2026, depois de olhar o site como dona de loja, cliente e pr
 1. ~~Backend (pré-requisito de tudo).~~ Feito em 23/11/2026.
 2. ~~Registro de pedidos + relatório de vendas.~~ Feito em 23/11/2026.
 3. ~~Controle de estoque (usa a confirmação de pedidos).~~ Feito em 23/11/2026.
-4. ~~Pix estático~~ (feito em 23/11/2026). ~~Pix dinâmico~~: feito com o Mercado Pago, desligado até a conta ser ligada.
+4. ~~Pix estático~~ (feito em 23/11/2026). Pix dinâmico: feito com o Mercado Pago em 23/11/2026 e retirado em 26/11/2026; a loja prefere conferir o Pix pelo comprovante.
 5. ~~Botão "Instalar o app" (item 4) e padronizador de fotos (item 5).~~ Feitos em 23/11/2026, com pedido manual, edição de peças e avisos no celular.
 
 ## Tempo real (atualização ao vivo)

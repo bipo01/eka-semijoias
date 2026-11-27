@@ -18,7 +18,6 @@ import { BASE_HEADERS, HttpError, json, readBody, readJson } from './http';
 import { notifyOrders } from './live';
 import { notifyOwner, receiptNotice } from './push';
 import { sniffReceipt } from './media';
-import { cancelMpPix, mpEnabled } from './mercadopago';
 import { nextStamp, readOrder, toData, toOrder, unchanged, type OrderRow } from './orders';
 import type { Context } from './router';
 
@@ -63,14 +62,14 @@ export async function handleCharge(ctx: Context): Promise<Response> {
       throw new HttpError('conflict', order.status === 'enviado' ? 'Confirme o pedido antes de cobrar.' : 'Este pedido não aceita mais cobrança.', { order });
     }
     const snapshot = await withReadRetry(() => db.prepare('SELECT body FROM catalog_snapshot WHERE id = 1').first<{ body: string }>());
-    if (!currentPix(snapshot?.body) && !mpEnabled(ctx.env)) throw new HttpError('not_configured', 'Cadastre a chave Pix em Configurações antes de cobrar.');
+    if (!currentPix(snapshot?.body)) throw new HttpError('not_configured', 'Cadastre a chave Pix em Configurações antes de cobrar.');
     const amountCents = chargeAmount(order.totalCents, shippingCents, discountCents);
     if (amountCents < 1) throw new HttpError('bad_request', 'O desconto não pode ser maior que o pedido com frete.');
 
     const sameAmount = order.charge && order.charge.amountCents === amountCents && order.charge.shippingCents === shippingCents && order.charge.discountCents === discountCents;
     const at = nextStamp(stamp);
     const token = sameAmount ? order.charge!.token : randomToken().slice(0, 32);
-    // Same amount: the link and any automatic Pix already generated stay valid.
+    // Same amount: the link already sent stays valid.
     const next: Order = { ...order, updatedAt: at, charge: sameAmount ? order.charge! : { token, shippingCents, discountCents, amountCents, createdAt: at } };
     try {
       await db.batch([
@@ -83,8 +82,6 @@ export async function handleCharge(ctx: Context): Promise<Response> {
       throw toHttpError(error);
     }
     ctx.waitUntil(notifyOrders(ctx.env));
-    // A new amount replaces the charge: an automatic Pix made for the old one must not stay payable.
-    if (!sameAmount && order.charge?.mp && !order.charge.paidBy) ctx.waitUntil(cancelMpPix(ctx.env, order.charge.mp.id));
     return json({ order: next });
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
@@ -124,8 +121,6 @@ export async function handlePayView(ctx: Context): Promise<Response> {
     state: payState(order),
     receipts: currentReceipts(order).map((r) => ({ at: r.at })),
     pix: pix ? { key: pix.key, name: pix.name, city: pix.city } : null,
-    auto: mpEnabled(ctx.env) && order.status === 'confirmado' && !order.anonymized,
-    mp: charge.mp && Date.parse(charge.mp.expiresAt) > Date.now() ? { qr: charge.mp.qr, expiresAt: charge.mp.expiresAt } : null,
   };
   return json(view, { headers: { 'Referrer-Policy': 'no-referrer' } });
 }

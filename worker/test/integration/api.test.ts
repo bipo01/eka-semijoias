@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- API payloads are asserted field by field in these tests. */
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
-import { MP_WEBHOOK_SECRET } from '../global-setup';
 
 /*
  * End-to-end API tests against a real local Worker (workerd, local D1 and the
@@ -1028,16 +1027,14 @@ describe('Pix charges and receipts', () => {
     expect((await a.req(`/api/admin/orders/${order.id}/items`, { method: 'PUT', body: { items: [line], stamp: paid.updatedAt } })).status).toBe(409);
   });
 
-  it('charges without a Pix key only through the automatic Pix, caps receipts per order and drops them with the order', async () => {
+  it('refuses a charge without a Pix key, caps receipts per order and drops them with the order', async () => {
     const a = await admin();
     await withPix(a, false);
     const { order } = await newOrder(a, 'Bia');
     await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'enviado', to: 'confirmado' } });
-    // This suite runs with the Mercado Pago secrets: the automatic Pix covers an order without a key
-    // (without the secrets the charge is refused with 503 until a key is saved).
+    // No Pix key: the charge is refused until a key is saved in Configurações.
     const noPix = await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 0, discountCents: 0 } });
-    expect(noPix.status).toBe(200);
-    expect((await new Client().req(`/api/pay/${noPix.json.order.charge.token}`)).json).toMatchObject({ pix: null, auto: true });
+    expect(noPix.json.error.code).toBe('not_configured');
     await withPix(a, true);
     const token = (await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 0, discountCents: 0 } })).json.order.charge.token;
     for (let i = 0; i < 6; i++) expect((await new Client().req(`/api/pay/${token}/receipt`, { raw: pngBytes(), type: 'image/png' })).status).toBe(201);
@@ -1056,7 +1053,7 @@ describe('Pix charges and receipts', () => {
 
 
 // ---------------------------------------------------------------------------
-// Phone notices (Web Push) and the automatic Pix (Mercado Pago), against a mock server
+// Phone notices (Web Push), against a mock server
 // ---------------------------------------------------------------------------
 
 interface PushHit {
@@ -1064,20 +1061,9 @@ interface PushHit {
   headers: IncomingMessage['headers'];
   body: Buffer;
 }
-interface MockPayment {
-  id: number;
-  status: string;
-  transaction_amount: number;
-  currency_id: string;
-  external_reference: string;
-}
 const mock = {
   pushHits: [] as PushHit[],
   pushStatus: new Map<string, number>(),
-  payments: new Map<number, MockPayment>(),
-  idempotency: new Map<string, number>(),
-  creates: [] as { body: any; key: string | undefined; auth: string | undefined }[],
-  cancels: [] as number[],
 };
 let mockServer: Server;
 
@@ -1095,29 +1081,6 @@ beforeAll(async () => {
       if (url.startsWith('/push/')) {
         mock.pushHits.push({ path: url, headers: req.headers, body });
         return send(mock.pushStatus.get(url) ?? 201);
-      }
-      if (req.method === 'POST' && url === '/v1/payments') {
-        const parsed = JSON.parse(body.toString());
-        const key = req.headers['x-idempotency-key'] as string | undefined;
-        mock.creates.push({ body: parsed, key, auth: req.headers.authorization });
-        let id = key ? mock.idempotency.get(key) : undefined;
-        if (!id) {
-          id = 900_000 + mock.payments.size + 1;
-          if (key) mock.idempotency.set(key, id);
-          mock.payments.set(id, { id, status: 'pending', transaction_amount: parsed.transaction_amount, currency_id: 'BRL', external_reference: parsed.external_reference });
-        }
-        return send(201, { id, status: 'pending', point_of_interaction: { transaction_data: { qr_code: `00020126MOCKPIX${id}-6304ABCD` } } });
-      }
-      const m = /^\/v1\/payments\/(\d+)$/.exec(url);
-      if (req.method === 'PUT' && m) {
-        mock.cancels.push(Number(m[1]));
-        const payment = mock.payments.get(Number(m[1]));
-        if (payment && payment.status === 'pending') payment.status = 'cancelled';
-        return payment ? send(200, payment) : send(404, {});
-      }
-      if (req.method === 'GET' && m) {
-        const payment = mock.payments.get(Number(m[1]));
-        return payment ? send(200, payment) : send(404, { message: 'not found' });
       }
       send(404);
     });
@@ -1214,111 +1177,6 @@ describe('phone notices (Web Push)', () => {
     expect(test.json.sent).toBeGreaterThanOrEqual(1);
     expect((await a.req(`/api/admin/push/${mine.id}`, { method: 'DELETE' })).json.deleted).toBe(true);
     expect((await a.req('/api/admin/push')).json.devices.some((d: any) => d.id === mine.id)).toBe(false);
-  });
-});
-
-describe('automatic Pix (Mercado Pago)', () => {
-  const sign = (dataId: string, requestId: string, ts = String(Date.now())) => `ts=${ts},v1=${createHmac('sha256', MP_WEBHOOK_SECRET).update(`id:${dataId};request-id:${requestId};ts:${ts};`).digest('hex')}`;
-  const notify = (paymentId: number | string, headers?: Record<string, string>) => {
-    const requestId = randomUUID();
-    return new Client().req(`/api/webhooks/mercadopago?data.id=${paymentId}&type=payment`, {
-      body: { action: 'payment.updated', data: { id: String(paymentId) } },
-      origin: null,
-      headers: headers ?? { 'x-signature': sign(String(paymentId), requestId), 'x-request-id': requestId },
-    });
-  };
-
-  async function chargedOrder(a: Client) {
-    const c = await catalog();
-    const product = c.products.find((p: any) => p.available && p.variants.every((v: any) => v.available && !v.sizes?.length) && !c.stock?.[p.id]);
-    const created = await new Client().req('/api/orders', { body: { items: [{ productId: product.id, variantId: product.variants[0].id, qty: 1 }], name: 'Paula Pix', city: 'Rio' }, headers: { 'Idempotency-Key': randomUUID() } });
-    const order = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.number === created.json.order.number);
-    await a.req(`/api/admin/orders/${order.id}/status`, { body: { from: 'enviado', to: 'confirmado' } });
-    const charged = await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 1500, discountCents: 0 } });
-    expect(charged.status).toBe(200);
-    return charged.json.order;
-  }
-
-  it('creates one dynamic Pix per charge and marks the order paid only on a signed, approved, exact payment', async () => {
-    const a = await admin();
-    const order = await chargedOrder(a);
-    const token = order.charge.token;
-    const view = await new Client().req(`/api/pay/${token}`);
-    expect(view.json).toMatchObject({ auto: true, mp: null });
-
-    expect((await new Client().req(`/api/pay/${token}/pix`, { body: { email: 'nao-e-email' } })).status).toBe(400);
-    const pix = await new Client().req(`/api/pay/${token}/pix`, { body: { email: 'Paula@Example.com' } });
-    expect(pix.status).toBe(200);
-    expect(pix.json.mp.qr).toMatch(/^00020126MOCKPIX\d+/);
-    const create = mock.creates.at(-1)!;
-    expect(create.auth).toBe('Bearer TEST-integration-token');
-    expect(create.key).toBe(`eka-${token}-1`);
-    expect(create.body).toMatchObject({ transaction_amount: order.charge.amountCents / 100, payment_method_id: 'pix', payer: { email: 'paula@example.com' }, external_reference: `${order.id}:${token}` });
-    expect(create.body.notification_url).toMatch(/\/api\/webhooks\/mercadopago\?source_news=webhooks$/);
-    expect(create.body.date_of_expiration).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}-03:00$/);
-    // A second tap shows the same Pix (no second payment).
-    const again = await new Client().req(`/api/pay/${token}/pix`, { body: { email: 'paula@example.com' } });
-    expect(again.json.mp.qr).toBe(pix.json.mp.qr);
-    expect(mock.creates.filter((c) => c.key?.startsWith(`eka-${token}`))).toHaveLength(1);
-    expect((await new Client().req(`/api/pay/${token}`)).json.mp.qr).toBe(pix.json.mp.qr);
-    // The e-mail is not kept anywhere in the order.
-    expect(JSON.stringify((await a.req('/api/admin/orders')).json)).not.toContain('paula@example.com');
-
-    const paymentId = Number(/MOCKPIX(\d+)/.exec(pix.json.mp.qr)![1]);
-    const state = async () => (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id);
-
-    // Unsigned, badly signed or stale notices are refused and change nothing.
-    expect((await notify(paymentId, {})).status).toBe(401);
-    expect((await notify(paymentId, { 'x-signature': 'ts=1,v1=' + '0'.repeat(64), 'x-request-id': 'x' })).status).toBe(401);
-    const rid = randomUUID();
-    expect((await notify(paymentId, { 'x-signature': sign(String(paymentId), rid, String(Date.now() - 8 * 24 * 3600_000)), 'x-request-id': rid })).status).toBe(401);
-    mock.payments.get(paymentId)!.status = 'approved';
-    expect((await notify(paymentId, { 'x-signature': sign(String(paymentId + 1), rid), 'x-request-id': rid })).status).toBe(401); // signature of another payment
-    // Still pending at Mercado Pago: nothing changes.
-    mock.payments.get(paymentId)!.status = 'pending';
-    expect((await notify(paymentId)).json.outcome).toBe('pending');
-    expect((await state()).status).toBe('confirmado');
-    // Exact and approved: paid, once. (Approved payments that do not match are covered below.)
-    mock.payments.get(paymentId)!.status = 'approved';
-    expect((await notify(paymentId)).json.outcome).toBe('paid');
-    const paid = await state();
-    expect(paid).toMatchObject({ status: 'pago', charge: { paidBy: 'mercadopago' } });
-    expect(paid.history.at(-1).status).toBe('pago');
-    expect((await notify(paymentId)).json.outcome).toBe('already');
-    expect((await state()).history.length).toBe(paid.history.length);
-    expect((await new Client().req(`/api/pay/${token}`)).json.state).toBe('pago');
-    expect((await new Client().req(`/api/pay/${token}/pix/check`, { body: {} })).json.state).toBe('pago');
-    // Unknown payments and other topics are acknowledged without effect.
-    expect((await notify(123)).json.outcome).toBe('ignored');
-  });
-
-  it('pays through "Já paguei" when the notice is late, and a new amount needs a new Pix', async () => {
-    const a = await admin();
-    const order = await chargedOrder(a);
-    const token = order.charge.token;
-    const pix = await new Client().req(`/api/pay/${token}/pix`, { body: { email: 'cliente@example.com' } });
-    const paymentId = Number(/MOCKPIX(\d+)/.exec(pix.json.mp.qr)![1]);
-    expect((await new Client().req(`/api/pay/${token}/pix/check`, { body: {} })).json.state).toBe('aguardando');
-
-    // The owner changes the shipping: new charge, new link; the old payment no longer matches.
-    const recharged = (await a.req(`/api/admin/orders/${order.id}/charge`, { body: { shippingCents: 2500, discountCents: 0 } })).json.order;
-    expect(recharged.charge.token).not.toBe(token);
-    expect(recharged.charge.mp).toBeUndefined();
-    // The old Pix is cancelled at Mercado Pago so it cannot be paid any more…
-    await waitFor(() => (mock.cancels.includes(paymentId) ? true : undefined));
-    // …but if the customer had paid it already, the money is kept on the order for the owner to see.
-    mock.payments.get(paymentId)!.status = 'approved';
-    expect((await notify(paymentId)).json.outcome).toBe('ignored');
-    const afterStray = (await a.req('/api/admin/orders')).json.orders.find((o: any) => o.id === order.id);
-    expect(afterStray.status).toBe('confirmado');
-    expect(afterStray.strayPayments).toEqual([expect.objectContaining({ id: String(paymentId), amountCents: order.charge.amountCents })]);
-    expect((await notify(paymentId)).json.outcome).toBe('already');
-
-    const pix2 = await new Client().req(`/api/pay/${recharged.charge.token}/pix`, { body: { email: 'cliente@example.com' } });
-    const payment2 = Number(/MOCKPIX(\d+)/.exec(pix2.json.mp.qr)![1]);
-    expect(payment2).not.toBe(paymentId);
-    mock.payments.get(payment2)!.status = 'approved';
-    expect((await new Client().req(`/api/pay/${recharged.charge.token}/pix/check`, { body: {} })).json.state).toBe('pago');
   });
 });
 

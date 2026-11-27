@@ -27,7 +27,6 @@ import { guard, isGuardMiss, toHttpError, withReadRetry } from './db';
 import { HttpError, json, readBody, readJson, zodDetails } from './http';
 import { notifyCatalog, notifyOrders } from './live';
 import { notifyOwner, orderNotice } from './push';
-import { cancelMpPix, mpEnabled } from './mercadopago';
 import type { Context } from './router';
 import { publishStatements, type StockState } from './stock';
 import { planStock, takeForLines } from './stockPlan';
@@ -213,7 +212,7 @@ export async function handleListOrders(ctx: Context): Promise<Response> {
       .bind(since, LIST_LIMIT)
       .all<OrderRow>(),
   );
-  return json({ orders: results.map(toOrder), limit: LIST_LIMIT, autoPix: mpEnabled(ctx.env) });
+  return json({ orders: results.map(toOrder), limit: LIST_LIMIT });
 }
 
 /** The order plus the stored `updated_at`, which every write checks (compare-and-swap on the whole row). */
@@ -344,8 +343,6 @@ export async function handleOrderStatus(ctx: Context): Promise<Response> {
     }
     ctx.waitUntil(notifyOrders(ctx.env));
     if (publishVersion !== null) ctx.waitUntil(notifyCatalog(ctx.env, publishVersion));
-    // Back to negotiation or cancelled: a pending automatic Pix must not stay payable.
-    if ((to === 'enviado' || to === 'cancelado') && order.charge?.mp && !order.charge.paidBy) ctx.waitUntil(cancelMpPix(ctx.env, order.charge.mp.id));
     return json({ order: next, ...(publishVersion !== null ? { version: publishVersion } : {}) });
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
@@ -378,7 +375,6 @@ export async function handleAnonymizeOrder(ctx: Context): Promise<Response> {
       throw toHttpError(error);
     }
     ctx.waitUntil(notifyOrders(ctx.env));
-    if (order.charge?.mp && !order.charge.paidBy) ctx.waitUntil(cancelMpPix(ctx.env, order.charge.mp.id));
     return json({ order: next });
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');
@@ -650,7 +646,6 @@ export async function handleEditOrderItems(ctx: Context): Promise<Response> {
     }
     ctx.waitUntil(notifyOrders(ctx.env));
     if (publish) ctx.waitUntil(notifyCatalog(ctx.env, publish.version));
-    if (dropCharge && order.charge?.mp && !order.charge.paidBy) ctx.waitUntil(cancelMpPix(ctx.env, order.charge.mp.id));
     return json({ order: next, chargeDropped: dropCharge, ...(publish ? { version: publish.version } : {}) });
   }
   throw new HttpError('unavailable', 'Muitas alterações ao mesmo tempo. Tente de novo.');

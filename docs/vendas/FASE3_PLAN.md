@@ -64,6 +64,9 @@
   - No iPhone só funciona com o Painel instalado (iOS 16.4+), e a tela explica isso.
 
 ## 6. Pix automático (Mercado Pago)
+
+> **Retirado em 26/11/2026:** a loja confere o Pix pelo comprovante. O código saiu do sistema; esta seção fica como histórico.
+
 - **Por que o Mercado Pago:** API simples com token Bearer (a Efí exige certificado mTLS), Pix com QR dinâmico e webhook assinado. A taxa do Pix é cobrada pelo Mercado Pago.
 - **Liga sozinho quando os secrets existem:** `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET`. Sem eles, o Pix estático de hoje continua igual.
 - **Fluxo:**

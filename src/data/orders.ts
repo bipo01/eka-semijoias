@@ -137,18 +137,6 @@ export type ReceiptType = (typeof RECEIPT_TYPES)[number];
 export const RECEIPT_MAX_BYTES = 700_000;
 export const MAX_RECEIPTS_PER_ORDER = 6;
 
-/** An automatic Pix created at Mercado Pago for the current charge (dynamic QR, confirmed by webhook). */
-export const mpPixSchema = z.object({
-  /** Mercado Pago payment id. */
-  id: z.string().regex(/^\d{1,20}$/),
-  /** Pix copia e cola of that payment. */
-  qr: z.string().min(10).max(1000),
-  expiresAt: isoDate,
-  /** How many payments were created for this charge (the next one's idempotency key). */
-  seq: z.number().int().min(1).max(50),
-});
-export type MpPix = z.infer<typeof mpPixSchema>;
-
 /** The current Pix charge of an order: what the payment link asks for. */
 export const chargeSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/),
@@ -156,9 +144,6 @@ export const chargeSchema = z.object({
   discountCents: z.number().int().min(0).max(100_000_000),
   amountCents: z.number().int().min(1).max(100_000_000),
   createdAt: isoDate,
-  mp: mpPixSchema.optional(),
-  /** Set when Mercado Pago confirmed the payment (the order moved to "pago" by itself). */
-  paidBy: z.literal('mercadopago').optional(),
 });
 export type Charge = z.infer<typeof chargeSchema>;
 
@@ -203,11 +188,6 @@ export const orderSchema = z.object({
   anonymized: z.boolean().optional(),
   charge: chargeSchema.optional(),
   receipts: z.array(receiptMetaSchema).max(MAX_RECEIPTS_PER_ORDER).optional(),
-  /**
-   * Approved Mercado Pago payments that could not settle this order (an old charge, a second payment,
-   * an order no longer awaiting payment): the money arrived, so the owner must see it and decide.
-   */
-  strayPayments: z.array(z.object({ id: z.string().max(24), amountCents: z.number().int().min(0), at: isoDate })).max(10).optional(),
 });
 export type Order = z.infer<typeof orderSchema>;
 
@@ -230,10 +210,6 @@ export interface PayView {
   state: PayState;
   receipts: { at: string }[];
   pix: { key: string; name: string; city: string } | null;
-  /** Automatic Pix (Mercado Pago) can be generated for this charge. */
-  auto: boolean;
-  /** The automatic Pix already generated and still valid. */
-  mp: { qr: string; expiresAt: string } | null;
 }
 
 /** Receipts sent for the current charge (older charges' receipts stay for the admin only). */

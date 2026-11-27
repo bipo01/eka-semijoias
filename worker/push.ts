@@ -121,20 +121,6 @@ export const receiptNotice = (number: number, amountCents: number): PushNotice =
   tag: `pedido-${number}`,
 });
 
-export const paidNotice = (number: number, amountCents: number): PushNotice => ({
-  title: `Pix recebido · pedido nº ${number}`,
-  body: `${formatBRL(amountCents)} confirmado pelo Mercado Pago. O pedido já está como pago.`,
-  url: `/admin/pedidos?pedido=${number}`,
-  tag: `pedido-${number}`,
-});
-
-export const strayNotice = (number: number, amountCents: number): PushNotice => ({
-  title: `Pix a conferir · pedido nº ${number}`,
-  body: `Chegou ${formatBRL(amountCents)} pelo Mercado Pago, mas não bate com a cobrança atual. Confira no painel.`,
-  url: `/admin/pedidos?pedido=${number}`,
-  tag: `pedido-${number}`,
-});
-
 // ---------------------------------------------------------------------------
 // Admin endpoints
 // ---------------------------------------------------------------------------

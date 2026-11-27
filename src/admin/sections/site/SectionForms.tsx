@@ -344,12 +344,6 @@ function PagamentoForm() {
         <TextInput path={['pix', 'qrHint']} label="Frase acima do QR Code" />
         <TextInput path={['pix', 'unavailable']} label="Aviso quando a chave Pix não está cadastrada" long rows={3} />
       </Group>
-      <Group title="Pix automático" hint="Só aparece quando o Pix automático do Mercado Pago está ligado. O passo 1 é o mesmo do Pix.">
-        <TextInput path={['autoPix', 'intro']} label="Explicação antes de gerar o Pix" long rows={3} />
-        <TextInput path={['autoPix', 'step2']} label="Passo 2" long rows={2} hint="{total} é o valor do pedido." />
-        <TextInput path={['autoPix', 'step3']} label="Passo 3" long rows={2} />
-        <TextInput path={['autoPix', 'notYet']} label="Quando ela toca em “Já paguei” e o pagamento ainda não chegou" long rows={2} />
-      </Group>
       <Group title="Comprovante">
         <TextInput path={['receipt', 'title']} label="Título para enviar o comprovante" />
         <TextInput path={['receipt', 'againTitle']} label="Título para enviar mais um comprovante" />

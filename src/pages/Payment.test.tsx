@@ -27,8 +27,6 @@ const view = (over: Partial<PayView> = {}): PayView => ({
   state: 'aguardando',
   receipts: [],
   pix: { key: '65999998888', name: 'EKA SEMIJOIAS', city: 'CUIABA' },
-  auto: false,
-  mp: null,
   ...over,
 });
 

@@ -15,8 +15,6 @@ type OrdersState = { status: 'loading' } | { status: 'ready'; orders: Order[] } 
 
 interface OrdersStore {
   state: OrdersState;
-  /** The automatic Pix (Mercado Pago) is on: a charge works without the static key. */
-  autoPix: boolean;
   load: () => Promise<void>;
   replace: (order: Order) => void;
   drop: (id: string) => void;
@@ -35,12 +33,11 @@ const parseOrders = (raw: unknown): Order[] => {
 
 export const useOrders = create<OrdersStore>()((set, get) => ({
   state: { status: 'loading' },
-  autoPix: false,
   load: async () => {
     const mine = ++seq;
     try {
       const raw = await api<unknown>('/api/admin/orders', { retries: 2 });
-      if (mine === seq) set({ state: { status: 'ready', orders: parseOrders(raw) }, autoPix: (raw as { autoPix?: unknown } | null)?.autoPix === true });
+      if (mine === seq) set({ state: { status: 'ready', orders: parseOrders(raw) } });
     } catch (error) {
       if (mine !== seq) return;
       if (error instanceof ApiError && error.code === 'unauthenticated') signalSessionLost();

@@ -42,8 +42,3 @@ function sendReceipt(token: string, blob: Blob, type: ReceiptType, onProgress?: 
   });
 }
 
-/** Asks for an automatic Pix (Mercado Pago) for this payment link. */
-export const createAutoPix = (token: string, email: string) => api<{ mp: { qr: string; expiresAt: string } }>(`/api/pay/${encodeURIComponent(token)}/pix`, { json: { email }, retries: 1, timeoutMs: 25_000 });
-
-/** "Já paguei": asks the server to check the automatic Pix with Mercado Pago now. */
-export const checkAutoPix = (token: string) => api<{ state: 'pago' | 'aguardando' }>(`/api/pay/${encodeURIComponent(token)}/pix/check`, { json: {}, timeoutMs: 20_000 });

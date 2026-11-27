@@ -27,8 +27,8 @@ describe('PrivacyPage', () => {
     for (const block of blocks) expect(screen.getByRole('region', { name: block.title })).toBeInTheDocument();
     // "Quais dados usamos" has one paragraph per kind of data.
     const dados = screen.getByRole('region', { name: 'Quais dados usamos e para quê' });
-    expect(dados.querySelectorAll('p').length).toBe(6);
-    expect(screen.getByText(/Atualizada em/)).toHaveTextContent('Atualizada em 24 de novembro de 2026');
+    expect(dados.querySelectorAll('p').length).toBe(5);
+    expect(screen.getByText(/Atualizada em/)).toHaveTextContent('Atualizada em 26 de novembro de 2026');
     expect(document.title).toBe('Política de privacidade · ÉKA Semijoias');
   });
 

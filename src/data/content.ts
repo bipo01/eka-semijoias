@@ -294,13 +294,6 @@ export const sectionSchemas = {
       /** Shown instead of the Pix when the store has no Pix key. */
       unavailable: req(300),
     }),
-    autoPix: z.object({
-      intro: req(300),
-      /** {total} */
-      step2: req(200),
-      step3: req(200),
-      notYet: req(200),
-    }),
     receipt: z.object({
       title: req(60),
       againTitle: req(60),

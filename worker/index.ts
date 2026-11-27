@@ -16,7 +16,6 @@ import { handleCharge, handleGetReceipt, handlePayView, handleUploadReceipt } fr
 import { handlePushDelete, handlePushStatus, handlePushSubscribe, handlePushTest } from './push';
 import { handleGetStock, handlePutStock, handleSetStockMotive, handleStockMove } from './stock';
 import { handleMedia, handleUpload } from './media';
-import { handleCheckMpPix, handleCreateMpPix, handleMpWebhook } from './mercadopago';
 import { Router, type Context } from './router';
 
 export { LiveHub } from './live';
@@ -40,9 +39,6 @@ const router = new Router()
   .on('POST', '/api/orders', handleCreateOrder)
   .on('GET', '/api/pay/:token', handlePayView)
   .on('POST', '/api/pay/:token/receipt', handleUploadReceipt)
-  .on('POST', '/api/pay/:token/pix', handleCreateMpPix)
-  .on('POST', '/api/pay/:token/pix/check', handleCheckMpPix)
-  .on('POST', '/api/webhooks/mercadopago', handleMpWebhook)
   .on('GET', '/api/admin/session', handleSessionStatus)
   .on('POST', '/api/admin/login', handleLogin)
   .on('POST', '/api/admin/logout', handleLogout)

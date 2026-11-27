@@ -23,7 +23,7 @@ export interface ContentFacts {
 }
 
 /** Date of the built-in privacy policy text (shown as "Atualizada em" until she saves her own). */
-export const DEFAULT_PRIVACY_DATE = '2026-11-24T12:00:00.000Z';
+export const DEFAULT_PRIVACY_DATE = '2026-11-26T12:00:00.000Z';
 
 export function defaultLoja(): Sections['loja'] {
   return {
@@ -99,7 +99,6 @@ function privacyBlocks(f: ContentFacts): Sections['privacidade']['blocks'] {
         'Pedidos: seu nome, sua cidade, as peças escolhidas e a observação que você escrever. Servem para registrar o pedido, combinar o pagamento e a entrega pelo WhatsApp e cumprir a garantia.',
         'Pré-cadastro de revendedora: nome, WhatsApp, cidade, estado, Instagram, se já revende, como conheceu a ÉKA e a sua autorização de contato. Servem para avaliar o cadastro e conversar com você sobre a revenda.',
         'Comprovante de pagamento: o arquivo que você envia na página de pagamento, usado só para conferir o pagamento do pedido.',
-        'Pix automático: quando ele está disponível, pedimos o seu e-mail porque o Mercado Pago exige. O e-mail vai direto para o Mercado Pago e não fica guardado com a gente.',
         'Clientes atendidas: a loja pode cadastrar nome, WhatsApp, cidade, Instagram e aniversário de quem compra, para registrar compras, enviar o resumo da compra com a garantia e atender melhor.',
         'Revendedoras: dados do cadastro, peças da maleta, vendas registradas, acertos e o aceite do contrato (nome digitado, data, versão do contrato e um código que identifica a rede sem guardar o endereço dela).',
       ].join('\n\n'),
@@ -116,7 +115,6 @@ function privacyBlocks(f: ContentFacts): Sections['privacidade']['blocks'] {
         'Não vendemos nem alugamos os seus dados. Eles passam apenas por serviços necessários para o site funcionar:',
         'Cloudflare: hospeda o site e o banco de dados. Os servidores podem ficar fora do Brasil, com as proteções exigidas pela LGPD.',
         'WhatsApp (Meta): quando você toca em um botão de WhatsApp, a conversa acontece no aplicativo, com as regras de privacidade dele.',
-        'Mercado Pago: só quando você paga pelo Pix automático.',
       ].join('\n\n'),
     },
     {
@@ -353,12 +351,6 @@ export function defaultSections(f: ContentFacts): Sections {
         step3: 'Envie o comprovante logo abaixo.',
         qrHint: 'No computador? Leia o QR Code com o celular.',
         unavailable: 'O Pix desta loja está sendo atualizado. Fale com a gente pelo WhatsApp para receber os dados de pagamento.',
-      },
-      autoPix: {
-        intro: 'Geramos um Pix só para este pedido, no valor exato. Quando você pagar, a confirmação chega aqui sozinha, sem precisar mandar comprovante.',
-        step2: 'Confira o valor de {total} e pague.',
-        step3: 'Pronto: a confirmação aparece aqui em instantes.',
-        notYet: 'O pagamento ainda não apareceu. Alguns bancos levam um minutinho.',
       },
       receipt: { title: 'Envie o comprovante', againTitle: 'Enviar outro comprovante' },
       status: {
